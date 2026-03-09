@@ -1,0 +1,61 @@
+{
+    "app.name": "oc-save-keeper",
+    "app.slogan": "안전한 세이브 백업과 기기 간 동기화",
+
+    "status.connected": "연결됨",
+    "status.disconnected": "연결 필요",
+
+    "footer.controls": "A: 선택  |  B: 뒤로  |  X: 전체 동기화  |  +: 종료",
+    "footer.game_count": "개 게임",
+
+    "detail.upload": "클라우드 업로드",
+    "detail.download": "클라우드 다운로드",
+    "detail.backup": "로컬 백업",
+    "detail.history": "버전 히스토리",
+    "detail.back": "뒤로",
+
+    "detail.save_size": "세이브 크기",
+    "detail.title_id": "Title ID",
+    "detail.recent_backup": "최근 백업",
+    "detail.versions": "개 버전",
+    "detail.no_backup": "없음",
+    "detail.latest_device": "최근 백업 기기",
+    "detail.latest_user": "최근 백업 사용자",
+    "detail.latest_source": "최근 백업 출처",
+
+    "sync.uploading": "세이브를 클라우드에 업로드하는 중...",
+    "sync.downloading": "클라우드 세이브를 확인하는 중...",
+    "sync.syncing": "동기화 진행 중...",
+    "sync.complete": "동기화가 완료되었습니다.",
+    "sync.syncing_game": "동기화 중...",
+
+    "auth.title": "Dropbox 연동 설정",
+    "auth.setup_time": "폰으로 2분 설정",
+    "auth.step1": "1. 폰 브라우저로 접속:",
+    "auth.step2": "2. [Create App] 클릭",
+    "auth.step2_api": "- API: Dropbox API",
+    "auth.step2_access": "- Access: App folder",
+    "auth.step2_name": "- Name: OCSaveKeeper-Backup",
+    "auth.step3": "3. [Generate access token] 클릭",
+    "auth.step4": "4. 토큰 복사 후 아래에 입력:",
+    "auth.token_placeholder": "여기에 토큰 붙여넣기...",
+    "auth.connect": "연결",
+    "auth.cancel": "취소",
+    "auth.tip": "1회 설정으로 계속 사용할 수 있습니다.",
+
+    "history.title": "버전 히스토리",
+    "history.local": "로컬 백업",
+    "history.cloud": "클라우드 백업",
+    "history.synced": "동기화됨",
+    "history.local_only": "로컬만",
+    "history.restore": "복원",
+    "history.no_backup": "백업 없음",
+    "history.no_cloud": "클라우드 백업 없음",
+    "history.login_needed": "로그인 필요",
+    "history.unknown_device": "알 수 없는 기기",
+    "history.unknown_user": "알 수 없는 사용자",
+    "history.unknown_source": "출처 정보 없음",
+
+    "error.not_authenticated": "Dropbox: 연결되지 않음",
+    "error.no_selection": "선택된 게임 없음"
+}

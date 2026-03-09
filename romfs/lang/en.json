@@ -1,0 +1,61 @@
+{
+    "app.name": "oc-save-keeper",
+    "app.slogan": "Safe save backup and cross-device sync",
+
+    "status.connected": "Connected",
+    "status.disconnected": "Not connected",
+
+    "footer.controls": "A: Select  |  B: Back  |  X: Sync All  |  +: Exit",
+    "footer.game_count": " games",
+
+    "detail.upload": "Upload to Cloud",
+    "detail.download": "Download from Cloud",
+    "detail.backup": "Local Backup",
+    "detail.history": "Version History",
+    "detail.back": "Back",
+
+    "detail.save_size": "Save Size",
+    "detail.title_id": "Title ID",
+    "detail.recent_backup": "Recent Backup",
+    "detail.versions": " versions",
+    "detail.no_backup": "None",
+    "detail.latest_device": "Latest backup device",
+    "detail.latest_user": "Latest backup user",
+    "detail.latest_source": "Latest backup source",
+
+    "sync.uploading": "Uploading save data to the cloud...",
+    "sync.downloading": "Checking cloud save metadata...",
+    "sync.syncing": "Syncing...",
+    "sync.complete": "Sync complete.",
+    "sync.syncing_game": "Syncing...",
+
+    "auth.title": "Dropbox Setup",
+    "auth.setup_time": "2-minute phone setup",
+    "auth.step1": "1. Visit on your phone:",
+    "auth.step2": "2. Click [Create App]",
+    "auth.step2_api": "- API: Dropbox API",
+    "auth.step2_access": "- Access: App folder",
+    "auth.step2_name": "- Name: OCSaveKeeper-Backup",
+    "auth.step3": "3. Click [Generate access token]",
+    "auth.step4": "4. Copy the token and paste it below:",
+    "auth.token_placeholder": "Paste token here...",
+    "auth.connect": "Connect",
+    "auth.cancel": "Cancel",
+    "auth.tip": "One-time setup, then reuse the saved token.",
+
+    "history.title": "Version History",
+    "history.local": "Local Backups",
+    "history.cloud": "Cloud Backups",
+    "history.synced": "Synced",
+    "history.local_only": "Local only",
+    "history.restore": "Restore",
+    "history.no_backup": "No backups",
+    "history.no_cloud": "No cloud backups",
+    "history.login_needed": "Login required",
+    "history.unknown_device": "Unknown device",
+    "history.unknown_user": "Unknown user",
+    "history.unknown_source": "No source info",
+
+    "error.not_authenticated": "Dropbox: Not connected",
+    "error.no_selection": "No game selected"
+}

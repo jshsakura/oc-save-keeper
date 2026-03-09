@@ -1,0 +1,151 @@
+/**
+ * oc-save-keeper - Safe save backup and sync for Nintendo Switch
+ * Main entry point
+ */
+
+#include <switch.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
+#include <curl/curl.h>
+#include <cstdio>
+#include <sys/stat.h>
+
+#include "core/SaveManager.hpp"
+#include "network/Dropbox.hpp"
+#include "ui/MainUI.hpp"
+#include "utils/Logger.hpp"
+
+constexpr int SCREEN_WIDTH = 1280;
+constexpr int SCREEN_HEIGHT = 720;
+
+static bool g_running = true;
+static SDL_Window* g_window = nullptr;
+static SDL_Renderer* g_renderer = nullptr;
+
+namespace dropkeep {
+
+bool initialize() {
+    consoleInit(nullptr);
+    
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0) {
+        LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
+        return false;
+    }
+    
+    g_window = SDL_CreateWindow(
+        "oc-save-keeper",
+        SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+        SDL_WINDOW_SHOWN
+    );
+    
+    if (!g_window) {
+        LOG_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());
+        return false;
+    }
+    
+    g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!g_renderer) {
+        LOG_ERROR("SDL_CreateRenderer failed: %s", SDL_GetError());
+        return false;
+    }
+    
+    int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
+    if (!(IMG_Init(imgFlags) & imgFlags)) {
+        LOG_ERROR("IMG_Init failed: %s", IMG_GetError());
+        return false;
+    }
+    
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        SDL_JoystickOpen(i);
+    }
+    
+    // Create directories
+    mkdir("/switch/OpenCourse", 0777);
+    mkdir("/switch/OpenCourse/oc-save-keeper", 0777);
+    mkdir("/switch/OpenCourse/oc-save-keeper/backups", 0777);
+    mkdir("/switch/OpenCourse/oc-save-keeper/fonts", 0777);
+    mkdir("/switch/OpenCourse/oc-save-keeper/logs", 0777);
+    
+    LOG_INFO("oc-save-keeper initialized");
+    return true;
+}
+
+void cleanup() {
+    LOG_INFO("Shutting down oc-save-keeper...");
+    
+    curl_global_cleanup();
+    IMG_Quit();
+    
+    if (g_renderer) {
+        SDL_DestroyRenderer(g_renderer);
+        g_renderer = nullptr;
+    }
+    
+    if (g_window) {
+        SDL_DestroyWindow(g_window);
+        g_window = nullptr;
+    }
+    
+    SDL_Quit();
+    consoleExit(nullptr);
+}
+
+void run() {
+    // Initialize Dropbox
+    network::Dropbox dropbox;
+    
+    // Initialize save manager
+    core::SaveManager saveManager;
+    if (!saveManager.initialize()) {
+        LOG_ERROR("Failed to initialize SaveManager");
+        return;
+    }
+    
+    // Initialize UI
+    ui::MainUI mainUI(g_renderer, dropbox, saveManager);
+    if (!mainUI.initialize()) {
+        LOG_ERROR("Failed to initialize UI");
+        return;
+    }
+    
+    // Main loop
+    SDL_Event event;
+    while (g_running && appletMainLoop()) {
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                g_running = false;
+            }
+            mainUI.handleEvent(event);
+        }
+        
+        mainUI.update();
+        
+        SDL_SetRenderDrawColor(g_renderer, 30, 30, 40, 255);
+        SDL_RenderClear(g_renderer);
+        mainUI.render();
+        SDL_RenderPresent(g_renderer);
+        
+        if (mainUI.shouldExit()) {
+            g_running = false;
+        }
+    }
+}
+
+} // namespace dropkeep
+
+int main(int argc, char* argv[]) {
+    if (!dropkeep::initialize()) {
+        dropkeep::cleanup();
+        return -1;
+    }
+    
+    dropkeep::run();
+    dropkeep::cleanup();
+    
+    return 0;
+}

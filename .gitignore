@@ -1,0 +1,21 @@
+*.o
+*.elf
+*.nro
+*.nacp
+*.pfs0
+*.nso
+*.map
+*.lst
+build/
+dist/
+.vscode/
+*.log
+
+# Local runtime data copied from SD layout during testing
+backups/
+temp/
+logs/
+fonts/
+
+# macOS / editor noise
+.DS_Store
