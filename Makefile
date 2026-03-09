@@ -17,9 +17,10 @@ DATA		:=	data
 INCLUDES	:=	include
 APP_TITLE   :=  oc-save-keeper
 APP_AUTHOR  :=  OpenCourse
-APP_VERSION :=  1.0.0
+APP_VERSION :=  0.1.0
 ROMFS	    :=	romfs
-ICON		:=	icon.jpg
+APP_ICON	:=	icon.jpg
+NROFLAGS    :=  --icon=$(TOPDIR)/$(APP_ICON) --nacp=$(TOPDIR)/$(TARGET).nacp --romfsdir=$(TOPDIR)/$(ROMFS)
 
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS	:=	$(INCLUDE) -D__SWITCH__ `sdl2-config --cflags` `curl-config --cflags` -g -Wall -O2 -ffunction-sections -I$(PORTLIBS)/include/freetype2 $(ARCH)
@@ -62,8 +63,8 @@ clean:
 else
 .PHONY:	all
 DEPENDS	:=	$(OFILES:.o=.d)
-all	:	$(OUTPUT).nro
-$(OUTPUT).nro	:	$(OUTPUT).elf
+all	:	$(OUTPUT).nacp $(OUTPUT).nro
+$(OUTPUT).nro	:	$(OUTPUT).elf $(OUTPUT).nacp
 $(OUTPUT).elf	:	$(OFILES)
 %.bin.o	:	%.bin
 	@$(bin2o)

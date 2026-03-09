@@ -22,8 +22,8 @@ namespace {
 constexpr const char* BACKUP_BASE_PATH = "/switch/oc-save-keeper/backups";
 constexpr const char* CONFIG_BASE_PATH = "/switch/oc-save-keeper";
 constexpr const char* TEMP_BASE_PATH = "/switch/oc-save-keeper/temp";
+constexpr const char* ICON_BASE_PATH = "/switch/oc-save-keeper/icons";
 constexpr const char* DEVICE_ID_PATH = "/switch/oc-save-keeper/device_id.txt";
-constexpr const char* DEVICE_LABEL_PATH = "/switch/oc-save-keeper/device_label.txt";
 constexpr const char* DEVICE_PRIORITY_PATH = "/switch/oc-save-keeper/device_priority.txt";
 constexpr const char* META_ENTRY_NAME = ".dropkeep.meta";
 constexpr int DEFAULT_MAX_VERSIONS = 5;
@@ -72,6 +72,52 @@ bool writeLineToFile(const char* path, const std::string& value) {
     return success;
 }
 
+bool writeBinaryFile(const char* path, const void* data, size_t size) {
+    FILE* file = fopen(path, "wb");
+    if (!file) {
+        return false;
+    }
+
+    const bool success = fwrite(data, 1, size, file) == size;
+    fclose(file);
+    return success;
+}
+
+bool looksBrokenDeviceToken(const std::string& value) {
+    return value.empty() || value.find("FFFFFFFFFFFFFFFF") != std::string::npos;
+}
+
+SaveType convertSaveType(u8 type) {
+    switch (type) {
+        case FsSaveDataType_System:
+            return SaveType::System;
+        case FsSaveDataType_Device:
+            return SaveType::Device;
+        case FsSaveDataType_Bcat:
+        case FsSaveDataType_SystemBcat:
+            return SaveType::BCAT;
+        case FsSaveDataType_Cache:
+            return SaveType::Cache;
+        case FsSaveDataType_Temporary:
+            return SaveType::Temporary;
+        case FsSaveDataType_Account:
+        default:
+            return SaveType::Account;
+    }
+}
+
+std::string makeDeviceLabel(const std::string& deviceId) {
+    if (deviceId.empty()) {
+        return "Device";
+    }
+
+    const size_t dash = deviceId.find('-');
+    const std::string compact = dash == std::string::npos ? deviceId : deviceId.substr(dash + 1);
+    const size_t nextDash = compact.find('-');
+    const std::string token = nextDash == std::string::npos ? compact : compact.substr(0, nextDash);
+    return "Device " + token;
+}
+
 } // namespace
 
 SaveManager::SaveManager()
@@ -92,7 +138,7 @@ bool SaveManager::initialize() {
     // Create directories
     mkdir(CONFIG_BASE_PATH, 0777);
     mkdir(BACKUP_BASE_PATH, 0777);
-    mkdir(TEMP_BASE_PATH, 0777);
+    mkdir(ICON_BASE_PATH, 0777);
 
     if (!loadDeviceConfig()) {
         LOG_ERROR("Failed to load device config");
@@ -119,7 +165,7 @@ bool SaveManager::loadDeviceConfig() {
     // Persist a per-device identity so cloud backups can carry origin metadata
     // without relying on transient runtime state.
     m_deviceId = readLineFromFile(DEVICE_ID_PATH);
-    if (m_deviceId.empty()) {
+    if (looksBrokenDeviceToken(m_deviceId)) {
         char generated[32];
         std::snprintf(generated, sizeof(generated), "dev-%08llX-%08lX",
                       static_cast<unsigned long long>(time(nullptr)),
@@ -131,13 +177,7 @@ bool SaveManager::loadDeviceConfig() {
     }
 
     std::string priorityText = readLineFromFile(DEVICE_PRIORITY_PATH);
-    m_deviceLabel = readLineFromFile(DEVICE_LABEL_PATH);
-    if (m_deviceLabel.empty()) {
-        m_deviceLabel = m_deviceId;
-        if (!writeLineToFile(DEVICE_LABEL_PATH, m_deviceLabel)) {
-            return false;
-        }
-    }
+    m_deviceLabel = makeDeviceLabel(m_deviceId);
     if (!priorityText.empty()) {
         m_devicePriority = std::max(1, std::atoi(priorityText.c_str()));
     } else if (!writeLineToFile(DEVICE_PRIORITY_PATH, std::to_string(m_devicePriority))) {
@@ -153,28 +193,59 @@ bool SaveManager::loadUsers() {
     m_users.clear();
     
 #ifdef __SWITCH__
-    // Open account service
-    Result rc = accountInitialize(AccountServiceType_Administrator);
+    Result rc = accountInitialize(AccountServiceType_Application);
+    if (R_FAILED(rc)) {
+        LOG_WARNING("accountInitialize(Application) failed: 0x%x", rc);
+        rc = accountInitialize(AccountServiceType_System);
+    }
+    if (R_FAILED(rc)) {
+        LOG_WARNING("accountInitialize(System) failed: 0x%x", rc);
+        rc = accountInitialize(AccountServiceType_Administrator);
+    }
     if (R_FAILED(rc)) {
         LOG_ERROR("accountInitialize failed: 0x%x", rc);
-        return false;
+        UserInfo fallbackUser;
+        fallbackUser.id = "device-user";
+        fallbackUser.name = "Default User";
+        fallbackUser.iconPath = "";
+        m_users.push_back(fallbackUser);
+        return true;
     }
-    
-    // Get all user accounts
-    AccountUid uids[8];
+
+    AccountUid uids[ACC_USER_LIST_SIZE]{};
     s32 userCount = 0;
     
-    rc = accountListAllUsers(uids, 8, &userCount);
-    if (R_FAILED(rc)) {
-        LOG_ERROR("accountListAllUsers failed: 0x%x", rc);
-        accountExit();
-        return false;
+    rc = accountListAllUsers(uids, ACC_USER_LIST_SIZE, &userCount);
+    if (R_FAILED(rc) || userCount <= 0) {
+        LOG_WARNING("accountListAllUsers failed or empty: 0x%x", rc);
+
+        AccountUid fallbackUid{};
+        if (R_SUCCEEDED(accountGetPreselectedUser(&fallbackUid)) && accountUidIsValid(&fallbackUid)) {
+            uids[0] = fallbackUid;
+            userCount = 1;
+        } else if (R_SUCCEEDED(accountGetLastOpenedUser(&fallbackUid)) && accountUidIsValid(&fallbackUid)) {
+            uids[0] = fallbackUid;
+            userCount = 1;
+        }
     }
     
     for (s32 i = 0; i < userCount; i++) {
+        if (!accountUidIsValid(&uids[i])) {
+            continue;
+        }
+
         AccountProfile profile;
         rc = accountGetProfile(&profile, uids[i]);
-        if (R_FAILED(rc)) continue;
+        if (R_FAILED(rc)) {
+            UserInfo user;
+            user.uid = uids[i];
+            user.id = std::to_string(static_cast<unsigned long long>(uids[i].uid[0])) + "-" +
+                      std::to_string(static_cast<unsigned long long>(uids[i].uid[1]));
+            user.name = "User";
+            user.iconPath = "";
+            m_users.push_back(user);
+            continue;
+        }
         
         AccountUserData userData;
         AccountProfileBase profileBase;
@@ -194,6 +265,14 @@ bool SaveManager::loadUsers() {
     }
     
     accountExit();
+
+    if (m_users.empty()) {
+        UserInfo fallbackUser;
+        fallbackUser.id = "device-user";
+        fallbackUser.name = "Default User";
+        fallbackUser.iconPath = "";
+        m_users.push_back(fallbackUser);
+    }
 #else
     // For development/testing, create a mock user
     UserInfo mockUser;
@@ -212,19 +291,28 @@ void SaveManager::scanTitles() {
     m_titles.clear();
     
 #ifdef __SWITCH__
+    Result rc = nsInitialize();
+    if (R_FAILED(rc)) {
+        LOG_ERROR("nsInitialize failed: 0x%x", rc);
+        return;
+    }
+
     // Scan SD card for installed titles
     NsApplicationRecord records[1024];
     s32 recordCount = 0;
     
-    Result rc = nsListApplicationRecord(records, 1024, 0, &recordCount);
+    rc = nsListApplicationRecord(records, 1024, 0, &recordCount);
     if (R_FAILED(rc)) {
         LOG_ERROR("nsListApplicationRecord failed: 0x%x", rc);
+        nsExit();
         return;
     }
     
     for (s32 i = 0; i < recordCount; i++) {
         scanTitle(records[i].application_id);
     }
+
+    nsExit();
 #else
     // Mock titles for development
     TitleInfo mockTitle;
@@ -268,12 +356,50 @@ bool SaveManager::scanTitle(uint64_t titleId) {
         info.name = name;
     }
     
-    // Check if save exists
-    if (m_selectedUser) {
+    // Cache the title icon from NACP control data so the UI can load it later.
+    char iconPath[256];
+    std::snprintf(iconPath, sizeof(iconPath), "%s/%016lX.jpg", ICON_BASE_PATH, titleId);
+    info.iconPath = iconPath;
+    FILE* iconFile = fopen(iconPath, "rb");
+    if (iconFile) {
+        fclose(iconFile);
+    } else if (R_SUCCEEDED(rc) && controlSize > 0) {
+        writeBinaryFile(iconPath, controlData.icon, sizeof(controlData.icon));
+    }
+
+    FsSaveDataFilter filter{};
+    filter.filter_by_application_id = true;
+    filter.attr.application_id = titleId;
+
+    FsSaveDataInfoReader reader;
+    rc = fsOpenSaveDataInfoReaderWithFilter(&reader, FsSaveDataSpaceId_All, &filter);
+    if (R_SUCCEEDED(rc)) {
+        FsSaveDataInfo entries[16]{};
+        s64 totalEntries = 0;
+        rc = fsSaveDataInfoReaderRead(&reader, entries, 16, &totalEntries);
+        fsSaveDataInfoReaderClose(&reader);
+
+        if (R_SUCCEEDED(rc)) {
+            for (s64 i = 0; i < totalEntries && i < 16; i++) {
+                info.hasSave = true;
+                info.saveType = convertSaveType(entries[i].save_data_type);
+                info.saveSize = entries[i].size;
+
+                // Prefer account save when available, but still keep device/shared
+                // saves visible when that's the only save type present.
+                if (entries[i].save_data_type == FsSaveDataType_Account) {
+                    info.saveType = SaveType::Account;
+                    break;
+                }
+            }
+        }
+    } else if (m_selectedUser) {
+        // Fallback for older service paths.
         FsFileSystem tmpFs;
         rc = fsOpen_SaveData(&tmpFs, titleId, m_selectedUser->uid);
         if (R_SUCCEEDED(rc)) {
             info.hasSave = true;
+            info.saveType = SaveType::Account;
             fsFsClose(&tmpFs);
         }
     }
@@ -288,9 +414,6 @@ bool SaveManager::scanTitle(uint64_t titleId) {
     char backupPath[256];
     snprintf(backupPath, sizeof(backupPath), "%s/%016lX", BACKUP_BASE_PATH, titleId);
     info.savePath = backupPath;
-    
-    snprintf(backupPath, sizeof(backupPath), "/switch/oc-save-keeper/icons/%016lX.jpg", titleId);
-    info.iconPath = backupPath;
     
     m_titles.push_back(info);
     return true;
@@ -324,6 +447,17 @@ std::vector<TitleInfo*> SaveManager::getTitlesWithSaves() {
             result.push_back(&title);
         }
     }
+
+    // When account services are unavailable on homebrew launch, save probing can
+    // fail even though installed titles exist. In that case, still show the
+    // scanned titles so the UI remains usable and the user can see what was
+    // detected on the system.
+    if (result.empty()) {
+        for (auto& title : m_titles) {
+            result.push_back(&title);
+        }
+    }
+
     return result;
 }
 
@@ -785,6 +919,7 @@ std::string SaveManager::exportBackupArchive(TitleInfo* title, const std::string
 }
 
 std::string SaveManager::makeUniqueTempPath(TitleInfo* title, const std::string& prefix) const {
+    mkdir(TEMP_BASE_PATH, 0777);
     char buffer[256];
     std::snprintf(buffer, sizeof(buffer), "%s/%s_%016llX_%lld",
                   TEMP_BASE_PATH,

@@ -11,6 +11,10 @@
 #include <vector>
 #include <string>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 #include "core/SaveManager.hpp"
 #include "network/Dropbox.hpp"
 #include "utils/Logger.hpp"
@@ -102,6 +106,9 @@ private:
     TTF_Font* m_fontLarge;
     TTF_Font* m_fontMedium;
     TTF_Font* m_fontSmall;
+#ifdef __SWITCH__
+    bool m_plInitialized;
+#endif
     
     // State
     State m_state;
@@ -117,6 +124,8 @@ private:
     
     // Buttons
     std::vector<Button> m_buttons;
+    SDL_Rect m_authTokenBox;
+    SDL_Rect m_languageButton;
     
     // Auth
     std::string m_authToken;
@@ -132,13 +141,20 @@ private:
     // Touch state
     int m_touchX, m_touchY;
     bool m_touchPressed;
+
+    // Output size
+    int m_screenWidth;
+    int m_screenHeight;
+    int m_gridCols;
+    int m_gridRows;
+    int m_currentPage;
     
     // Dimensions
-    static constexpr int CARD_WIDTH = 200;
-    static constexpr int CARD_HEIGHT = 280;
-    static constexpr int CARD_MARGIN = 20;
-    static constexpr int HEADER_HEIGHT = 80;
-    static constexpr int FOOTER_HEIGHT = 60;
+    static constexpr int CARD_WIDTH = 220;
+    static constexpr int CARD_HEIGHT = 300;
+    static constexpr int CARD_MARGIN = 28;
+    static constexpr int HEADER_HEIGHT = 112;
+    static constexpr int FOOTER_HEIGHT = 72;
     
     // Render methods
     void renderHeader();
@@ -155,12 +171,18 @@ private:
     void renderButton(const Button& btn);
     void renderCard(const GameCard& card);
     void renderSyncBadge(int x, int y, bool synced);
+    std::string fitText(TTF_Font* font, const std::string& text, int maxWidth) const;
     
     SDL_Texture* loadIcon(const std::string& path);
     
     void updateGameCards();
     void handleTouch(int x, int y, bool pressed);
     void handleButtonPress(const Button& btn);
+    void toggleLanguage();
+    void clampSelection();
+    int getItemsPerPage() const;
+    int getPageCount() const;
+    int getVisibleStartIndex() const;
     
     // Actions
     void syncToDropbox();
@@ -170,6 +192,7 @@ private:
     void restoreVersion(VersionItem* item);
     void syncAllGames();
     void connectDropbox();
+    void openTokenKeyboard();
 };
 
 } // namespace ui

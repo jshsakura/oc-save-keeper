@@ -6,7 +6,7 @@ First public alpha build for on-device testing.
 
 - `oc-save-keeper.nro`
 - Korean and English UI strings
-- Embedded `NotoSansCJK` font for readable Korean and English text
+- Nintendo Switch shared font rendering for Korean and English text
 - Metadata-aware cloud sync flow
 - Device priority based conflict handling
 - Local version history and restore flow

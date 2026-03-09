@@ -5,7 +5,7 @@
     "status.connected": "연결됨",
     "status.disconnected": "연결 필요",
 
-    "footer.controls": "A: 선택  |  B: 뒤로  |  X: 전체 동기화  |  +: 종료",
+    "footer.controls": "A: 선택  |  Y: 언어  |  L/R: 페이지  |  -/+: 종료",
     "footer.game_count": "개 게임",
 
     "detail.upload": "클라우드 업로드",
@@ -30,7 +30,7 @@
     "sync.syncing_game": "동기화 중...",
 
     "auth.title": "Dropbox 연동 설정",
-    "auth.setup_time": "폰으로 2분 설정",
+    "auth.setup_time": "스마트폰으로 간단하게 설정 가능한 과정입니다.",
     "auth.step1": "1. 폰 브라우저로 접속:",
     "auth.step2": "2. [Create App] 클릭",
     "auth.step2_api": "- API: Dropbox API",
@@ -39,6 +39,7 @@
     "auth.step3": "3. [Generate access token] 클릭",
     "auth.step4": "4. 토큰 복사 후 아래에 입력:",
     "auth.token_placeholder": "여기에 토큰 붙여넣기...",
+    "auth.open_keyboard": "키보드 열기",
     "auth.connect": "연결",
     "auth.cancel": "취소",
     "auth.tip": "1회 설정으로 계속 사용할 수 있습니다.",

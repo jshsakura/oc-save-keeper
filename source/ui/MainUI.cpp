@@ -9,6 +9,25 @@
 
 namespace ui {
 
+#ifdef __SWITCH__
+namespace {
+TTF_Font* openSharedFont(const PlFontData& font, int size) {
+    SDL_RWops* rw = SDL_RWFromConstMem(font.address, static_cast<int>(font.size));
+    if (!rw) {
+        LOG_ERROR("SDL_RWFromConstMem failed for shared font: %s", SDL_GetError());
+        return nullptr;
+    }
+
+    TTF_Font* ttfFont = TTF_OpenFontRW(rw, 1, size);
+    if (!ttfFont) {
+        LOG_ERROR("TTF_OpenFontRW failed for shared font: %s", TTF_GetError());
+    }
+
+    return ttfFont;
+}
+}
+#endif
+
 MainUI::MainUI(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveManager& saveMgr)
     : m_renderer(renderer)
     , m_dropbox(dropbox)
@@ -16,6 +35,9 @@ MainUI::MainUI(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveMana
     , m_fontLarge(nullptr)
     , m_fontMedium(nullptr)
     , m_fontSmall(nullptr)
+#ifdef __SWITCH__
+    , m_plInitialized(false)
+#endif
     , m_state(State::Main)
     , m_shouldExit(false)
     , m_selectedIndex(0)
@@ -26,16 +48,30 @@ MainUI::MainUI(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveMana
     , m_touchX(0)
     , m_touchY(0)
     , m_touchPressed(false) {
+    m_screenWidth = 1280;
+    m_screenHeight = 720;
+    m_gridCols = 1;
+    m_gridRows = 1;
+    m_currentPage = 0;
+    m_authTokenBox = {0, 0, 0, 0};
+    m_languageButton = {0, 0, 0, 0};
 }
 
 MainUI::~MainUI() {
     if (m_fontLarge) TTF_CloseFont(m_fontLarge);
     if (m_fontMedium) TTF_CloseFont(m_fontMedium);
     if (m_fontSmall) TTF_CloseFont(m_fontSmall);
+#ifdef __SWITCH__
+    if (m_plInitialized) {
+        plExit();
+    }
+#endif
     TTF_Quit();
 }
 
 bool MainUI::initialize() {
+    SDL_GetRendererOutputSize(m_renderer, &m_screenWidth, &m_screenHeight);
+
     if (TTF_Init() < 0) {
         LOG_ERROR("TTF_Init failed: %s", TTF_GetError());
         return false;
@@ -43,18 +79,58 @@ bool MainUI::initialize() {
     
     // Initialize language system (auto-detects system language)
     utils::Language::instance().init();
-    
-    // Use one embedded CJK font for every weight to keep installation simple:
-    // one NRO, one app folder, no extra font copy step on the SD card.
-    m_fontLarge = TTF_OpenFont("romfs:/fonts/NotoSansCJK-Regular.ttc", 36);
-    m_fontMedium = TTF_OpenFont("romfs:/fonts/NotoSansCJK-Regular.ttc", 24);
-    m_fontSmall = TTF_OpenFont("romfs:/fonts/NotoSansCJK-Regular.ttc", 18);
 
-    // Development fallback only.
-    if (!m_fontLarge) {
-        m_fontLarge = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36);
-        m_fontMedium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24);
-        m_fontSmall = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18);
+#ifdef __SWITCH__
+    Result rc = plInitialize(PlServiceType_User);
+    if (R_SUCCEEDED(rc)) {
+        m_plInitialized = true;
+
+        PlFontData sharedFont{};
+        PlSharedFontType fontType =
+            utils::Language::instance().currentLang() == "ko"
+                ? PlSharedFontType_KO
+                : PlSharedFontType_Standard;
+
+        rc = plGetSharedFontByType(&sharedFont, fontType);
+        if (R_FAILED(rc) && fontType != PlSharedFontType_KO) {
+            rc = plGetSharedFontByType(&sharedFont, PlSharedFontType_KO);
+        }
+
+        if (R_SUCCEEDED(rc)) {
+            m_fontLarge = openSharedFont(sharedFont, 44);
+            m_fontMedium = openSharedFont(sharedFont, 28);
+            m_fontSmall = openSharedFont(sharedFont, 22);
+        } else {
+            LOG_ERROR("plGetSharedFontByType failed: 0x%x", rc);
+        }
+    } else {
+        LOG_ERROR("plInitialize failed: 0x%x", rc);
+    }
+#endif
+
+    // Desktop fallback only. Real hardware should use the built-in shared font.
+    if (!m_fontLarge || !m_fontMedium || !m_fontSmall) {
+        if (m_fontLarge) {
+            TTF_CloseFont(m_fontLarge);
+            m_fontLarge = nullptr;
+        }
+        if (m_fontMedium) {
+            TTF_CloseFont(m_fontMedium);
+            m_fontMedium = nullptr;
+        }
+        if (m_fontSmall) {
+            TTF_CloseFont(m_fontSmall);
+            m_fontSmall = nullptr;
+        }
+
+        m_fontLarge = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 44);
+        m_fontMedium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28);
+        m_fontSmall = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22);
+    }
+
+    if (!m_fontLarge || !m_fontMedium || !m_fontSmall) {
+        LOG_ERROR("Font initialization failed");
+        return false;
     }
     
     // Scan titles
@@ -74,15 +150,24 @@ void MainUI::updateGameCards() {
     
     auto titles = m_saveManager.getTitlesWithSaves();
     
-    int cols = (1280 - CARD_MARGIN) / (CARD_WIDTH + CARD_MARGIN);
-    int row = 0, col = 0;
+    const int contentHeight = m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - CARD_MARGIN * 2;
+    m_gridCols = std::max(1, (m_screenWidth - CARD_MARGIN) / (CARD_WIDTH + CARD_MARGIN));
+    m_gridRows = std::max(1, contentHeight / (CARD_HEIGHT + CARD_MARGIN));
+    const int itemsPerPage = getItemsPerPage();
+    if (itemsPerPage > 0) {
+        m_currentPage = std::clamp(m_selectedIndex / itemsPerPage, 0, std::max(0, getPageCount() - 1));
+    }
     
-    for (auto* title : titles) {
+    for (size_t i = 0; i < titles.size(); i++) {
+        auto* title = titles[i];
         GameCard card;
         card.title = title;
         card.selected = false;
         card.synced = false; // TODO: Check sync status
-        
+
+        const int indexInPage = static_cast<int>(i) % std::max(1, itemsPerPage);
+        const int row = indexInPage / m_gridCols;
+        const int col = indexInPage % m_gridCols;
         int x = CARD_MARGIN + col * (CARD_WIDTH + CARD_MARGIN);
         int y = HEADER_HEIGHT + CARD_MARGIN + row * (CARD_HEIGHT + CARD_MARGIN);
         card.rect = {x, y, CARD_WIDTH, CARD_HEIGHT};
@@ -91,12 +176,6 @@ void MainUI::updateGameCards() {
         card.icon = nullptr;
         
         m_gameCards.push_back(card);
-        
-        col++;
-        if (col >= cols) {
-            col = 0;
-            row++;
-        }
     }
 }
 
@@ -119,16 +198,64 @@ void MainUI::handleEvent(const SDL_Event& event) {
                     }
                     break;
                 case 1: // B
-                    if (m_state == State::GameDetail) {
+                    if (m_state == State::Auth) {
+                        m_state = State::Main;
+                    } else if (m_state == State::GameDetail) {
                         m_state = State::Main;
                         m_selectedTitle = nullptr;
                     } else if (m_state == State::VersionHistory) {
                         m_state = State::GameDetail;
                     }
                     break;
+                case 2: // X
+                    if (m_state == State::Main) {
+                        syncAllGames();
+                    } else if (m_state == State::Auth) {
+                        connectDropbox();
+                    }
+                    break;
+                case 3: // Y
+                    if (m_state == State::Main) {
+                        toggleLanguage();
+                    }
+                    break;
+                case 4: // L
+                    if (m_state == State::Main && m_currentPage > 0) {
+                        m_currentPage--;
+                        m_selectedIndex = m_currentPage * getItemsPerPage();
+                        clampSelection();
+                    }
+                    break;
+                case 5: // R
+                    if (m_state == State::Main && m_currentPage + 1 < getPageCount()) {
+                        m_currentPage++;
+                        m_selectedIndex = m_currentPage * getItemsPerPage();
+                        clampSelection();
+                    }
+                    break;
+                case 12: // D-pad up
+                case 13: // D-pad down
+                case 14: // D-pad left
+                case 15: // D-pad right
+                    if (m_state == State::Main && !m_gameCards.empty()) {
+                        int nextIndex = m_selectedIndex;
+                        if (button == 12) nextIndex -= m_gridCols;
+                        if (button == 13) nextIndex += m_gridCols;
+                        if (button == 14) nextIndex -= 1;
+                        if (button == 15) nextIndex += 1;
+                        nextIndex = std::clamp(nextIndex, 0, (int)m_gameCards.size() - 1);
+                        m_selectedIndex = nextIndex;
+                        clampSelection();
+                    }
+                    break;
                 case 10: // Plus
+                case 11: // Minus
                     m_shouldExit = true;
                     break;
+            }
+
+            if (m_state == State::Auth && button == 0) {
+                openTokenKeyboard();
             }
             break;
         }
@@ -137,8 +264,8 @@ void MainUI::handleEvent(const SDL_Event& event) {
         case SDL_MOUSEBUTTONDOWN:
             m_touchPressed = true;
             if (event.type == SDL_FINGERDOWN) {
-                m_touchX = event.tfinger.x * 1280;
-                m_touchY = event.tfinger.y * 720;
+                m_touchX = static_cast<int>(event.tfinger.x * m_screenWidth);
+                m_touchY = static_cast<int>(event.tfinger.y * m_screenHeight);
             } else {
                 m_touchX = event.button.x;
                 m_touchY = event.button.y;
@@ -152,7 +279,18 @@ void MainUI::handleTouch(int x, int y, bool pressed) {
     if (!pressed) return;
     
     if (m_state == State::Main) {
+        if (x >= m_languageButton.x && x < m_languageButton.x + m_languageButton.w &&
+            y >= m_languageButton.y && y < m_languageButton.y + m_languageButton.h) {
+            toggleLanguage();
+            return;
+        }
+
         for (size_t i = 0; i < m_gameCards.size(); i++) {
+            const int startIndex = getVisibleStartIndex();
+            const int endIndex = std::min((int)m_gameCards.size(), startIndex + getItemsPerPage());
+            if ((int)i < startIndex || (int)i >= endIndex) {
+                continue;
+            }
             SDL_Rect& r = m_gameCards[i].rect;
             if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
                 m_selectedIndex = i;
@@ -178,6 +316,13 @@ void MainUI::handleTouch(int x, int y, bool pressed) {
                 handleButtonPress(btn);
                 break;
             }
+        }
+
+        if (m_state == State::Auth &&
+            x >= m_authTokenBox.x && x < m_authTokenBox.x + m_authTokenBox.w &&
+            y >= m_authTokenBox.y && y < m_authTokenBox.y + m_authTokenBox.h) {
+            openTokenKeyboard();
+            return;
         }
     }
 }
@@ -211,7 +356,7 @@ void MainUI::handleButtonPress(const Button& btn) {
 }
 
 void MainUI::update() {
-    // Nothing for now
+    SDL_GetRendererOutputSize(m_renderer, &m_screenWidth, &m_screenHeight);
 }
 
 void MainUI::render() {
@@ -250,42 +395,63 @@ void MainUI::render() {
 }
 
 void MainUI::renderHeader() {
-    SDL_Rect headerRect = {0, 0, 1280, HEADER_HEIGHT};
+    SDL_Rect headerRect = {0, 0, m_screenWidth, HEADER_HEIGHT};
     SDL_SetRenderDrawColor(m_renderer, Color::Header.r, Color::Header.g,
                           Color::Header.b, Color::Header.a);
     SDL_RenderFillRect(m_renderer, &headerRect);
     
-    // Logo with localized slogan
-    renderText(LANG("app.name"), 20, 12, m_fontLarge, Color::Accent);
-    renderText(LANG("app.slogan"), 20, 48, m_fontSmall, Color::TextDim);
+    renderText(LANG("app.name"), 28, 22, m_fontLarge, Color::Accent);
     
     // Connection status
     bool connected = m_dropbox.isAuthenticated();
     std::string status = connected ? LANG("status.connected") : LANG("status.disconnected");
     SDL_Color statusColor = connected ? Color::Synced : Color::NotSynced;
-    renderText(status, 1100, 30, m_fontMedium, statusColor);
+    const std::string slogan = LANG("app.slogan");
+    m_languageButton = {m_screenWidth - 98, 24, 70, 44};
+
+    SDL_SetRenderDrawColor(m_renderer, 58, 58, 78, 255);
+    SDL_RenderFillRect(m_renderer, &m_languageButton);
+    SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, 255);
+    SDL_RenderDrawRect(m_renderer, &m_languageButton);
+    renderTextCentered(utils::Language::instance().currentLang() == "ko" ? "KO" : "EN",
+                       m_languageButton.x, m_languageButton.y + 8, m_languageButton.w, m_fontSmall, Color::Text);
+
+    int statusWidth = 0;
+    int statusHeight = 0;
+    TTF_SizeUTF8(m_fontMedium, status.c_str(), &statusWidth, &statusHeight);
+    renderText(status, m_languageButton.x - statusWidth - 24, 22, m_fontMedium, statusColor);
+
+    int sloganWidth = 0;
+    int sloganHeight = 0;
+    TTF_SizeUTF8(m_fontSmall, slogan.c_str(), &sloganWidth, &sloganHeight);
+    renderText(slogan, m_languageButton.x - sloganWidth - 24, 58, m_fontSmall, Color::TextDim);
 }
 
 void MainUI::renderFooter() {
-    SDL_Rect footerRect = {0, 720 - FOOTER_HEIGHT, 1280, FOOTER_HEIGHT};
+    SDL_Rect footerRect = {0, m_screenHeight - FOOTER_HEIGHT, m_screenWidth, FOOTER_HEIGHT};
     SDL_SetRenderDrawColor(m_renderer, Color::Header.r, Color::Header.g,
                           Color::Header.b, Color::Header.a);
     SDL_RenderFillRect(m_renderer, &footerRect);
     
     renderText(LANG("footer.controls"), 
-              20, 720 - FOOTER_HEIGHT + 20, m_fontSmall, Color::TextDim);
+              20, m_screenHeight - FOOTER_HEIGHT + 20, m_fontSmall, Color::TextDim);
     
     std::string count = std::to_string(m_gameCards.size()) + LANG("footer.game_count");
-    renderText(count, 1150, 720 - FOOTER_HEIGHT + 20, m_fontSmall, Color::TextDim);
+    int countWidth = 0;
+    int countHeight = 0;
+    TTF_SizeUTF8(m_fontSmall, count.c_str(), &countWidth, &countHeight);
+    renderText(count, m_screenWidth - countWidth - 20, m_screenHeight - FOOTER_HEIGHT + 20, m_fontSmall, Color::TextDim);
 }
 
 void MainUI::renderGameList() {
-    for (size_t i = 0; i < m_gameCards.size(); i++) {
+    const int startIndex = getVisibleStartIndex();
+    const int endIndex = std::min((int)m_gameCards.size(), startIndex + getItemsPerPage());
+    for (int i = startIndex; i < endIndex; i++) {
         GameCard& card = m_gameCards[i];
         card.selected = ((int)i == m_selectedIndex);
         
         if (card.rect.y + card.rect.h < HEADER_HEIGHT ||
-            card.rect.y > 720 - FOOTER_HEIGHT) {
+            card.rect.y > m_screenHeight - FOOTER_HEIGHT) {
             continue;
         }
         
@@ -305,7 +471,7 @@ void MainUI::renderCard(const GameCard& card) {
     }
     
     // Icon placeholder
-    SDL_Rect iconRect = {card.rect.x + 10, card.rect.y + 10, 180, 180};
+    SDL_Rect iconRect = {card.rect.x + 20, card.rect.y + 18, 180, 180};
     SDL_Texture* iconTexture = card.icon;
     if (!iconTexture && card.selected) {
         iconTexture = loadIcon(card.title->iconPath);
@@ -324,9 +490,8 @@ void MainUI::renderCard(const GameCard& card) {
     }
     
     // Name
-    std::string name = card.title->name;
-    if (name.length() > 18) name = name.substr(0, 15) + "...";
-    renderTextCentered(name, card.rect.x, card.rect.y + 200, CARD_WIDTH, m_fontMedium, Color::Text);
+    std::string name = fitText(m_fontSmall, card.title->name, CARD_WIDTH - 24);
+    renderTextCentered(name, card.rect.x + 12, card.rect.y + 222, CARD_WIDTH - 24, m_fontSmall, Color::Text);
     
     // Sync badge
     renderSyncBadge(card.rect.x + CARD_WIDTH - 40, card.rect.y + 10, card.synced);
@@ -345,27 +510,28 @@ void MainUI::renderSyncBadge(int x, int y, bool synced) {
 void MainUI::renderGameDetail() {
     if (!m_selectedTitle) return;
     
-    SDL_Rect detailRect = {100, HEADER_HEIGHT + 50, 1080, 500};
+    SDL_Rect detailRect = {72, HEADER_HEIGHT + 36, m_screenWidth - 144, m_screenHeight - HEADER_HEIGHT - 128};
     SDL_SetRenderDrawColor(m_renderer, Color::Card.r, Color::Card.g,
                           Color::Card.b, Color::Card.a);
     SDL_RenderFillRect(m_renderer, &detailRect);
     
-    int y = HEADER_HEIGHT + 80;
+    int left = detailRect.x + 48;
+    int y = detailRect.y + 40;
     
-    renderText(m_selectedTitle->name, 150, y, m_fontLarge, Color::Text);
+    renderText(fitText(m_fontLarge, m_selectedTitle->name, detailRect.w - 96), left, y, m_fontLarge, Color::Text);
     y += 50;
     
-    renderText(m_selectedTitle->publisher, 150, y, m_fontMedium, Color::TextDim);
+    renderText(m_selectedTitle->publisher, left, y, m_fontMedium, Color::TextDim);
     y += 40;
     
     char idStr[32];
     snprintf(idStr, sizeof(idStr), "Title ID: %016lX", m_selectedTitle->titleId);
-    renderText(idStr, 150, y, m_fontSmall, Color::TextDim);
+    renderText(idStr, left, y, m_fontSmall, Color::TextDim);
     y += 30;
     
     char sizeStr[64];
     snprintf(sizeStr, sizeof(sizeStr), "%s: %.2f MB", LANG("detail.save_size"), m_selectedTitle->saveSize / (1024.0 * 1024.0));
-    renderText(sizeStr, 150, y, m_fontSmall, Color::TextDim);
+    renderText(sizeStr, left, y, m_fontSmall, Color::TextDim);
     y += 60;
 
     auto versions = m_saveManager.getBackupVersions(m_selectedTitle);
@@ -373,34 +539,39 @@ void MainUI::renderGameDetail() {
         const auto& latest = versions.front();
         renderText(std::string(LANG("detail.latest_device")) + ": " +
                    (latest.deviceLabel.empty() ? "-" : latest.deviceLabel),
-                   150, y, m_fontSmall, Color::TextDim);
+                   left, y, m_fontSmall, Color::TextDim);
         y += 24;
         renderText(std::string(LANG("detail.latest_user")) + ": " +
                    (latest.userName.empty() ? "-" : latest.userName),
-                   150, y, m_fontSmall, Color::TextDim);
+                   left, y, m_fontSmall, Color::TextDim);
         y += 24;
         renderText(std::string(LANG("detail.latest_source")) + ": " +
                    (latest.source.empty() ? "-" : latest.source),
-                   150, y, m_fontSmall, Color::TextDim);
+                   left, y, m_fontSmall, Color::TextDim);
         y += 36;
     }
     
     std::string syncText = m_dropbox.isAuthenticated() ? 
         std::string("☁️ Dropbox: ") + LANG("status.connected") : 
         std::string("☁️ Dropbox: ") + LANG("status.disconnected");
-    renderText(syncText, 150, y, m_fontMedium, m_dropbox.isAuthenticated() ? Color::Synced : Color::NotSynced);
+    renderText(syncText, left, y, m_fontMedium, m_dropbox.isAuthenticated() ? Color::Synced : Color::NotSynced);
     
     // Buttons
     m_buttons.clear();
-    int btnY = HEADER_HEIGHT + 320;
-    int btnW = 180;
-    int btnH = 50;
-    
-    m_buttons.emplace_back(140, btnY, btnW, btnH, LANG("detail.upload"));
-    m_buttons.emplace_back(340, btnY, btnW, btnH, LANG("detail.download"));
-    m_buttons.emplace_back(540, btnY, btnW, btnH, LANG("detail.backup"));
-    m_buttons.emplace_back(740, btnY, btnW, btnH, LANG("detail.history"));
-    m_buttons.emplace_back(940, btnY, btnW, btnH, LANG("detail.back"));
+    int btnW = std::min(280, (detailRect.w - 96) / 3);
+    int btnH = 58;
+    int gap = 18;
+    int row1Width = btnW * 3 + gap * 2;
+    int row1X = detailRect.x + (detailRect.w - row1Width) / 2;
+    int row1Y = detailRect.y + detailRect.h - 150;
+    int row2Width = btnW * 2 + gap;
+    int row2X = detailRect.x + (detailRect.w - row2Width) / 2;
+    int row2Y = row1Y + btnH + 16;
+    m_buttons.emplace_back(row1X, row1Y, btnW, btnH, LANG("detail.upload"));
+    m_buttons.emplace_back(row1X + btnW + gap, row1Y, btnW, btnH, LANG("detail.download"));
+    m_buttons.emplace_back(row1X + (btnW + gap) * 2, row1Y, btnW, btnH, LANG("detail.backup"));
+    m_buttons.emplace_back(row2X, row2Y, btnW, btnH, LANG("detail.history"));
+    m_buttons.emplace_back(row2X + btnW + gap, row2Y, btnW, btnH, LANG("detail.back"));
     
     for (const auto& btn : m_buttons) {
         renderButton(btn);
@@ -412,7 +583,17 @@ void MainUI::renderButton(const Button& btn) {
     SDL_SetRenderDrawColor(m_renderer, bgColor.r, bgColor.g, bgColor.b, bgColor.a);
     SDL_RenderFillRect(m_renderer, &btn.rect);
     
-    renderTextCentered(btn.text, btn.rect.x, btn.rect.y + 15, btn.rect.w, m_fontMedium, Color::Text);
+    TTF_Font* font = m_fontMedium;
+    int textW = 0;
+    int textH = 0;
+    TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
+    if (textW > btn.rect.w - 24) {
+        font = m_fontSmall;
+        TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
+    }
+    renderTextCentered(fitText(font, btn.text, btn.rect.w - 24),
+                       btn.rect.x, btn.rect.y + (btn.rect.h - textH) / 2 - 2,
+                       btn.rect.w, font, Color::Text);
 }
 
 void MainUI::renderAuthScreen() {
@@ -420,67 +601,63 @@ void MainUI::renderAuthScreen() {
     SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 200);
     SDL_RenderFillRect(m_renderer, nullptr);
     
-    SDL_Rect authRect = {140, 100, 1000, 520};
+    int panelWidth = std::min(m_screenWidth - 80, 1180);
+    int panelHeight = std::min(m_screenHeight - 80, 620);
+    SDL_Rect authRect = {(m_screenWidth - panelWidth) / 2, (m_screenHeight - panelHeight) / 2, panelWidth, panelHeight};
     SDL_SetRenderDrawColor(m_renderer, Color::Card.r, Color::Card.g, Color::Card.b, 255);
     SDL_RenderFillRect(m_renderer, &authRect);
     
-    renderTextCentered(LANG("auth.title"), 140, 120, 1000, m_fontLarge, Color::Accent);
-    
-    int y = 180;
-    
-    renderText(LANG("auth.setup_time"), 180, y, m_fontMedium, Color::Warning);
+    renderTextCentered(LANG("auth.title"), authRect.x, authRect.y + 20, authRect.w, m_fontLarge, Color::Accent);
+
+    int left = authRect.x + 50;
+    int y = authRect.y + 90;
+
+    renderText(LANG("auth.setup_time"), left, y, m_fontMedium, Color::Warning);
+    y += 48;
+    renderText("1. dropbox.com/developers/apps", left, y, m_fontMedium, Color::Text);
+    y += 42;
+    renderText("2. Create App -> Dropbox API -> App folder", left, y, m_fontMedium, Color::Text);
+    y += 42;
+    renderText("3. Generate access token on your phone", left, y, m_fontMedium, Color::Text);
+    y += 56;
+    renderText("4. Press A or tap the token box to open the keyboard", left, y, m_fontMedium, Color::Accent);
     y += 50;
-    
-    renderText(LANG("auth.step1"), 180, y, m_fontMedium, Color::Text);
-    y += 30;
-    renderText("   dropbox.com/developers/apps", 180, y, m_fontMedium, Color::Accent);
-    y += 45;
-    
-    renderText(LANG("auth.step2"), 180, y, m_fontMedium, Color::Text);
-    y += 30;
-    renderText(LANG("auth.step2_api"), 180, y, m_fontSmall, Color::TextDim);
-    y += 25;
-    renderText(LANG("auth.step2_access"), 180, y, m_fontSmall, Color::TextDim);
-    y += 25;
-    renderText(LANG("auth.step2_name"), 180, y, m_fontSmall, Color::TextDim);
-    y += 45;
-    
-    renderText(LANG("auth.step3"), 180, y, m_fontMedium, Color::Text);
-    y += 45;
-    
-    renderText(LANG("auth.step4"), 180, y, m_fontMedium, Color::Text);
-    y += 35;
-    
-    // Token input box
-    SDL_Rect tokenBox = {180, y, 920, 50};
+
+    m_authTokenBox = {left, y, authRect.w - 100, 76};
     SDL_SetRenderDrawColor(m_renderer, 40, 40, 55, 255);
-    SDL_RenderFillRect(m_renderer, &tokenBox);
+    SDL_RenderFillRect(m_renderer, &m_authTokenBox);
     SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, 255);
-    SDL_RenderDrawRect(m_renderer, &tokenBox);
+    SDL_RenderDrawRect(m_renderer, &m_authTokenBox);
     
     if (m_authToken.empty()) {
-        renderText(LANG("auth.token_placeholder"), 200, y + 15, m_fontMedium, Color::TextDim);
+        renderText(LANG("auth.token_placeholder"), m_authTokenBox.x + 18, y + 24, m_fontMedium, Color::TextDim);
     } else {
-        renderText(m_authToken, 200, y + 15, m_fontMedium, Color::Text);
+        std::string preview = m_authToken;
+        if (preview.size() > 56) {
+            preview = preview.substr(0, 53) + "...";
+        }
+        renderText(preview, m_authTokenBox.x + 18, y + 24, m_fontMedium, Color::Text);
     }
-    y += 70;
+    y += 100;
     
     m_buttons.clear();
-    m_buttons.emplace_back(300, y, 200, 50, LANG("auth.connect"));
-    m_buttons.emplace_back(520, y, 200, 50, LANG("auth.cancel"));
+    int buttonWidth = 240;
+    int gap = 28;
+    int totalWidth = buttonWidth * 2 + gap;
+    int buttonX = authRect.x + (authRect.w - totalWidth) / 2;
+    m_buttons.emplace_back(buttonX, y, buttonWidth, 58, LANG("auth.connect"));
+    m_buttons.emplace_back(buttonX + buttonWidth + gap, y, buttonWidth, 58, LANG("auth.cancel"));
     
     for (const auto& btn : m_buttons) {
         renderButton(btn);
     }
-    
-    renderTextCentered(LANG("auth.tip"), 140, y + 70, 1000, m_fontSmall, Color::TextDim);
 }
 
 void MainUI::renderVersionHistory() {
     renderText(LANG("history.title"), 100, HEADER_HEIGHT + 20, m_fontLarge, Color::Accent);
     
     if (m_selectedTitle) {
-        renderText(m_selectedTitle->name, 350, HEADER_HEIGHT + 25, m_fontMedium, Color::Text);
+        renderText(fitText(m_fontMedium, m_selectedTitle->name, m_screenWidth - 470), 350, HEADER_HEIGHT + 25, m_fontMedium, Color::Text);
     }
     
     int y = HEADER_HEIGHT + 80;
@@ -488,7 +665,7 @@ void MainUI::renderVersionHistory() {
     for (size_t i = 0; i < m_versionItems.size(); i++) {
         VersionItem& item = m_versionItems[i];
         item.selected = ((int)i == m_selectedVersionIndex);
-        item.rect = {100, y, 1080, 60};
+        item.rect = {100, y, m_screenWidth - 200, 60};
         
         SDL_Color bgColor = item.selected ? Color::CardHover : Color::Card;
         SDL_SetRenderDrawColor(m_renderer, bgColor.r, bgColor.g, bgColor.b, bgColor.a);
@@ -505,18 +682,18 @@ void MainUI::renderVersionHistory() {
         char timeStr[64];
         strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M", localtime(&item.timestamp));
         renderText(timeStr, item.rect.x + 70, item.rect.y + 18, m_fontMedium, Color::Text);
-        renderText(item.deviceLabel.empty() ? LANG("history.unknown_device") : item.deviceLabel,
+        renderText(fitText(m_fontSmall, item.deviceLabel.empty() ? LANG("history.unknown_device") : item.deviceLabel, 360),
                    item.rect.x + 320, item.rect.y + 10, m_fontSmall, Color::TextDim);
-        renderText(item.userName.empty() ? LANG("history.unknown_user") : item.userName,
+        renderText(fitText(m_fontSmall, item.userName.empty() ? LANG("history.unknown_user") : item.userName, 360),
                    item.rect.x + 320, item.rect.y + 30, m_fontSmall, Color::TextDim);
-        renderText(item.sourceLabel.empty() ? LANG("history.unknown_source") : item.sourceLabel,
+        renderText(fitText(m_fontSmall, item.sourceLabel.empty() ? LANG("history.unknown_source") : item.sourceLabel, 220),
                    item.rect.x + 760, item.rect.y + 18, m_fontSmall, Color::Accent);
         
         y += 70;
     }
     
     m_buttons.clear();
-    m_buttons.emplace_back(100, 640, 200, 50, LANG("detail.back"));
+    m_buttons.emplace_back(100, m_screenHeight - 80, 200, 50, LANG("detail.back"));
     for (const auto& btn : m_buttons) {
         renderButton(btn);
     }
@@ -527,12 +704,12 @@ void MainUI::renderSyncProgress() {
     SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 200);
     SDL_RenderFillRect(m_renderer, nullptr);
     
-    SDL_Rect progressRect = {340, 260, 600, 200};
+    SDL_Rect progressRect = {m_screenWidth / 2 - 300, m_screenHeight / 2 - 100, 600, 200};
     SDL_SetRenderDrawColor(m_renderer, Color::Card.r, Color::Card.g, Color::Card.b, 255);
     SDL_RenderFillRect(m_renderer, &progressRect);
     
-    renderTextCentered(LANG("sync.syncing"), 340, 280, 600, m_fontLarge, Color::Accent);
-    renderTextCentered(m_syncStatus, 340, 380, 600, m_fontMedium, Color::Text);
+    renderTextCentered(LANG("sync.syncing"), progressRect.x, progressRect.y + 20, progressRect.w, m_fontLarge, Color::Accent);
+    renderTextCentered(m_syncStatus, progressRect.x, progressRect.y + 120, progressRect.w, m_fontMedium, Color::Text);
 }
 
 void MainUI::renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color) {
@@ -556,6 +733,31 @@ void MainUI::renderTextCentered(const std::string& text, int x, int y, int w, TT
     int textW, textH;
     TTF_SizeUTF8(font, text.c_str(), &textW, &textH);
     renderText(text, x + (w - textW) / 2, y, font, color);
+}
+
+std::string MainUI::fitText(TTF_Font* font, const std::string& text, int maxWidth) const {
+    if (!font || text.empty()) {
+        return text;
+    }
+
+    int textW = 0;
+    int textH = 0;
+    TTF_SizeUTF8(font, text.c_str(), &textW, &textH);
+    if (textW <= maxWidth) {
+        return text;
+    }
+
+    std::string clipped = text;
+    while (!clipped.empty()) {
+        clipped.pop_back();
+        std::string trial = clipped + "...";
+        TTF_SizeUTF8(font, trial.c_str(), &textW, &textH);
+        if (textW <= maxWidth) {
+            return trial;
+        }
+    }
+
+    return "...";
 }
 
 SDL_Texture* MainUI::loadIcon(const std::string& path) {
@@ -720,6 +922,69 @@ void MainUI::connectDropbox() {
     } else {
         m_syncStatus = "Failed to save Dropbox token";
     }
+}
+
+void MainUI::openTokenKeyboard() {
+#ifdef __SWITCH__
+    SwkbdConfig keyboard{};
+    if (R_FAILED(swkbdCreate(&keyboard, 0))) {
+        m_syncStatus = "Keyboard open failed";
+        return;
+    }
+
+    swkbdConfigMakePresetDefault(&keyboard);
+    swkbdConfigSetHeaderText(&keyboard, "Dropbox access token");
+    swkbdConfigSetSubText(&keyboard, "Paste or type the generated token");
+    swkbdConfigSetGuideText(&keyboard, "Token");
+    swkbdConfigSetInitialText(&keyboard, m_authToken.c_str());
+    swkbdConfigSetStringLenMin(&keyboard, 1);
+    swkbdConfigSetStringLenMax(&keyboard, 512);
+    swkbdConfigSetOkButtonText(&keyboard, "Save");
+
+    char buffer[513] = {0};
+    Result rc = swkbdShow(&keyboard, buffer, sizeof(buffer));
+    swkbdClose(&keyboard);
+
+    if (R_SUCCEEDED(rc) && buffer[0] != '\0') {
+        m_authToken = buffer;
+    }
+#endif
+}
+
+void MainUI::toggleLanguage() {
+    const std::string nextLang = utils::Language::instance().currentLang() == "ko" ? "en" : "ko";
+    utils::Language::instance().load(nextLang);
+    updateGameCards();
+}
+
+void MainUI::clampSelection() {
+    if (m_gameCards.empty()) {
+        m_selectedIndex = 0;
+        m_currentPage = 0;
+        return;
+    }
+
+    m_selectedIndex = std::clamp(m_selectedIndex, 0, (int)m_gameCards.size() - 1);
+    const int itemsPerPage = getItemsPerPage();
+    if (itemsPerPage > 0) {
+        m_currentPage = std::clamp(m_selectedIndex / itemsPerPage, 0, std::max(0, getPageCount() - 1));
+    }
+}
+
+int MainUI::getItemsPerPage() const {
+    return std::max(1, m_gridCols * m_gridRows);
+}
+
+int MainUI::getPageCount() const {
+    if (m_gameCards.empty()) {
+        return 1;
+    }
+    const int itemsPerPage = getItemsPerPage();
+    return std::max(1, (int(m_gameCards.size()) + itemsPerPage - 1) / itemsPerPage);
+}
+
+int MainUI::getVisibleStartIndex() const {
+    return m_currentPage * getItemsPerPage();
 }
 
 } // namespace ui

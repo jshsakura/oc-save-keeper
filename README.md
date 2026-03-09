@@ -42,7 +42,7 @@ Advanced/manual option:
 - Device-aware and user-aware revision metadata
 - Priority-based conflict handling across multiple devices
 - Korean UI for `ko`, English fallback for everything else
-- Bundled `NotoSansCJK` fonts for readable Korean and English text
+- Nintendo Switch shared font rendering for Korean and English text
 
 ## Install
 
@@ -53,8 +53,6 @@ The SD layout should look like this:
 ```text
 /switch/oc-save-keeper/oc-save-keeper.nro
 ```
-
-Fonts are embedded in the NRO through `romfs`, so there is no separate font copy step.
 
 Runtime data is stored here:
 
