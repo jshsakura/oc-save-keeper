@@ -19,12 +19,12 @@ namespace core {
 
 namespace {
 
-constexpr const char* BACKUP_BASE_PATH = "/switch/OpenCourse/oc-save-keeper/backups";
-constexpr const char* CONFIG_BASE_PATH = "/switch/OpenCourse/oc-save-keeper";
-constexpr const char* TEMP_BASE_PATH = "/switch/OpenCourse/oc-save-keeper/temp";
-constexpr const char* DEVICE_ID_PATH = "/switch/OpenCourse/oc-save-keeper/device_id.txt";
-constexpr const char* DEVICE_LABEL_PATH = "/switch/OpenCourse/oc-save-keeper/device_label.txt";
-constexpr const char* DEVICE_PRIORITY_PATH = "/switch/OpenCourse/oc-save-keeper/device_priority.txt";
+constexpr const char* BACKUP_BASE_PATH = "/switch/oc-save-keeper/backups";
+constexpr const char* CONFIG_BASE_PATH = "/switch/oc-save-keeper";
+constexpr const char* TEMP_BASE_PATH = "/switch/oc-save-keeper/temp";
+constexpr const char* DEVICE_ID_PATH = "/switch/oc-save-keeper/device_id.txt";
+constexpr const char* DEVICE_LABEL_PATH = "/switch/oc-save-keeper/device_label.txt";
+constexpr const char* DEVICE_PRIORITY_PATH = "/switch/oc-save-keeper/device_priority.txt";
 constexpr const char* META_ENTRY_NAME = ".dropkeep.meta";
 constexpr int DEFAULT_MAX_VERSIONS = 5;
 
@@ -289,7 +289,7 @@ bool SaveManager::scanTitle(uint64_t titleId) {
     snprintf(backupPath, sizeof(backupPath), "%s/%016lX", BACKUP_BASE_PATH, titleId);
     info.savePath = backupPath;
     
-    snprintf(backupPath, sizeof(backupPath), "/switch/OpenCourse/oc-save-keeper/icons/%016lX.jpg", titleId);
+    snprintf(backupPath, sizeof(backupPath), "/switch/oc-save-keeper/icons/%016lX.jpg", titleId);
     info.iconPath = backupPath;
     
     m_titles.push_back(info);

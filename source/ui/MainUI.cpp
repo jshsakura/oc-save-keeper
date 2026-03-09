@@ -1,5 +1,5 @@
 /**
- * Drop-Keep - Main UI implementation
+ * oc-save-keeper - Main UI implementation
  */
 
 #include "ui/MainUI.hpp"
@@ -44,21 +44,15 @@ bool MainUI::initialize() {
     // Initialize language system (auto-detects system language)
     utils::Language::instance().init();
     
-    // Load fonts
-    m_fontLarge = TTF_OpenFont("romfs:/fonts/NotoSansCJK-Bold.ttc", 36);
+    // Use one embedded CJK font for every weight to keep installation simple:
+    // one NRO, one app folder, no extra font copy step on the SD card.
+    m_fontLarge = TTF_OpenFont("romfs:/fonts/NotoSansCJK-Regular.ttc", 36);
     m_fontMedium = TTF_OpenFont("romfs:/fonts/NotoSansCJK-Regular.ttc", 24);
     m_fontSmall = TTF_OpenFont("romfs:/fonts/NotoSansCJK-Regular.ttc", 18);
-    
-    // Fallback paths
+
+    // Development fallback only.
     if (!m_fontLarge) {
-        m_fontLarge = TTF_OpenFont("/switch/OpenCourse/oc-save-keeper/fonts/NotoSansCJK-Bold.ttc", 36);
-        m_fontMedium = TTF_OpenFont("/switch/OpenCourse/oc-save-keeper/fonts/NotoSansCJK-Regular.ttc", 24);
-        m_fontSmall = TTF_OpenFont("/switch/OpenCourse/oc-save-keeper/fonts/NotoSansCJK-Regular.ttc", 18);
-    }
-    
-    // Final fallback for development
-    if (!m_fontLarge) {
-        m_fontLarge = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36);
+        m_fontLarge = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36);
         m_fontMedium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24);
         m_fontSmall = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18);
     }
@@ -621,9 +615,9 @@ void MainUI::downloadFromDropbox() {
     
     char localMeta[256];
     char localZip[256];
-    std::snprintf(localMeta, sizeof(localMeta), "/switch/OpenCourse/oc-save-keeper/temp/%016llX_latest.meta",
+    std::snprintf(localMeta, sizeof(localMeta), "/switch/oc-save-keeper/temp/%016llX_latest.meta",
                   static_cast<unsigned long long>(m_selectedTitle->titleId));
-    std::snprintf(localZip, sizeof(localZip), "/switch/OpenCourse/oc-save-keeper/temp/%016llX_latest.zip",
+    std::snprintf(localZip, sizeof(localZip), "/switch/oc-save-keeper/temp/%016llX_latest.zip",
                   static_cast<unsigned long long>(m_selectedTitle->titleId));
 
     // The low-memory path pulls the tiny metadata sidecar first and only

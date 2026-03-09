@@ -65,11 +65,9 @@ bool initialize() {
     }
     
     // Create directories
-    mkdir("/switch/OpenCourse", 0777);
-    mkdir("/switch/OpenCourse/oc-save-keeper", 0777);
-    mkdir("/switch/OpenCourse/oc-save-keeper/backups", 0777);
-    mkdir("/switch/OpenCourse/oc-save-keeper/fonts", 0777);
-    mkdir("/switch/OpenCourse/oc-save-keeper/logs", 0777);
+    mkdir("/switch/oc-save-keeper", 0777);
+    mkdir("/switch/oc-save-keeper/backups", 0777);
+    mkdir("/switch/oc-save-keeper/logs", 0777);
     
     LOG_INFO("oc-save-keeper initialized");
     return true;

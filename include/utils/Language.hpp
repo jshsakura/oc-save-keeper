@@ -34,7 +34,7 @@ public:
         FILE* file = fopen(path.c_str(), "r");
         if (!file) {
             // Fallback path for SD card
-            path = "/switch/OpenCourse/oc-save-keeper/lang/" + langCode + ".json";
+            path = "/switch/oc-save-keeper/lang/" + langCode + ".json";
             file = fopen(path.c_str(), "r");
         }
         

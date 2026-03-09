@@ -1,5 +1,5 @@
 /**
- * Drop-Keep - Dropbox Save Sync for Nintendo Switch
+ * oc-save-keeper - Dropbox sync client
  * Dropbox implementation - Phone-friendly OAuth
  */
 #include "network/Dropbox.hpp"
@@ -93,7 +93,7 @@ bool Dropbox::checkAuthentication() {
 // User creates a Dropbox app token on dropbox.com/developers ONCE
 // and pastes it into S.O.S - ONE time setup, works forever
 bool Dropbox::loadToken() {
-    FILE* file = fopen("/switch/OpenCourse/oc-save-keeper/dropbox_token.txt", "r");
+    FILE* file = fopen("/switch/oc-save-keeper/dropbox_token.txt", "r");
     if (!file) return false;
     
     char token[256];
@@ -110,7 +110,7 @@ bool Dropbox::loadToken() {
 }
 
 bool Dropbox::saveToken() {
-    FILE* file = fopen("/switch/OpenCourse/oc-save-keeper/dropbox_token.txt", "w");
+    FILE* file = fopen("/switch/oc-save-keeper/dropbox_token.txt", "w");
     if (!file) return false;
     
     fprintf(file, "%s\n", m_accessToken.c_str());
@@ -121,7 +121,7 @@ bool Dropbox::saveToken() {
 void Dropbox::logout() {
     m_accessToken.clear();
     m_authenticated = false;
-    remove("/switch/OpenCourse/oc-save-keeper/dropbox_token.txt");
+    remove("/switch/oc-save-keeper/dropbox_token.txt");
 }
 
 // Upload file to Dropbox

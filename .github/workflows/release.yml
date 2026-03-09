@@ -20,7 +20,7 @@ jobs:
       - name: Install packaging tools and fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip fonts-noto-cjk
+          sudo apt-get install -y zip
 
       - name: Build NRO in devkitPro container
         run: |
@@ -35,12 +35,10 @@ jobs:
           VERSION="${GITHUB_REF_NAME:-dev}"
           RELEASE_DIR="dist/oc-save-keeper-${VERSION}"
 
-          mkdir -p "${RELEASE_DIR}/switch/OpenCourse/oc-save-keeper/fonts"
+          mkdir -p "${RELEASE_DIR}/switch/oc-save-keeper"
           mkdir -p "${RELEASE_DIR}/docs"
 
-          cp oc-save-keeper.nro "${RELEASE_DIR}/switch/OpenCourse/oc-save-keeper/oc-save-keeper.nro"
-          cp /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc "${RELEASE_DIR}/switch/OpenCourse/oc-save-keeper/fonts/"
-          cp /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc "${RELEASE_DIR}/switch/OpenCourse/oc-save-keeper/fonts/"
+          cp oc-save-keeper.nro "${RELEASE_DIR}/switch/oc-save-keeper/oc-save-keeper.nro"
           cp README.md RELEASE_NOTES_v0.1.0-alpha.1.md TESTING_v0.1.0-alpha.1.md FONTS_NOTICE.md "${RELEASE_DIR}/docs/"
 
           cd dist

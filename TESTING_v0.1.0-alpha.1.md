@@ -4,9 +4,7 @@
 
 1. Extract the release zip to the root of the SD card.
 2. Confirm these files exist:
-   - `/switch/OpenCourse/oc-save-keeper/oc-save-keeper.nro`
-   - `/switch/OpenCourse/oc-save-keeper/fonts/NotoSansCJK-Regular.ttc`
-   - `/switch/OpenCourse/oc-save-keeper/fonts/NotoSansCJK-Bold.ttc`
+   - `/switch/oc-save-keeper/oc-save-keeper.nro`
 3. Launch from the Homebrew Menu.
 
 ## Dropbox Setup
@@ -29,6 +27,6 @@
 
 ## If Something Fails
 
-- Check `/switch/OpenCourse/oc-save-keeper/logs/oc-save-keeper.log`
+- Check `/switch/oc-save-keeper/logs/oc-save-keeper.log`
 - Note the game title, time, and the action you performed
 - Keep the backup folders if restore behavior looks wrong

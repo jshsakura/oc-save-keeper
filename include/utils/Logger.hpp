@@ -40,7 +40,7 @@ public:
         printf("\n");
         
         // Also write to file
-        FILE* logFile = fopen("/switch/OpenCourse/oc-save-keeper/logs/oc-save-keeper.log", "a");
+        FILE* logFile = fopen("/switch/oc-save-keeper/logs/oc-save-keeper.log", "a");
         if (logFile) {
             fprintf(logFile, "[%s] [%s] ", timeStr, levelStr[static_cast<int>(level)]);
             vfprintf(logFile, format, fileArgs);

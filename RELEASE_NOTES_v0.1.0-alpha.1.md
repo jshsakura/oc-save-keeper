@@ -6,16 +6,15 @@ First public alpha build for on-device testing.
 
 - `oc-save-keeper.nro`
 - Korean and English UI strings
-- Bundled `NotoSansCJK` fonts for readable Korean and English text
+- Embedded `NotoSansCJK` font for readable Korean and English text
 - Metadata-aware cloud sync flow
 - Device priority based conflict handling
 - Local version history and restore flow
 
 ## Install Layout
 
-- `/switch/OpenCourse/oc-save-keeper/oc-save-keeper.nro`
-- `/switch/OpenCourse/oc-save-keeper/fonts/...`
-- `/switch/OpenCourse/oc-save-keeper/backups/...`
+- `/switch/oc-save-keeper/oc-save-keeper.nro`
+- `/switch/oc-save-keeper/backups/...`
 
 ## Important Notes
 

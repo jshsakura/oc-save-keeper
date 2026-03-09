@@ -33,8 +33,7 @@ Recommended for most users:
 Advanced/manual option:
 
 - download the standalone `.nro`
-- place it inside `/switch/OpenCourse/oc-save-keeper/`
-- make sure the required font files are also present
+- place it inside `/switch/oc-save-keeper/`
 
 ## Features
 
@@ -52,21 +51,21 @@ Extract the release zip to the root of the SD card.
 The SD layout should look like this:
 
 ```text
-/switch/OpenCourse/oc-save-keeper/oc-save-keeper.nro
-/switch/OpenCourse/oc-save-keeper/fonts/NotoSansCJK-Regular.ttc
-/switch/OpenCourse/oc-save-keeper/fonts/NotoSansCJK-Bold.ttc
+/switch/oc-save-keeper/oc-save-keeper.nro
 ```
+
+Fonts are embedded in the NRO through `romfs`, so there is no separate font copy step.
 
 Runtime data is stored here:
 
 ```text
-/switch/OpenCourse/oc-save-keeper/backups/
-/switch/OpenCourse/oc-save-keeper/logs/
-/switch/OpenCourse/oc-save-keeper/temp/
-/switch/OpenCourse/oc-save-keeper/device_id.txt
-/switch/OpenCourse/oc-save-keeper/device_label.txt
-/switch/OpenCourse/oc-save-keeper/device_priority.txt
-/switch/OpenCourse/oc-save-keeper/dropbox_token.txt
+/switch/oc-save-keeper/backups/
+/switch/oc-save-keeper/logs/
+/switch/oc-save-keeper/temp/
+/switch/oc-save-keeper/device_id.txt
+/switch/oc-save-keeper/device_label.txt
+/switch/oc-save-keeper/device_priority.txt
+/switch/oc-save-keeper/dropbox_token.txt
 ```
 
 ## Dropbox Setup
@@ -101,7 +100,7 @@ Launch `oc-save-keeper`, open the Dropbox setup screen, and paste the token.
 The token is stored locally at:
 
 ```text
-/switch/OpenCourse/oc-save-keeper/dropbox_token.txt
+/switch/oc-save-keeper/dropbox_token.txt
 ```
 
 ## How Sync Decisions Work
@@ -227,7 +226,7 @@ For safer testing, use this order:
 If something fails, check:
 
 ```text
-/switch/OpenCourse/oc-save-keeper/logs/oc-save-keeper.log
+/switch/oc-save-keeper/logs/oc-save-keeper.log
 ```
 
 Useful things to record when reporting an issue:
