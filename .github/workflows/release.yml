@@ -1,0 +1,63 @@
+name: Build Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install packaging tools and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip fonts-noto-cjk
+
+      - name: Build NRO in devkitPro container
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            devkitpro/devkita64 \
+            make
+
+      - name: Package release bundle
+        run: |
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          RELEASE_DIR="dist/oc-save-keeper-${VERSION}"
+
+          mkdir -p "${RELEASE_DIR}/switch/OpenCourse/oc-save-keeper/fonts"
+          mkdir -p "${RELEASE_DIR}/docs"
+
+          cp oc-save-keeper.nro "${RELEASE_DIR}/switch/OpenCourse/oc-save-keeper/oc-save-keeper.nro"
+          cp /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc "${RELEASE_DIR}/switch/OpenCourse/oc-save-keeper/fonts/"
+          cp /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc "${RELEASE_DIR}/switch/OpenCourse/oc-save-keeper/fonts/"
+          cp README.md RELEASE_NOTES_v0.1.0-alpha.1.md TESTING_v0.1.0-alpha.1.md FONTS_NOTICE.md "${RELEASE_DIR}/docs/"
+
+          cd dist
+          zip -r "oc-save-keeper-${VERSION}.zip" "oc-save-keeper-${VERSION}"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oc-save-keeper-${{ github.ref_name || 'dev' }}
+          path: |
+            oc-save-keeper.nro
+            dist/oc-save-keeper-${{ github.ref_name || 'dev' }}.zip
+
+      - name: Upload release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            oc-save-keeper.nro
+            dist/oc-save-keeper-${{ github.ref_name }}.zip
