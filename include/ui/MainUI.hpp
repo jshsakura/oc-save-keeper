@@ -1,6 +1,6 @@
 /**
- * Drop-Keep - Dropbox Save Sync for Nintendo Switch
- * Main UI - SX OS style interface
+ * OC Save Keeper
+ * Main UI
  */
 
 #pragma once
@@ -21,19 +21,23 @@
 
 namespace ui {
 
-// Color scheme
 namespace Color {
-    constexpr SDL_Color Background = {30, 30, 40, 255};
-    constexpr SDL_Color Header = {45, 45, 60, 255};
-    constexpr SDL_Color Card = {50, 50, 65, 255};
-    constexpr SDL_Color CardHover = {60, 60, 80, 255};
-    constexpr SDL_Color Accent = {0, 150, 255, 255};      // Dropbox Blue
-    constexpr SDL_Color Warning = {255, 180, 0, 255};
-    constexpr SDL_Color Error = {255, 80, 80, 255};
-    constexpr SDL_Color Text = {255, 255, 255, 255};
-    constexpr SDL_Color TextDim = {180, 180, 180, 255};
-    constexpr SDL_Color Synced = {80, 200, 120, 255};
-    constexpr SDL_Color NotSynced = {200, 100, 100, 255};
+    constexpr SDL_Color Background = {241, 244, 248, 255};
+    constexpr SDL_Color Header = {250, 252, 255, 255};
+    constexpr SDL_Color Card = {255, 255, 255, 255};
+    constexpr SDL_Color CardHover = {236, 247, 255, 255};
+    constexpr SDL_Color Accent = {52, 152, 219, 255};
+    constexpr SDL_Color Warning = {233, 165, 61, 255};
+    constexpr SDL_Color Error = {201, 92, 92, 255};
+    constexpr SDL_Color Text = {41, 56, 76, 255};
+    constexpr SDL_Color TextDim = {111, 124, 142, 255};
+    constexpr SDL_Color Synced = {74, 163, 116, 255};
+    constexpr SDL_Color NotSynced = {186, 132, 87, 255};
+    constexpr SDL_Color Border = {214, 223, 232, 255};
+    constexpr SDL_Color BorderStrong = {187, 201, 216, 255};
+    constexpr SDL_Color Poster = {222, 231, 241, 255};
+    constexpr SDL_Color TitleStrip = {246, 249, 252, 255};
+    constexpr SDL_Color AccentSoft = {226, 242, 252, 255};
 }
 
 // UI State
@@ -150,10 +154,10 @@ private:
     int m_currentPage;
     
     // Dimensions
-    static constexpr int CARD_WIDTH = 220;
-    static constexpr int CARD_HEIGHT = 300;
-    static constexpr int CARD_MARGIN = 28;
-    static constexpr int HEADER_HEIGHT = 112;
+    static constexpr int CARD_WIDTH = 190;
+    static constexpr int CARD_HEIGHT = 252;
+    static constexpr int CARD_MARGIN = 12;
+    static constexpr int HEADER_HEIGHT = 96;
     static constexpr int FOOTER_HEIGHT = 72;
     
     // Render methods

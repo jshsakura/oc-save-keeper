@@ -346,9 +346,15 @@ bool SaveManager::scanTitle(uint64_t titleId) {
                                             titleId, &controlData, 
                                             sizeof(controlData), &controlSize);
     
-    if (R_SUCCEEDED(rc) && controlSize > 0) {
-        info.name = controlData.nacp.lang[0].name;
-        info.publisher = controlData.nacp.lang[0].author;
+    if (R_SUCCEEDED(rc) && controlSize >= sizeof(NacpStruct)) {
+        NacpLanguageEntry* langEntry = nullptr;
+        if (R_SUCCEEDED(nacpGetLanguageEntry(&controlData.nacp, &langEntry)) && langEntry) {
+            info.name = langEntry->name;
+            info.publisher = langEntry->author;
+        } else {
+            info.name = controlData.nacp.lang[SetLanguage_ENUS].name;
+            info.publisher = controlData.nacp.lang[SetLanguage_ENUS].author;
+        }
     } else {
         // Fallback: use title ID as name
         char name[32];
@@ -363,8 +369,9 @@ bool SaveManager::scanTitle(uint64_t titleId) {
     FILE* iconFile = fopen(iconPath, "rb");
     if (iconFile) {
         fclose(iconFile);
-    } else if (R_SUCCEEDED(rc) && controlSize > 0) {
-        writeBinaryFile(iconPath, controlData.icon, sizeof(controlData.icon));
+    } else if (R_SUCCEEDED(rc) && controlSize > sizeof(NacpStruct)) {
+        const size_t iconSize = std::min(sizeof(controlData.icon), controlSize - sizeof(NacpStruct));
+        writeBinaryFile(iconPath, controlData.icon, iconSize);
     }
 
     FsSaveDataFilter filter{};

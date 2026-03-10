@@ -101,16 +101,16 @@ private:
 
         if (m_currentLang == "ko") {
             assign({
-                {"app.name", "oc-save-keeper"},
+                {"app.name", "OC Save Keeper"},
                 {"app.slogan", "안전한 세이브 백업과 기기 간 동기화"},
                 {"status.connected", "연결됨"},
                 {"status.disconnected", "연결 필요"},
                 {"footer.controls", "A: 선택  |  Y: 언어  |  L/R: 페이지  |  -/+: 종료"},
                 {"footer.game_count", "개 게임"},
-                {"detail.upload", "클라우드 업로드"},
-                {"detail.download", "클라우드 다운로드"},
+                {"detail.upload", "업로드"},
+                {"detail.download", "받기"},
                 {"detail.backup", "로컬 백업"},
-                {"detail.history", "버전 히스토리"},
+                {"detail.history", "히스토리"},
                 {"detail.back", "뒤로"},
                 {"detail.save_size", "세이브 크기"},
                 {"detail.title_id", "Title ID"},
@@ -158,16 +158,16 @@ private:
         }
 
         assign({
-            {"app.name", "oc-save-keeper"},
+            {"app.name", "OC Save Keeper"},
             {"app.slogan", "Safe save backup and cross-device sync"},
             {"status.connected", "Connected"},
             {"status.disconnected", "Not connected"},
             {"footer.controls", "A: Select  |  Y: Language  |  L/R: Page  |  -/+: Exit"},
             {"footer.game_count", " games"},
-            {"detail.upload", "Upload to Cloud"},
-            {"detail.download", "Download from Cloud"},
+            {"detail.upload", "Upload"},
+            {"detail.download", "Fetch"},
             {"detail.backup", "Local Backup"},
-            {"detail.history", "Version History"},
+            {"detail.history", "History"},
             {"detail.back", "Back"},
             {"detail.save_size", "Save Size"},
             {"detail.title_id", "Title ID"},

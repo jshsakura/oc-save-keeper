@@ -1,5 +1,5 @@
 {
-    "app.name": "oc-save-keeper",
+    "app.name": "OC Save Keeper",
     "app.slogan": "안전한 세이브 백업과 기기 간 동기화",
 
     "status.connected": "연결됨",
@@ -8,10 +8,10 @@
     "footer.controls": "A: 선택  |  Y: 언어  |  L/R: 페이지  |  -/+: 종료",
     "footer.game_count": "개 게임",
 
-    "detail.upload": "클라우드 업로드",
-    "detail.download": "클라우드 다운로드",
+    "detail.upload": "업로드",
+    "detail.download": "받기",
     "detail.backup": "로컬 백업",
-    "detail.history": "버전 히스토리",
+    "detail.history": "히스토리",
     "detail.back": "뒤로",
 
     "detail.save_size": "세이브 크기",

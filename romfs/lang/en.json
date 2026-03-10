@@ -1,5 +1,5 @@
 {
-    "app.name": "oc-save-keeper",
+    "app.name": "OC Save Keeper",
     "app.slogan": "Safe save backup and cross-device sync",
 
     "status.connected": "Connected",
@@ -8,10 +8,10 @@
     "footer.controls": "A: Select  |  Y: Language  |  L/R: Page  |  -/+: Exit",
     "footer.game_count": " games",
 
-    "detail.upload": "Upload to Cloud",
-    "detail.download": "Download from Cloud",
+    "detail.upload": "Upload",
+    "detail.download": "Fetch",
     "detail.backup": "Local Backup",
-    "detail.history": "Version History",
+    "detail.history": "History",
     "detail.back": "Back",
 
     "detail.save_size": "Save Size",

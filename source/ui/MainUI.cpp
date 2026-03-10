@@ -97,9 +97,9 @@ bool MainUI::initialize() {
         }
 
         if (R_SUCCEEDED(rc)) {
-            m_fontLarge = openSharedFont(sharedFont, 44);
-            m_fontMedium = openSharedFont(sharedFont, 28);
-            m_fontSmall = openSharedFont(sharedFont, 22);
+            m_fontLarge = openSharedFont(sharedFont, 48);
+            m_fontMedium = openSharedFont(sharedFont, 32);
+            m_fontSmall = openSharedFont(sharedFont, 26);
         } else {
             LOG_ERROR("plGetSharedFontByType failed: 0x%x", rc);
         }
@@ -123,9 +123,9 @@ bool MainUI::initialize() {
             m_fontSmall = nullptr;
         }
 
-        m_fontLarge = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 44);
-        m_fontMedium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28);
-        m_fontSmall = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22);
+        m_fontLarge = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 48);
+        m_fontMedium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32);
+        m_fontSmall = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26);
     }
 
     if (!m_fontLarge || !m_fontMedium || !m_fontSmall) {
@@ -137,11 +137,6 @@ bool MainUI::initialize() {
     m_saveManager.scanTitles();
     updateGameCards();
     
-    // Check if need auth
-    if (m_dropbox.needsAuthentication()) {
-        m_state = State::Auth;
-    }
-    
     return true;
 }
 
@@ -150,9 +145,17 @@ void MainUI::updateGameCards() {
     
     auto titles = m_saveManager.getTitlesWithSaves();
     
-    const int contentHeight = m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - CARD_MARGIN * 2;
-    m_gridCols = std::max(1, (m_screenWidth - CARD_MARGIN) / (CARD_WIDTH + CARD_MARGIN));
-    m_gridRows = std::max(1, contentHeight / (CARD_HEIGHT + CARD_MARGIN));
+    const int outerMargin = 14;
+    const int gridGap = 12;
+    const int contentHeight = m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - outerMargin * 2;
+    const int titleCount = std::max(1, static_cast<int>(titles.size()));
+    m_gridCols = std::max(1, std::min(6, titleCount > 0 ? titleCount : 6));
+    m_gridRows = 2;
+    if (titleCount <= m_gridCols) {
+        m_gridRows = 1;
+    }
+    const int cardWidth = std::max(150, (m_screenWidth - outerMargin * 2 - gridGap * (m_gridCols - 1)) / m_gridCols);
+    const int cardHeight = std::max(236, (contentHeight - gridGap * (m_gridRows - 1)) / m_gridRows);
     const int itemsPerPage = getItemsPerPage();
     if (itemsPerPage > 0) {
         m_currentPage = std::clamp(m_selectedIndex / itemsPerPage, 0, std::max(0, getPageCount() - 1));
@@ -168,11 +171,9 @@ void MainUI::updateGameCards() {
         const int indexInPage = static_cast<int>(i) % std::max(1, itemsPerPage);
         const int row = indexInPage / m_gridCols;
         const int col = indexInPage % m_gridCols;
-        int x = CARD_MARGIN + col * (CARD_WIDTH + CARD_MARGIN);
-        int y = HEADER_HEIGHT + CARD_MARGIN + row * (CARD_HEIGHT + CARD_MARGIN);
-        card.rect = {x, y, CARD_WIDTH, CARD_HEIGHT};
-        // Avoid holding a texture per title; icons are loaded on demand for the
-        // focused card to keep UI memory predictable on Switch.
+        int x = outerMargin + col * (cardWidth + gridGap);
+        int y = HEADER_HEIGHT + outerMargin + row * (cardHeight + gridGap);
+        card.rect = {x, y, cardWidth, cardHeight};
         card.icon = nullptr;
         
         m_gameCards.push_back(card);
@@ -338,9 +339,17 @@ void MainUI::handleButtonPress(const Button& btn) {
     std::string cancelText = LANG("auth.cancel");
     
     if (btn.text == uploadText) {
-        syncToDropbox();
+        if (m_dropbox.isAuthenticated()) {
+            syncToDropbox();
+        } else {
+            m_state = State::Auth;
+        }
     } else if (btn.text == downloadText) {
-        downloadFromDropbox();
+        if (m_dropbox.isAuthenticated()) {
+            downloadFromDropbox();
+        } else {
+            m_state = State::Auth;
+        }
     } else if (btn.text == backupText) {
         backupLocal();
     } else if (btn.text == historyText) {
@@ -348,6 +357,13 @@ void MainUI::handleButtonPress(const Button& btn) {
     } else if (btn.text == backText) {
         m_state = State::Main;
         m_selectedTitle = nullptr;
+    } else if (btn.text == "X") {
+        if (m_state == State::VersionHistory) {
+            m_state = State::GameDetail;
+        } else {
+            m_state = State::Main;
+            m_selectedTitle = nullptr;
+        }
     } else if (btn.text == connectText) {
         connectDropbox();
     } else if (btn.text == cancelText) {
@@ -399,32 +415,45 @@ void MainUI::renderHeader() {
     SDL_SetRenderDrawColor(m_renderer, Color::Header.r, Color::Header.g,
                           Color::Header.b, Color::Header.a);
     SDL_RenderFillRect(m_renderer, &headerRect);
+    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+    SDL_RenderDrawLine(m_renderer, 0, HEADER_HEIGHT - 1, m_screenWidth, HEADER_HEIGHT - 1);
     
-    renderText(LANG("app.name"), 28, 22, m_fontLarge, Color::Accent);
+    renderText(LANG("app.name"), 24, 16, m_fontLarge, Color::Text);
+    SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, 255);
+    SDL_Rect accentBar = {24, 62, 108, 4};
+    SDL_RenderFillRect(m_renderer, &accentBar);
     
     // Connection status
     bool connected = m_dropbox.isAuthenticated();
     std::string status = connected ? LANG("status.connected") : LANG("status.disconnected");
     SDL_Color statusColor = connected ? Color::Synced : Color::NotSynced;
     const std::string slogan = LANG("app.slogan");
-    m_languageButton = {m_screenWidth - 98, 24, 70, 44};
-
-    SDL_SetRenderDrawColor(m_renderer, 58, 58, 78, 255);
-    SDL_RenderFillRect(m_renderer, &m_languageButton);
-    SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, 255);
-    SDL_RenderDrawRect(m_renderer, &m_languageButton);
-    renderTextCentered(utils::Language::instance().currentLang() == "ko" ? "KO" : "EN",
-                       m_languageButton.x, m_languageButton.y + 8, m_languageButton.w, m_fontSmall, Color::Text);
+    m_languageButton = {m_screenWidth - 92, 28, 64, 38};
 
     int statusWidth = 0;
     int statusHeight = 0;
     TTF_SizeUTF8(m_fontMedium, status.c_str(), &statusWidth, &statusHeight);
-    renderText(status, m_languageButton.x - statusWidth - 24, 22, m_fontMedium, statusColor);
+    SDL_Rect statusChip = {m_languageButton.x - statusWidth - 46, 10, statusWidth + 26, 30};
+    SDL_SetRenderDrawColor(m_renderer,
+                           connected ? Color::AccentSoft.r : Color::TitleStrip.r,
+                           connected ? Color::AccentSoft.g : Color::TitleStrip.g,
+                           connected ? Color::AccentSoft.b : Color::TitleStrip.b,
+                           255);
+    SDL_RenderFillRect(m_renderer, &statusChip);
+    SDL_SetRenderDrawColor(m_renderer, statusColor.r, statusColor.g, statusColor.b, 255);
+    SDL_RenderDrawRect(m_renderer, &statusChip);
+    renderText(status, statusChip.x + 13, 12, m_fontSmall, statusColor);
 
     int sloganWidth = 0;
     int sloganHeight = 0;
     TTF_SizeUTF8(m_fontSmall, slogan.c_str(), &sloganWidth, &sloganHeight);
-    renderText(slogan, m_languageButton.x - sloganWidth - 24, 58, m_fontSmall, Color::TextDim);
+    renderText(slogan, m_languageButton.x - sloganWidth - 20, 46, m_fontSmall, Color::TextDim);
+    SDL_SetRenderDrawColor(m_renderer, Color::TitleStrip.r, Color::TitleStrip.g, Color::TitleStrip.b, 255);
+    SDL_RenderFillRect(m_renderer, &m_languageButton);
+    SDL_SetRenderDrawColor(m_renderer, Color::BorderStrong.r, Color::BorderStrong.g, Color::BorderStrong.b, 255);
+    SDL_RenderDrawRect(m_renderer, &m_languageButton);
+    renderTextCentered(utils::Language::instance().currentLang() == "ko" ? "KO" : "EN",
+                       m_languageButton.x, m_languageButton.y + 5, m_languageButton.w, m_fontSmall, Color::Accent);
 }
 
 void MainUI::renderFooter() {
@@ -432,15 +461,17 @@ void MainUI::renderFooter() {
     SDL_SetRenderDrawColor(m_renderer, Color::Header.r, Color::Header.g,
                           Color::Header.b, Color::Header.a);
     SDL_RenderFillRect(m_renderer, &footerRect);
+    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+    SDL_RenderDrawLine(m_renderer, 0, m_screenHeight - FOOTER_HEIGHT, m_screenWidth, m_screenHeight - FOOTER_HEIGHT);
     
     renderText(LANG("footer.controls"), 
-              20, m_screenHeight - FOOTER_HEIGHT + 20, m_fontSmall, Color::TextDim);
+              20, m_screenHeight - FOOTER_HEIGHT + 16, m_fontSmall, Color::TextDim);
     
     std::string count = std::to_string(m_gameCards.size()) + LANG("footer.game_count");
     int countWidth = 0;
     int countHeight = 0;
     TTF_SizeUTF8(m_fontSmall, count.c_str(), &countWidth, &countHeight);
-    renderText(count, m_screenWidth - countWidth - 20, m_screenHeight - FOOTER_HEIGHT + 20, m_fontSmall, Color::TextDim);
+    renderText(count, m_screenWidth - countWidth - 20, m_screenHeight - FOOTER_HEIGHT + 16, m_fontSmall, Color::TextDim);
 }
 
 void MainUI::renderGameList() {
@@ -463,38 +494,63 @@ void MainUI::renderCard(const GameCard& card) {
     SDL_Color bgColor = card.selected ? Color::CardHover : Color::Card;
     SDL_SetRenderDrawColor(m_renderer, bgColor.r, bgColor.g, bgColor.b, bgColor.a);
     SDL_RenderFillRect(m_renderer, &card.rect);
+    SDL_SetRenderDrawColor(m_renderer,
+                           card.selected ? Color::BorderStrong.r : Color::Border.r,
+                           card.selected ? Color::BorderStrong.g : Color::Border.g,
+                           card.selected ? Color::BorderStrong.b : Color::Border.b,
+                           255);
+    SDL_RenderDrawRect(m_renderer, &card.rect);
     
     if (card.selected) {
         SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g,
                               Color::Accent.b, Color::Accent.a);
+        SDL_Rect topBar = {card.rect.x, card.rect.y, card.rect.w, 5};
+        SDL_RenderFillRect(m_renderer, &topBar);
         SDL_RenderDrawRect(m_renderer, &card.rect);
     }
-    
-    // Icon placeholder
-    SDL_Rect iconRect = {card.rect.x + 20, card.rect.y + 18, 180, 180};
-    SDL_Texture* iconTexture = card.icon;
-    if (!iconTexture && card.selected) {
-        iconTexture = loadIcon(card.title->iconPath);
-    }
+
+    const int horizontalPadding = 10;
+    const int verticalPadding = 10;
+    const int titleStripHeight = 46;
+    const int posterHeight = std::max(150, card.rect.h - (verticalPadding * 2) - titleStripHeight);
+    SDL_Rect iconRect = {
+        card.rect.x + horizontalPadding,
+        card.rect.y + verticalPadding,
+        card.rect.w - horizontalPadding * 2,
+        posterHeight
+    };
+    SDL_Texture* iconTexture = loadIcon(card.title->iconPath);
 
     if (iconTexture) {
         SDL_RenderCopy(m_renderer, iconTexture, nullptr, &iconRect);
     } else {
-        SDL_SetRenderDrawColor(m_renderer, 70, 70, 90, 255);
+        SDL_SetRenderDrawColor(m_renderer, Color::Poster.r, Color::Poster.g, Color::Poster.b, 255);
         SDL_RenderFillRect(m_renderer, &iconRect);
-        renderTextCentered("🎮", iconRect.x, iconRect.y + 70, 180, m_fontLarge, Color::Text);
+        renderTextCentered("NO IMAGE", iconRect.x, iconRect.y + (iconRect.h / 2) - 12, iconRect.w, m_fontSmall, Color::TextDim);
     }
+    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+    SDL_RenderDrawRect(m_renderer, &iconRect);
 
-    if (iconTexture && iconTexture != card.icon) {
+    if (iconTexture) {
         SDL_DestroyTexture(iconTexture);
     }
-    
-    // Name
-    std::string name = fitText(m_fontSmall, card.title->name, CARD_WIDTH - 24);
-    renderTextCentered(name, card.rect.x + 12, card.rect.y + 222, CARD_WIDTH - 24, m_fontSmall, Color::Text);
-    
-    // Sync badge
-    renderSyncBadge(card.rect.x + CARD_WIDTH - 40, card.rect.y + 10, card.synced);
+
+    SDL_Rect titleRect = {
+        card.rect.x + horizontalPadding,
+        card.rect.y + card.rect.h - verticalPadding - titleStripHeight,
+        card.rect.w - horizontalPadding * 2,
+        titleStripHeight
+    };
+    SDL_Color titleBg = card.selected ? Color::AccentSoft : Color::TitleStrip;
+    SDL_SetRenderDrawColor(m_renderer, titleBg.r, titleBg.g, titleBg.b, 255);
+    SDL_RenderFillRect(m_renderer, &titleRect);
+    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+    SDL_RenderDrawRect(m_renderer, &titleRect);
+
+    std::string name = fitText(m_fontSmall, card.title->name, titleRect.w - 14);
+    renderTextCentered(name, titleRect.x + 7, titleRect.y + 10, titleRect.w - 14, m_fontSmall, Color::Text);
+
+    renderSyncBadge(card.rect.x + card.rect.w - 40, card.rect.y + 10, card.synced);
 }
 
 void MainUI::renderSyncBadge(int x, int y, bool synced) {
@@ -502,76 +558,93 @@ void MainUI::renderSyncBadge(int x, int y, bool synced) {
     SDL_Rect badgeRect = {x, y, 30, 30};
     SDL_SetRenderDrawColor(m_renderer, color.r, color.g, color.b, 200);
     SDL_RenderFillRect(m_renderer, &badgeRect);
+    SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 180);
+    SDL_RenderDrawRect(m_renderer, &badgeRect);
     
     const char* icon = synced ? "✓" : "○";
-    renderTextCentered(icon, x, y + 5, 30, m_fontSmall, Color::Text);
+    renderTextCentered(icon, x, y + 5, 30, m_fontSmall, Color::Card);
 }
 
 void MainUI::renderGameDetail() {
     if (!m_selectedTitle) return;
     
-    SDL_Rect detailRect = {72, HEADER_HEIGHT + 36, m_screenWidth - 144, m_screenHeight - HEADER_HEIGHT - 128};
+    SDL_Rect detailRect = {56, HEADER_HEIGHT + 24, m_screenWidth - 112, m_screenHeight - HEADER_HEIGHT - 96};
     SDL_SetRenderDrawColor(m_renderer, Color::Card.r, Color::Card.g,
                           Color::Card.b, Color::Card.a);
     SDL_RenderFillRect(m_renderer, &detailRect);
+    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+    SDL_RenderDrawRect(m_renderer, &detailRect);
     
-    int left = detailRect.x + 48;
-    int y = detailRect.y + 40;
-    
-    renderText(fitText(m_fontLarge, m_selectedTitle->name, detailRect.w - 96), left, y, m_fontLarge, Color::Text);
-    y += 50;
-    
-    renderText(m_selectedTitle->publisher, left, y, m_fontMedium, Color::TextDim);
-    y += 40;
-    
+    const int panelPadding = 30;
+    const int posterWidth = 276;
+    const int posterHeight = 356;
+    SDL_Rect posterRect = {detailRect.x + panelPadding, detailRect.y + panelPadding, posterWidth, posterHeight};
+    SDL_SetRenderDrawColor(m_renderer, Color::Poster.r, Color::Poster.g, Color::Poster.b, 255);
+    SDL_RenderFillRect(m_renderer, &posterRect);
+    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+    SDL_RenderDrawRect(m_renderer, &posterRect);
+
+    SDL_Texture* posterTexture = loadIcon(m_selectedTitle->iconPath);
+    if (posterTexture) {
+        SDL_RenderCopy(m_renderer, posterTexture, nullptr, &posterRect);
+        SDL_DestroyTexture(posterTexture);
+    } else {
+        renderTextCentered("NO IMAGE", posterRect.x, posterRect.y + (posterRect.h / 2) - 12, posterRect.w, m_fontMedium, Color::TextDim);
+    }
+
+    const int rightX = posterRect.x + posterRect.w + 28;
+    const int rightWidth = detailRect.x + detailRect.w - rightX - panelPadding;
+    const int labelWidth = 180;
+    int y = detailRect.y + panelPadding;
+
+    renderText(fitText(m_fontLarge, m_selectedTitle->name, rightWidth), rightX, y, m_fontLarge, Color::Text);
+    y += 46;
+
+    renderText(m_selectedTitle->publisher, rightX, y, m_fontMedium, Color::TextDim);
+    y += 38;
+
     char idStr[32];
     snprintf(idStr, sizeof(idStr), "Title ID: %016lX", m_selectedTitle->titleId);
-    renderText(idStr, left, y, m_fontSmall, Color::TextDim);
-    y += 30;
+    renderText(idStr, rightX, y, m_fontSmall, Color::TextDim);
+    y += 46;
+
+    auto renderInfoRow = [&](const std::string& label, const std::string& value) {
+        SDL_Rect rowRect = {rightX, y, rightWidth, 48};
+        SDL_SetRenderDrawColor(m_renderer, Color::TitleStrip.r, Color::TitleStrip.g, Color::TitleStrip.b, 255);
+        SDL_RenderFillRect(m_renderer, &rowRect);
+        SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+        SDL_RenderDrawRect(m_renderer, &rowRect);
+        renderText(label, rowRect.x + 16, rowRect.y + 10, m_fontSmall, Color::TextDim);
+        renderText(fitText(m_fontSmall, value, rowRect.w - labelWidth - 32), rowRect.x + labelWidth, rowRect.y + 10, m_fontSmall, Color::Text);
+        y += 56;
+    };
     
-    char sizeStr[64];
-    snprintf(sizeStr, sizeof(sizeStr), "%s: %.2f MB", LANG("detail.save_size"), m_selectedTitle->saveSize / (1024.0 * 1024.0));
-    renderText(sizeStr, left, y, m_fontSmall, Color::TextDim);
-    y += 60;
+    char sizeValue[32];
+    snprintf(sizeValue, sizeof(sizeValue), "%.2f MB", m_selectedTitle->saveSize / (1024.0 * 1024.0));
+    renderInfoRow(LANG("detail.save_size"), sizeValue);
 
     auto versions = m_saveManager.getBackupVersions(m_selectedTitle);
     if (!versions.empty()) {
         const auto& latest = versions.front();
-        renderText(std::string(LANG("detail.latest_device")) + ": " +
-                   (latest.deviceLabel.empty() ? "-" : latest.deviceLabel),
-                   left, y, m_fontSmall, Color::TextDim);
-        y += 24;
-        renderText(std::string(LANG("detail.latest_user")) + ": " +
-                   (latest.userName.empty() ? "-" : latest.userName),
-                   left, y, m_fontSmall, Color::TextDim);
-        y += 24;
-        renderText(std::string(LANG("detail.latest_source")) + ": " +
-                   (latest.source.empty() ? "-" : latest.source),
-                   left, y, m_fontSmall, Color::TextDim);
-        y += 36;
+        renderInfoRow(LANG("detail.latest_device"), latest.deviceLabel.empty() ? "-" : latest.deviceLabel);
+        renderInfoRow(LANG("detail.latest_user"), latest.userName.empty() ? "-" : latest.userName);
+        renderInfoRow(LANG("detail.latest_source"), latest.source.empty() ? "-" : latest.source);
     }
     
-    std::string syncText = m_dropbox.isAuthenticated() ? 
-        std::string("☁️ Dropbox: ") + LANG("status.connected") : 
-        std::string("☁️ Dropbox: ") + LANG("status.disconnected");
-    renderText(syncText, left, y, m_fontMedium, m_dropbox.isAuthenticated() ? Color::Synced : Color::NotSynced);
+    renderInfoRow("Dropbox", m_dropbox.isAuthenticated() ? LANG("status.connected") : LANG("status.disconnected"));
     
-    // Buttons
     m_buttons.clear();
-    int btnW = std::min(280, (detailRect.w - 96) / 3);
-    int btnH = 58;
-    int gap = 18;
-    int row1Width = btnW * 3 + gap * 2;
-    int row1X = detailRect.x + (detailRect.w - row1Width) / 2;
-    int row1Y = detailRect.y + detailRect.h - 150;
-    int row2Width = btnW * 2 + gap;
-    int row2X = detailRect.x + (detailRect.w - row2Width) / 2;
-    int row2Y = row1Y + btnH + 16;
-    m_buttons.emplace_back(row1X, row1Y, btnW, btnH, LANG("detail.upload"));
-    m_buttons.emplace_back(row1X + btnW + gap, row1Y, btnW, btnH, LANG("detail.download"));
-    m_buttons.emplace_back(row1X + (btnW + gap) * 2, row1Y, btnW, btnH, LANG("detail.backup"));
-    m_buttons.emplace_back(row2X, row2Y, btnW, btnH, LANG("detail.history"));
-    m_buttons.emplace_back(row2X + btnW + gap, row2Y, btnW, btnH, LANG("detail.back"));
+    int btnW = std::min(220, (detailRect.w - 70) / 4);
+    int btnH = 56;
+    int gap = 12;
+    int rowWidth = btnW * 4 + gap * 3;
+    int rowX = detailRect.x + (detailRect.w - rowWidth) / 2;
+    int rowY = detailRect.y + detailRect.h - 82;
+    m_buttons.emplace_back(detailRect.x + detailRect.w - 64, detailRect.y + 16, 40, 40, "X");
+    m_buttons.emplace_back(rowX, rowY, btnW, btnH, LANG("detail.upload"));
+    m_buttons.emplace_back(rowX + btnW + gap, rowY, btnW, btnH, LANG("detail.download"));
+    m_buttons.emplace_back(rowX + (btnW + gap) * 2, rowY, btnW, btnH, LANG("detail.backup"));
+    m_buttons.emplace_back(rowX + (btnW + gap) * 3, rowY, btnW, btnH, LANG("detail.history"));
     
     for (const auto& btn : m_buttons) {
         renderButton(btn);
@@ -579,9 +652,21 @@ void MainUI::renderGameDetail() {
 }
 
 void MainUI::renderButton(const Button& btn) {
-    SDL_Color bgColor = btn.hover ? Color::CardHover : Color::Accent;
+    const bool isClose = btn.text == "X";
+    const bool isPrimary = btn.text == LANG("detail.upload") ||
+                           btn.text == LANG("detail.download") ||
+                           btn.text == LANG("auth.connect");
+    SDL_Color bgColor = btn.hover
+        ? (isPrimary ? Color::Accent : Color::CardHover)
+        : (isClose ? Color::Header : (isPrimary ? Color::Accent : Color::Card));
     SDL_SetRenderDrawColor(m_renderer, bgColor.r, bgColor.g, bgColor.b, bgColor.a);
     SDL_RenderFillRect(m_renderer, &btn.rect);
+    SDL_SetRenderDrawColor(m_renderer,
+                           isClose ? Color::TextDim.r : (isPrimary ? Color::Accent.r : Color::Border.r),
+                           isClose ? Color::TextDim.g : (isPrimary ? Color::Accent.g : Color::Border.g),
+                           isClose ? Color::TextDim.b : (isPrimary ? Color::Accent.b : Color::Border.b),
+                           255);
+    SDL_RenderDrawRect(m_renderer, &btn.rect);
     
     TTF_Font* font = m_fontMedium;
     int textW = 0;
@@ -593,7 +678,7 @@ void MainUI::renderButton(const Button& btn) {
     }
     renderTextCentered(fitText(font, btn.text, btn.rect.w - 24),
                        btn.rect.x, btn.rect.y + (btn.rect.h - textH) / 2 - 2,
-                       btn.rect.w, font, Color::Text);
+                       btn.rect.w, font, isClose ? Color::Text : (isPrimary ? Color::Card : Color::Text));
 }
 
 void MainUI::renderAuthScreen() {
@@ -606,6 +691,8 @@ void MainUI::renderAuthScreen() {
     SDL_Rect authRect = {(m_screenWidth - panelWidth) / 2, (m_screenHeight - panelHeight) / 2, panelWidth, panelHeight};
     SDL_SetRenderDrawColor(m_renderer, Color::Card.r, Color::Card.g, Color::Card.b, 255);
     SDL_RenderFillRect(m_renderer, &authRect);
+    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+    SDL_RenderDrawRect(m_renderer, &authRect);
     
     renderTextCentered(LANG("auth.title"), authRect.x, authRect.y + 20, authRect.w, m_fontLarge, Color::Accent);
 
@@ -624,7 +711,7 @@ void MainUI::renderAuthScreen() {
     y += 50;
 
     m_authTokenBox = {left, y, authRect.w - 100, 76};
-    SDL_SetRenderDrawColor(m_renderer, 40, 40, 55, 255);
+    SDL_SetRenderDrawColor(m_renderer, Color::TitleStrip.r, Color::TitleStrip.g, Color::TitleStrip.b, 255);
     SDL_RenderFillRect(m_renderer, &m_authTokenBox);
     SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, 255);
     SDL_RenderDrawRect(m_renderer, &m_authTokenBox);
@@ -654,13 +741,13 @@ void MainUI::renderAuthScreen() {
 }
 
 void MainUI::renderVersionHistory() {
-    renderText(LANG("history.title"), 100, HEADER_HEIGHT + 20, m_fontLarge, Color::Accent);
+    renderText(LANG("history.title"), 72, HEADER_HEIGHT + 16, m_fontLarge, Color::Text);
     
     if (m_selectedTitle) {
-        renderText(fitText(m_fontMedium, m_selectedTitle->name, m_screenWidth - 470), 350, HEADER_HEIGHT + 25, m_fontMedium, Color::Text);
+        renderText(fitText(m_fontMedium, m_selectedTitle->name, m_screenWidth - 360), 300, HEADER_HEIGHT + 22, m_fontMedium, Color::TextDim);
     }
     
-    int y = HEADER_HEIGHT + 80;
+    int y = HEADER_HEIGHT + 64;
     
     for (size_t i = 0; i < m_versionItems.size(); i++) {
         VersionItem& item = m_versionItems[i];
@@ -670,6 +757,8 @@ void MainUI::renderVersionHistory() {
         SDL_Color bgColor = item.selected ? Color::CardHover : Color::Card;
         SDL_SetRenderDrawColor(m_renderer, bgColor.r, bgColor.g, bgColor.b, bgColor.a);
         SDL_RenderFillRect(m_renderer, &item.rect);
+        SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
+        SDL_RenderDrawRect(m_renderer, &item.rect);
         
         if (item.selected) {
             SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, Color::Accent.a);
@@ -693,7 +782,7 @@ void MainUI::renderVersionHistory() {
     }
     
     m_buttons.clear();
-    m_buttons.emplace_back(100, m_screenHeight - 80, 200, 50, LANG("detail.back"));
+    m_buttons.emplace_back(m_screenWidth - 72, HEADER_HEIGHT + 12, 40, 40, "X");
     for (const auto& btn : m_buttons) {
         renderButton(btn);
     }

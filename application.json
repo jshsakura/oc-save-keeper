@@ -1,8 +1,8 @@
 {
-    "name": "oc-save-keeper",
+    "name": "OC Save Keeper",
     "icon": "icon.jpg",
     "author": "OpenCourse",
     "version": "0.1.0",
-    "description": "Dropbox Save Sync for Nintendo Switch",
+    "description": "Safe save backup and sync for Nintendo Switch",
     "launch_path": "/switch/oc-save-keeper/oc-save-keeper.nro"
 }
