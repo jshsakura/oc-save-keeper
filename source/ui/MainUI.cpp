@@ -13,49 +13,49 @@
 namespace ui {
 
 namespace Theme {
-    ColorPalette Light() {
+    ColorPalette Light() { // Catppuccin Latte
         return {
-            {248, 250, 252, 255}, // Background: Slate 50
-            {255, 255, 255, 255}, // Header: White
-            {255, 255, 255, 255}, // Card: White
-            {241, 245, 249, 255}, // CardHover: Slate 100
-            {59, 130, 246, 255},  // Accent: Blue 500
-            {219, 234, 254, 255}, // AccentSoft: Blue 100
-            {245, 158, 11, 255},  // Warning: Amber 500
-            {239, 68, 68, 255},   // Error: Red 500
-            {15, 23, 42, 255},    // Text: Slate 900
-            {100, 116, 139, 255}, // TextDim: Slate 500
-            {34, 197, 94, 255},   // Synced: Green 500
-            {148, 163, 184, 255}, // NotSynced: Slate 400
-            {226, 232, 240, 255}, // Border: Slate 200
-            {59, 130, 246, 255},  // BorderStrong: Blue 500
-            {248, 250, 252, 255}, // Poster: Slate 50
-            {255, 255, 255, 255}, // TitleStrip: White
-            {0, 0, 0, 20},        // Shadow
-            {59, 130, 246, 40}    // SelectionGlow
+            {239, 241, 245, 255}, // Background: Base
+            {230, 233, 239, 255}, // Header: Mantle
+            {204, 208, 218, 255}, // Card: Surface0
+            {188, 192, 204, 255}, // CardHover: Surface1
+            {30, 102, 245, 255},  // Accent: Blue
+            {114, 135, 253, 255}, // AccentSoft: Lavender
+            {223, 142, 29, 255},  // Warning: Yellow
+            {210, 15, 57, 255},   // Error: Red
+            {76, 79, 105, 255},   // Text: Text
+            {108, 111, 133, 255}, // TextDim: Subtext0
+            {64, 160, 43, 255},   // Synced: Green
+            {156, 160, 176, 255}, // NotSynced: Overlay0
+            {172, 176, 190, 255}, // Border: Overlay1
+            {30, 102, 245, 255},  // BorderStrong: Blue
+            {220, 224, 232, 255}, // Poster: Crust
+            {204, 208, 218, 255}, // TitleStrip: Surface0
+            {0, 0, 0, 40},        // Shadow
+            {30, 102, 245, 60}    // SelectionGlow
         };
     }
 
-    ColorPalette Dark() {
+    ColorPalette Dark() { // Catppuccin Mocha
         return {
-            {15, 23, 42, 255},    // Background: Slate 900
-            {30, 41, 59, 255},    // Header: Slate 800
-            {30, 41, 59, 255},    // Card: Slate 800
-            {51, 65, 85, 255},    // CardHover: Slate 700
-            {56, 189, 248, 255},  // Accent: Sky 400
-            {12, 74, 110, 255},   // AccentSoft: Sky 900
-            {251, 191, 36, 255},  // Warning: Amber 400
-            {248, 113, 113, 255}, // Error: Red 400
-            {248, 250, 252, 255}, // Text: Slate 50
-            {148, 163, 184, 255}, // TextDim: Slate 400
-            {34, 197, 94, 255},   // Synced: Green 500
-            {71, 85, 105, 255},   // NotSynced: Slate 600
-            {51, 65, 85, 255},    // Border: Slate 700
-            {56, 189, 248, 255},  // BorderStrong: Sky 400
-            {15, 23, 42, 255},    // Poster: Slate 900
-            {30, 41, 59, 255},    // TitleStrip: Slate 800
-            {0, 0, 0, 150},       // Shadow
-            {56, 189, 248, 60}    // SelectionGlow
+            {30, 30, 46, 255},    // Background: Base
+            {24, 24, 37, 255},    // Header: Mantle
+            {49, 50, 68, 255},    // Card: Surface0
+            {69, 71, 90, 255},    // CardHover: Surface1
+            {137, 220, 235, 255}, // Accent: Sky
+            {180, 190, 254, 255}, // AccentSoft: Lavender
+            {249, 226, 175, 255}, // Warning: Yellow
+            {243, 139, 168, 255}, // Error: Red
+            {205, 214, 244, 255}, // Text: Text
+            {166, 173, 200, 255}, // TextDim: Subtext0
+            {166, 227, 161, 255}, // Synced: Green
+            {108, 112, 126, 255}, // NotSynced: Overlay0
+            {88, 91, 112, 255},   // Border: Overlay1
+            {137, 220, 235, 255}, // BorderStrong: Sky
+            {17, 17, 27, 255},    // Poster: Crust
+            {49, 50, 68, 255},    // TitleStrip: Surface0
+            {0, 0, 0, 100},       // Shadow
+            {137, 220, 235, 100}  // SelectionGlow
         };
     }
 }
@@ -931,21 +931,21 @@ void MainUI::update() {
     m_lastFocusState = focusState;
 #endif
     
-    // Smooth selection pulse animation
+    // Snappier selection pulse animation (Speed increased)
     static float timer = 0;
-    timer += 0.06f;
-    m_selectionScale = 1.0f + 0.025f * sin(timer);
-    m_selectionAlpha = 180.0f + 75.0f * sin(timer);
+    timer += 0.15f; 
+    m_selectionScale = 1.0f + 0.02f * sin(timer);
+    m_selectionAlpha = 200.0f + 55.0f * sin(timer);
     
-    // Background Drifting Animation
-    m_bgTimer += 0.005f;
+    // Snappier background animation
+    m_bgTimer += 0.015f;
     
-    // Overlay Fade Logic
+    // Fast Overlay Fade Logic
     const bool showOverlay = (m_state != State::Main && m_state != State::SyncAll);
     if (showOverlay) {
-        if (m_overlayAlpha < 255.0f) m_overlayAlpha += 20.0f;
+        if (m_overlayAlpha < 255.0f) m_overlayAlpha += 40.0f;
     } else {
-        if (m_overlayAlpha > 0.0f) m_overlayAlpha -= 20.0f;
+        if (m_overlayAlpha > 0.0f) m_overlayAlpha -= 40.0f;
     }
     m_overlayAlpha = std::clamp(m_overlayAlpha, 0.0f, 255.0f);
 
@@ -953,9 +953,9 @@ void MainUI::update() {
     if (m_toast.active) {
         if (m_toast.timer > 0) {
             m_toast.timer--;
-            if (m_toast.alpha < 255.0f) m_toast.alpha += 15.0f;
+            if (m_toast.alpha < 255.0f) m_toast.alpha += 30.0f;
         } else {
-            m_toast.alpha -= 10.0f;
+            m_toast.alpha -= 20.0f;
             if (m_toast.alpha <= 0.0f) {
                 m_toast.alpha = 0.0f;
                 m_toast.active = false;
@@ -963,9 +963,9 @@ void MainUI::update() {
         }
     }
     
-    // Smooth scrolling
+    // Smooth scrolling (Faster)
     float targetOffset = static_cast<float>(m_scrollRow);
-    m_scrollOffset += (targetOffset - m_scrollOffset) * 0.25f;
+    m_scrollOffset += (targetOffset - m_scrollOffset) * 0.35f;
 }
 
 void MainUI::renderIcon(SDL_Texture* texture, const SDL_Rect& rect, bool selected) {
@@ -1042,19 +1042,19 @@ void MainUI::renderHeader() {
     std::string status = connected ? LANG("status.connected") : LANG("status.disconnected");
     SDL_Color statusColor = connected ? m_colors.Synced : m_colors.TextDim;
     
-    // Exact vertical centering for buttons
-    m_languageButton = {m_screenWidth - 110, centerY - (38 / 2), 76, 38};
+    // Exact vertical centering for buttons - LARGER SIZE
+    m_languageButton = {m_screenWidth - 120, centerY - (44 / 2), 88, 44};
 
     int statusWidth = 0, statusHeight = 0;
     TTF_SizeUTF8(m_fontSmall, status.c_str(), &statusWidth, &statusHeight);
-    m_statusButton = {m_languageButton.x - statusWidth - 48, centerY - (38 / 2), statusWidth + 32, 38};
+    m_statusButton = {m_languageButton.x - statusWidth - 52, centerY - (44 / 2), statusWidth + 36, 44};
     
-    // Status Badge (Glassy)
-    renderGlassPanel(m_statusButton, 19, SDL_Color{255, 255, 255, 15}, true);
+    // Status Badge (Opaque)
+    renderGlassPanel(m_statusButton, 22, m_colors.Card, true);
     renderTextCentered(status, m_statusButton.x, m_statusButton.y + (m_statusButton.h - statusHeight) / 2, m_statusButton.w, m_fontSmall, statusColor);
 
-    // Language Toggle (Glassy)
-    renderGlassPanel(m_languageButton, 19, SDL_Color{255, 255, 255, 15}, true);
+    // Language Toggle (Opaque)
+    renderGlassPanel(m_languageButton, 22, m_colors.Card, true);
     renderTextCentered(utils::Language::instance().currentLang() == "ko" ? "KO" : "EN",
                        m_languageButton.x, m_languageButton.y + (m_languageButton.h - statusHeight) / 2, m_languageButton.w, m_fontSmall, m_colors.Accent);
 }
@@ -1083,15 +1083,16 @@ void MainUI::renderFooter() {
     renderPill("A", utils::Language::instance().currentLang() == "ko" ? "선택" : "Select", currentX);
     renderPill("B", utils::Language::instance().currentLang() == "ko" ? "뒤로" : "Back", currentX);
     renderPill("X", utils::Language::instance().currentLang() == "ko" ? "새로고침" : "Refresh", currentX);
+    renderPill("Y", LANG("footer.controls.lang"), currentX);
 
     core::UserInfo* selectedUser = m_saveManager.getSelectedUser();
     const std::string userName = selectedUser ? selectedUser->name : std::string("User");
     int userTextW = 0, userTextH = 0;
     TTF_SizeUTF8(m_fontSmall, userName.c_str(), &userTextW, &userTextH);
-    const int chipW = std::min(300, std::max(160, userTextW + 80));
-    m_userButton = {m_screenWidth - chipW - 32, footerY, chipW, footerH};
+    const int chipW = std::min(320, std::max(180, userTextW + 80));
+    m_userButton = {m_screenWidth - chipW - 32, footerY - 4, chipW, footerH + 8};
     
-    renderGlassPanel(m_userButton, 20, SDL_Color{255, 255, 255, 15}, true);
+    renderGlassPanel(m_userButton, 24, m_colors.Card, true);
     // User text with strict fitting to prevent overflow into boundaries
     renderText(fitText(m_fontSmall, userName, m_userButton.w - 64), m_userButton.x + 52, m_userButton.y + (m_userButton.h - userTextH)/2, m_fontSmall, m_colors.Text);
 }
@@ -1272,28 +1273,18 @@ void MainUI::renderAuraBackground() {
 void MainUI::renderGlassPanel(const SDL_Rect& rect, int radius, SDL_Color baseColor, bool hasRimLight) {
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
     
-    // Deep web-like soft shadow
-    renderSoftShadow(rect, radius, 24, SDL_Color{0, 0, 0, 140}, 12);
+    // Opaque Catppuccin Style
+    SDL_Color solidColor = baseColor;
+    solidColor.a = 255; 
 
-    // Glass Base
-    renderFilledRoundedRect(rect, radius, baseColor);
+    // Soft Shadow
+    renderSoftShadow(rect, radius, 12, SDL_Color{0, 0, 0, 100}, 6);
 
-    // Rim Light (Top Edge Highlight)
-    if (hasRimLight) {
-        SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 60);
-        SDL_RenderDrawLine(m_renderer, rect.x + radius, rect.y, rect.x + rect.w - radius, rect.y);
-        // Soft corner highlights
-        SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 30);
-        SDL_RenderDrawPoint(m_renderer, rect.x + radius - 1, rect.y + 1);
-        SDL_RenderDrawPoint(m_renderer, rect.x + rect.w - radius, rect.y + 1);
-    }
-    
-    // Subtle Inner Border (Glass reflection)
-    renderRoundedRect(rect, radius, SDL_Color{255, 255, 255, 18});
-    
-    // Inner dark shadow for 3D depth (Inset shadow)
-    SDL_Rect inset = {rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2};
-    renderRoundedRect(inset, radius, SDL_Color{0, 0, 0, 20});
+    // Solid Base
+    renderFilledRoundedRect(rect, radius, solidColor);
+
+    // Border (Mocha Overlay1)
+    renderRoundedRect(rect, radius, m_colors.Border);
 }
 
 void MainUI::renderCard(const GameCard& card, float unused_scale) {
@@ -1302,9 +1293,9 @@ void MainUI::renderCard(const GameCard& card, float unused_scale) {
     int yOffset = 0;
 
     if (card.selected) {
-        // Strict scale limit to prevent overflowing into header or sides
+        // Snappier scale
         scale = 1.0f + (m_selectionScale - 1.0f) * 0.8f; 
-        yOffset = -10; // Subtle lift
+        yOffset = -8; // Lift
         
         rect.w = static_cast<int>(rect.w * scale);
         rect.h = static_cast<int>(rect.h * scale);
@@ -1312,7 +1303,7 @@ void MainUI::renderCard(const GameCard& card, float unused_scale) {
         rect.y -= (rect.h - card.rect.h) / 2;
         rect.y += yOffset;
 
-        // Screen boundary safety check
+        // Boundary safety
         if (rect.x < 16) rect.x = 16;
         if (rect.x + rect.w > m_screenWidth - 16) rect.x = m_screenWidth - 16 - rect.w;
     }
@@ -1332,26 +1323,23 @@ void MainUI::renderCard(const GameCard& card, float unused_scale) {
     const int iconSize = rect.w - padding * 2;
     SDL_Rect iconRect = {rect.x + padding, rect.y + padding, iconSize, iconSize};
     
-    // Icon Area
+    // Guaranteed Icon Rendering
     SDL_Texture* iconTexture = loadIcon(card.title->iconPath);
     if (iconTexture) {
         SDL_RenderCopy(m_renderer, iconTexture, nullptr, &iconRect);
-        SDL_DestroyTexture(iconTexture);
     } else {
-        renderFilledRoundedRect(iconRect, 18, SDL_Color{15, 23, 42, 255});
+        renderFilledRoundedRect(iconRect, 14, m_colors.Poster);
         renderTextCentered("?", iconRect.x, iconRect.y + (iconRect.h / 2) - 20, iconRect.w, m_fontLarge, m_colors.TextDim);
     }
-    // Deep inset shadow on icon to make it pop
-    renderRoundedRect(iconRect, 18, SDL_Color{0, 0, 0, 60});
-    renderRoundedRect(iconRect, 18, SDL_Color{255, 255, 255, 20}); // Subtle rim on icon
+    renderRoundedRect(iconRect, 14, m_colors.Border);
 
-    // Content Area with shadow for high contrast
-    int textY = iconRect.y + iconRect.h + 16;
-    renderTextWithShadow(fitText(m_fontMedium, card.title->name, rect.w - padding * 2), rect.x + padding + 4, textY, m_fontMedium, m_colors.Text);
+    // Text with High Contrast Shadow
+    int textY = iconRect.y + iconRect.h + 14;
+    renderTextWithShadow(fitText(m_fontSmall, card.title->name, rect.w - padding * 2), rect.x + padding, textY, m_fontSmall, m_colors.Text);
 
     if (!card.syncLabel.empty()) {
         SDL_Color statusColor = card.selected ? m_colors.Accent : m_colors.TextDim;
-        renderTextWithShadow(fitText(m_fontSmall, card.syncLabel, rect.w - padding * 2), rect.x + padding + 4, textY + 32, m_fontSmall, statusColor);
+        renderTextWithShadow(fitText(m_fontSmall, card.syncLabel, rect.w - padding * 2), rect.x + padding, textY + 28, m_fontSmall, statusColor);
     }
 
     if (card.synced) {
@@ -1432,16 +1420,16 @@ void MainUI::renderGameDetail() {
 
     m_buttons.clear();
     const int btnW = (sideRect.w - 80 - 24) / 2;
-    const int btnH = 56;
-    const int startY = sideRect.y + sideRect.h - 160;
+    const int btnH = 64; // TALLER
+    const int startY = sideRect.y + sideRect.h - 180;
     
     m_buttons.emplace_back(sideRect.x + 40, startY, btnW, btnH, LANG("detail.upload"));
     m_buttons.emplace_back(sideRect.x + 40 + btnW + 24, startY, btnW, btnH, LANG("detail.download"));
-    m_buttons.emplace_back(sideRect.x + 40, startY + 72, btnW, btnH, LANG("detail.backup"));
-    m_buttons.emplace_back(sideRect.x + 40 + btnW + 24, startY + 72, btnW, btnH, LANG("detail.history"));
+    m_buttons.emplace_back(sideRect.x + 40, startY + 80, btnW, btnH, LANG("detail.backup"));
+    m_buttons.emplace_back(sideRect.x + 40 + btnW + 24, startY + 80, btnW, btnH, LANG("detail.history"));
     
-    // Close button (Extreme Minimalism)
-    m_buttons.emplace_back(sideRect.x + sideRect.w - 120, sideRect.y + 24, 80, 40, "X");
+    // Close button - TOP RIGHT properly
+    m_buttons.emplace_back(sideRect.x + sideRect.w - 100, sideRect.y + 20, 60, 60, "X");
 
     for (size_t i = 0; i < m_buttons.size(); ++i) {
         auto& btn = m_buttons[i];
