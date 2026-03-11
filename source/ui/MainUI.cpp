@@ -1060,7 +1060,6 @@ void MainUI::renderHeader() {
 void MainUI::renderFooter() {
     const int footerY = m_screenHeight - 68;
     const int footerH = 40;
-    const int footerCenterY = footerY + (footerH / 2);
 
     auto renderPill = [&](const std::string& key, const std::string& label, int& x) {
         int kw, kh, lw, lh;
@@ -1548,8 +1547,6 @@ void MainUI::renderUserPicker() {
                 SDL_RenderCopy(m_renderer, avatarTexture, nullptr, &avatarRect);
                 // CRITICAL FIX: DO NOT destroy cached texture!
                 renderedAvatar = true;
-            }
-        }
             }
         }
         if (!renderedAvatar) {
