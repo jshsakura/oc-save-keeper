@@ -14,6 +14,9 @@
 #include <switch.h>
 #endif
 
+#include "utils/Paths.hpp"
+#include "utils/SettingsStore.hpp"
+
 namespace utils {
 
 class Language {
@@ -23,13 +26,17 @@ public:
         return lang;
     }
     
-    // Initialize with auto-detected system language
+    // Initialize with saved or auto-detected system language
     bool init() {
-        std::string langCode = detectSystemLanguage();
+        std::string langCode = loadSavedLanguage();
+        if (langCode.empty()) {
+            langCode = detectSystemLanguage();
+        }
         return load(langCode);
     }
     
     bool load(const std::string& langCode) {
+        saveLanguagePreference(langCode);
         std::string path = "romfs:/lang/" + langCode + ".json";
         FILE* file = fopen(path.c_str(), "r");
         if (!file) {
@@ -89,6 +96,28 @@ public:
 private:
     Language() : m_currentLang("ko") {}
 
+    void saveLanguagePreference(const std::string& lang) {
+        utils::SettingsStore::setString("language", lang);
+    }
+
+    std::string loadSavedLanguage() {
+        const std::string saved = utils::SettingsStore::getString("language", "");
+        if (!saved.empty()) {
+            return saved;
+        }
+
+        FILE* f = fopen("/switch/oc-save-keeper/language.pref", "r");
+        if (f) {
+            char buf[8];
+            if (fgets(buf, sizeof(buf), f)) {
+                fclose(f);
+                return std::string(buf);
+            }
+            fclose(f);
+        }
+        return "";
+    }
+
     void loadBuiltIn(const std::string& langCode) {
         m_strings.clear();
         m_currentLang = (langCode == "ko") ? "ko" : "en";
@@ -114,7 +143,7 @@ private:
                 {"detail.upload", "업로드"},
                 {"detail.download", "받기"},
                 {"detail.backup", "로컬 백업"},
-                {"detail.history", "히스토리"},
+                {"detail.history", "이력보기"},
                 {"detail.back", "뒤로"},
                 {"detail.save_size", "세이브 크기"},
                 {"detail.title_id", "Title ID"},
@@ -124,6 +153,8 @@ private:
                 {"detail.latest_device", "최근 백업 기기"},
                 {"detail.latest_user", "최근 백업 사용자"},
                 {"detail.latest_source", "최근 백업 출처"},
+                {"detail.current_user_backup", "현재 사용자 백업"},
+                {"detail.cloud_inside", "클라우드 안의 백업"},
                 {"sync.uploading", "세이브를 클라우드에 업로드하는 중..."},
                 {"sync.downloading", "클라우드 세이브를 확인하는 중..."},
                 {"sync.syncing", "동기화 진행 중..."},
@@ -144,12 +175,12 @@ private:
                 {"auth.step2_name", "- Name: OCSaveKeeper-Backup"},
                 {"auth.step3", "3. [Generate access token] 클릭"},
                 {"auth.step4", "4. 토큰 복사 후 아래에 입력:"},
-                {"auth.token_placeholder", "여기에 토큰 붙여넣기..."},
+                {"auth.token_placeholder", "여기에 인증 코드 또는 돌아온 URL을 붙여넣기..."},
                 {"auth.open_keyboard", "키보드 열기"},
                 {"auth.connect", "연결"},
                 {"auth.cancel", "취소"},
                 {"auth.tip", "1회 설정으로 계속 사용할 수 있습니다."},
-                {"history.title", "버전 히스토리"},
+                {"history.title", "버전 이력 목록"},
                 {"history.local", "로컬 백업"},
                 {"history.cloud", "클라우드 백업"},
                 {"history.synced", "동기화됨"},
@@ -174,14 +205,14 @@ private:
             {"status.disconnected", "Not connected"},
             {"footer.controls.open", "Open"},
             {"footer.controls.sync_all", "Cloud"},
-            {"footer.controls.lang", "Lang"},
+            {"footer.controls.lang", "Language"},
             {"footer.controls.exit", "Exit"},
             {"footer.controls", "A: Select  |  X: Cloud  |  Y: Language  |  L/R: Page  |  -/+: Exit"},
             {"footer.game_count", " games"},
             {"detail.upload", "Upload"},
             {"detail.download", "Fetch"},
             {"detail.backup", "Local Backup"},
-            {"detail.history", "History"},
+            {"detail.history", "Version History List"},
             {"detail.back", "Back"},
             {"detail.save_size", "Save Size"},
             {"detail.title_id", "Title ID"},
@@ -191,6 +222,8 @@ private:
             {"detail.latest_device", "Latest backup device"},
             {"detail.latest_user", "Latest backup user"},
             {"detail.latest_source", "Latest backup source"},
+            {"detail.current_user_backup", "Current user backup"},
+            {"detail.cloud_inside", "Backup stored in cloud"},
             {"sync.uploading", "Uploading save data to the cloud..."},
             {"sync.downloading", "Checking cloud save metadata..."},
             {"sync.syncing", "Syncing..."},
@@ -211,12 +244,12 @@ private:
             {"auth.step2_name", "- Name: OCSaveKeeper-Backup"},
             {"auth.step3", "3. Click [Generate access token]"},
             {"auth.step4", "4. Copy the token and paste it below:"},
-            {"auth.token_placeholder", "Paste token here..."},
+            {"auth.token_placeholder", "Paste the authorization code or redirected URL here..."},
             {"auth.open_keyboard", "Open Keyboard"},
             {"auth.connect", "Connect"},
             {"auth.cancel", "Cancel"},
             {"auth.tip", "One-time setup, then reuse the saved token."},
-            {"history.title", "Version History"},
+            {"history.title", "Version History List"},
             {"history.local", "Local Backups"},
             {"history.cloud", "Cloud Backups"},
             {"history.synced", "Synced"},
