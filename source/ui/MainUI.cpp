@@ -17,13 +17,13 @@ namespace Theme {
         return {
             {239, 241, 245, 255}, // Background: Base
             {230, 233, 239, 255}, // Header: Mantle
-            {204, 208, 218, 255}, // Card: Surface0
-            {188, 192, 204, 255}, // CardHover: Surface1
+            {255, 255, 255, 255}, // Card: White (High contrast)
+            {204, 208, 218, 255}, // CardHover: Surface0
             {30, 102, 245, 255},  // Accent: Blue
             {114, 135, 253, 255}, // AccentSoft: Lavender
             {223, 142, 29, 255},  // Warning: Yellow
             {210, 15, 57, 255},   // Error: Red
-            {76, 79, 105, 255},   // Text: Text
+            {76, 79, 105, 255},   // Text: Latte Text (Dark Grey)
             {108, 111, 133, 255}, // TextDim: Subtext0
             {64, 160, 43, 255},   // Synced: Green
             {156, 160, 176, 255}, // NotSynced: Overlay0
@@ -31,22 +31,22 @@ namespace Theme {
             {30, 102, 245, 255},  // BorderStrong: Blue
             {220, 224, 232, 255}, // Poster: Crust
             {204, 208, 218, 255}, // TitleStrip: Surface0
-            {0, 0, 0, 40},        // Shadow
-            {30, 102, 245, 60}    // SelectionGlow
+            {0, 0, 0, 30},        // Shadow
+            {30, 102, 245, 40}    // SelectionGlow
         };
     }
 
     ColorPalette Dark() { // Catppuccin Mocha
         return {
-            {30, 30, 46, 255},    // Background: Base
+            {30, 30, 46, 255},    // Background: Base (Dark Navy)
             {24, 24, 37, 255},    // Header: Mantle
             {49, 50, 68, 255},    // Card: Surface0
             {69, 71, 90, 255},    // CardHover: Surface1
-            {137, 220, 235, 255}, // Accent: Sky
+            {137, 220, 235, 255}, // Accent: Sky (Light Blue)
             {180, 190, 254, 255}, // AccentSoft: Lavender
             {249, 226, 175, 255}, // Warning: Yellow
             {243, 139, 168, 255}, // Error: Red
-            {205, 214, 244, 255}, // Text: Text
+            {205, 214, 244, 255}, // Text: Mocha Text (Off White)
             {166, 173, 200, 255}, // TextDim: Subtext0
             {166, 227, 161, 255}, // Synced: Green
             {108, 112, 126, 255}, // NotSynced: Overlay0
@@ -54,8 +54,8 @@ namespace Theme {
             {137, 220, 235, 255}, // BorderStrong: Sky
             {17, 17, 27, 255},    // Poster: Crust
             {49, 50, 68, 255},    // TitleStrip: Surface0
-            {0, 0, 0, 100},       // Shadow
-            {137, 220, 235, 100}  // SelectionGlow
+            {0, 0, 0, 80},        // Shadow
+            {137, 220, 235, 80}   // SelectionGlow
         };
     }
 }
@@ -931,13 +931,11 @@ void MainUI::update() {
     m_lastFocusState = focusState;
 #endif
     
-    // Snappier selection pulse animation (Speed increased)
-    static float timer = 0;
-    timer += 0.15f; 
-    m_selectionScale = 1.0f + 0.02f * sin(timer);
-    m_selectionAlpha = 200.0f + 55.0f * sin(timer);
+    // Static selection state (Scaling removed for stability)
+    m_selectionScale = 1.0f;
+    m_selectionAlpha = 255.0f;
     
-    // Snappier background animation
+    // Background Drifting Animation
     m_bgTimer += 0.015f;
     
     // Fast Overlay Fade Logic
@@ -1243,31 +1241,17 @@ void MainUI::renderVerticalGradient(const SDL_Rect& rect, SDL_Color top, SDL_Col
 }
 
 void MainUI::renderAuraBackground() {
-    // Deep Base
+    // Solid Base (Consistent with Theme)
     SDL_Rect screenRect = {0, 0, m_screenWidth, m_screenHeight};
-    SDL_SetRenderDrawColor(m_renderer, 10, 15, 28, 255);
+    SDL_SetRenderDrawColor(m_renderer, m_colors.Background.r, m_colors.Background.g, m_colors.Background.b, 255);
     SDL_RenderFillRect(m_renderer, &screenRect);
 
-    // Drifting Web Mesh Orbs
+    // Ultra-subtle accent light (Fixed positions, no frames dropped)
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-    
-    // Top-Left Orb (Moves slowly)
-    int driftX = static_cast<int>(sin(m_bgTimer) * 50.0f);
-    int driftY = static_cast<int>(cos(m_bgTimer * 0.8f) * 40.0f);
-    for (int i = 0; i < 500; i += 10) {
-        Uint8 alpha = static_cast<Uint8>(30.0f * (1.0f - std::pow(static_cast<float>(i) / 500.0f, 2.0f)));
-        SDL_Rect lightRect = {-150 + driftX + i/2, -150 + driftY + i/2, 800 - i, 800 - i};
-        renderRoundedRect(lightRect, (800 - i)/2, SDL_Color{m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, alpha});
-    }
-
-    // Bottom-Right Orb (Moves in opposite phase)
-    int driftX2 = static_cast<int>(cos(m_bgTimer * 1.2f) * 60.0f);
-    int driftY2 = static_cast<int>(sin(m_bgTimer * 0.7f) * 50.0f);
-    for (int i = 0; i < 600; i += 12) {
-        Uint8 alpha = static_cast<Uint8>(20.0f * (1.0f - std::pow(static_cast<float>(i) / 600.0f, 2.0f)));
-        SDL_Rect lightRect = {m_screenWidth - 550 + driftX2 + i/2, m_screenHeight - 450 + driftY2 + i/2, 900 - i, 900 - i};
-        renderRoundedRect(lightRect, (900 - i)/2, SDL_Color{124, 58, 237, alpha}); // Indigo
-    }
+    SDL_Rect accentLight = {-100, -100, 600, 600};
+    SDL_Color al = m_colors.Accent;
+    SDL_SetRenderDrawColor(m_renderer, al.r, al.g, al.b, 20);
+    SDL_RenderFillRect(m_renderer, &accentLight);
 }
 
 void MainUI::renderGlassPanel(const SDL_Rect& rect, int radius, SDL_Color baseColor, bool hasRimLight) {
@@ -1289,35 +1273,22 @@ void MainUI::renderGlassPanel(const SDL_Rect& rect, int radius, SDL_Color baseCo
 
 void MainUI::renderCard(const GameCard& card, float unused_scale) {
     SDL_Rect rect = card.rect;
-    float scale = 1.0f;
-    int yOffset = 0;
+    
+    // NO SCALING, NO LIFTING (Stable Frame rate)
+    const int borderRadius = 16;
+    
+    // Opaque Surface (Mocha/Latte)
+    SDL_Color cardColor = card.selected ? m_colors.CardHover : m_colors.Card;
+    renderGlassPanel(rect, borderRadius, cardColor, false);
 
     if (card.selected) {
-        // Snappier scale
-        scale = 1.0f + (m_selectionScale - 1.0f) * 0.8f; 
-        yOffset = -8; // Lift
-        
-        rect.w = static_cast<int>(rect.w * scale);
-        rect.h = static_cast<int>(rect.h * scale);
-        rect.x -= (rect.w - card.rect.w) / 2;
-        rect.y -= (rect.h - card.rect.h) / 2;
-        rect.y += yOffset;
-
-        // Boundary safety
-        if (rect.x < 16) rect.x = 16;
-        if (rect.x + rect.w > m_screenWidth - 16) rect.x = m_screenWidth - 16 - rect.w;
+        // High-Visibility Accent Border (4px)
+        SDL_SetRenderDrawColor(m_renderer, m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, 255);
+        for(int i=1; i<=4; i++) {
+            SDL_Rect b = {rect.x - i, rect.y - i, rect.w + i*2, rect.h + i*2};
+            renderRoundedRect(b, borderRadius + i, m_colors.Accent);
+        }
     }
-
-    const int borderRadius = 20; // More organic rounding
-    
-    // Premium Glass Material with Web-like contrast
-    SDL_Color glassColor = card.selected ? SDL_Color{255, 255, 255, 20} : SDL_Color{30, 41, 59, 140};
-    if (card.selected) {
-        // Render large soft glow behind the selected card
-        renderSelectionGlow(rect);
-    }
-    
-    renderGlassPanel(rect, borderRadius, glassColor, true);
 
     const int padding = 12;
     const int iconSize = rect.w - padding * 2;
@@ -1328,22 +1299,22 @@ void MainUI::renderCard(const GameCard& card, float unused_scale) {
     if (iconTexture) {
         SDL_RenderCopy(m_renderer, iconTexture, nullptr, &iconRect);
     } else {
-        renderFilledRoundedRect(iconRect, 14, m_colors.Poster);
+        renderFilledRoundedRect(iconRect, 12, m_colors.Poster);
         renderTextCentered("?", iconRect.x, iconRect.y + (iconRect.h / 2) - 20, iconRect.w, m_fontLarge, m_colors.TextDim);
     }
-    renderRoundedRect(iconRect, 14, m_colors.Border);
+    renderRoundedRect(iconRect, 12, m_colors.Border);
 
-    // Text with High Contrast Shadow
-    int textY = iconRect.y + iconRect.h + 14;
-    renderTextWithShadow(fitText(m_fontSmall, card.title->name, rect.w - padding * 2), rect.x + padding, textY, m_fontSmall, m_colors.Text);
+    int textY = iconRect.y + iconRect.h + 12;
+    // Strict use of Theme Text color
+    renderText(fitText(m_fontSmall, card.title->name, rect.w - padding * 2), rect.x + padding, textY, m_fontSmall, m_colors.Text);
 
     if (!card.syncLabel.empty()) {
         SDL_Color statusColor = card.selected ? m_colors.Accent : m_colors.TextDim;
-        renderTextWithShadow(fitText(m_fontSmall, card.syncLabel, rect.w - padding * 2), rect.x + padding, textY + 28, m_fontSmall, statusColor);
+        renderText(fitText(m_fontSmall, card.syncLabel, rect.w - padding * 2), rect.x + padding, textY + 26, m_fontSmall, statusColor);
     }
 
     if (card.synced) {
-        renderSyncBadge(rect.x + rect.w - 32, rect.y + 14, true);
+        renderSyncBadge(rect.x + rect.w - 28, rect.y + 12, true);
     }
 }
 
@@ -1406,9 +1377,13 @@ void MainUI::renderGameDetail() {
     const auto versions = m_saveManager.getBackupVersions(m_selectedTitle);
     const std::string backupCount = versions.empty() ? LANG("detail.no_backup") : std::to_string(versions.size()) + " " + LANG("detail.versions");
 
+    // Standard Row rendering with guaranteed contrast
     auto drawRow = [&](const std::string& label, const std::string& value, int y) {
         SDL_Rect row{sideRect.x + 40, y, sideRect.w - 80, 84};
-        renderGlassPanel(row, 16, SDL_Color{255, 255, 255, 8}, false);
+        // Opaque background for the row to ensure text visibility
+        renderFilledRoundedRect(row, 16, m_colors.CardHover);
+        renderRoundedRect(row, 16, m_colors.Border);
+        
         renderText(label, row.x + 24, row.y + 16, m_fontSmall, m_colors.TextDim);
         renderText(fitText(m_fontMedium, value, row.w - 48), row.x + 24, row.y + 44, m_fontMedium, m_colors.Text);
     };
@@ -1447,54 +1422,41 @@ void MainUI::renderButton(const Button& btn) {
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
     
     SDL_Color bgColor;
-    SDL_Color textColor;
+    SDL_Color textColor = m_colors.Text; // Default to theme text
 
     if (isClose) {
-        bgColor = btn.hover ? m_colors.AccentSoft : m_colors.Card;
-        textColor = m_colors.TextDim;
+        bgColor = btn.hover ? m_colors.Accent : m_colors.Card;
+        textColor = btn.hover ? m_colors.Background : m_colors.Text;
     } else if (isPrimary) {
-        bgColor = btn.hover ? SDL_Color{56, 189, 248, 255} : m_colors.Accent;
-        textColor = SDL_Color{255, 255, 255, 255};
+        bgColor = btn.hover ? m_colors.AccentSoft : m_colors.Accent;
+        textColor = m_colors.Background; // High contrast against accent
     } else {
-        bgColor = btn.hover ? m_colors.AccentSoft : m_colors.Card;
+        bgColor = btn.hover ? m_colors.CardHover : m_colors.Card;
         textColor = m_colors.Text;
     }
 
     const int radius = btn.rect.h / 2;
     
+    // Opaque Button
+    renderGlassPanel(btn.rect, radius, bgColor, false);
+    
     if (btn.hover) {
-        // CSS Box-shadow hover effect
-        renderSoftShadow(btn.rect, radius, 16, SDL_Color{bgColor.r, bgColor.g, bgColor.b, 100}, 4);
-        
-        // Slight scale up on hover simulation (just by drawing it 1px larger or shifting)
-        SDL_Rect hoverRect = {btn.rect.x, btn.rect.y - 1, btn.rect.w, btn.rect.h};
-        renderGlassPanel(hoverRect, radius, SDL_Color{bgColor.r, bgColor.g, bgColor.b, 200}, true);
-        
-        TTF_Font* font = m_fontMedium;
-        int textW, textH;
-        TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
-        if (textW > btn.rect.w - 24) {
-            font = m_fontSmall;
-            TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
-        }
-        renderTextWithShadow(fitText(font, btn.text, btn.rect.w - 16),
-                           hoverRect.x + (hoverRect.w - textW) / 2, hoverRect.y + (hoverRect.h - textH) / 2,
-                           font, textColor);
-    } else {
-        // Default state
-        renderGlassPanel(btn.rect, radius, SDL_Color{bgColor.r, bgColor.g, bgColor.b, 160}, true);
-        
-        TTF_Font* font = m_fontMedium;
-        int textW, textH;
-        TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
-        if (textW > btn.rect.w - 24) {
-            font = m_fontSmall;
-            TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
-        }
-        renderTextWithShadow(fitText(font, btn.text, btn.rect.w - 16),
-                           btn.rect.x + (btn.rect.w - textW) / 2, btn.rect.y + (btn.rect.h - textH) / 2,
-                           font, textColor);
+        // High visibility border for selected button
+        renderRoundedRect(btn.rect, radius, m_colors.BorderStrong);
     }
+
+    TTF_Font* font = m_fontMedium;
+    int textW, textH;
+    TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
+    if (textW > btn.rect.w - 24) {
+        font = m_fontSmall;
+        TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
+    }
+    
+    // Render text with theme-aware contrast
+    renderTextCentered(fitText(font, btn.text, btn.rect.w - 16),
+                       btn.rect.x, btn.rect.y + (btn.rect.h - textH) / 2,
+                       btn.rect.w, font, textColor);
 }
 
 void MainUI::renderAuthScreen() {
