@@ -3,9 +3,12 @@
     "app.slogan": "안전한 세이브 백업과 기기 간 동기화",
 
     "status.connected": "연결됨",
-    "status.disconnected": "연결 필요",
+    "status.disconnected": "클라우드 미연동",
 
-    "footer.controls": "A: 선택  |  Y: 언어  |  L/R: 페이지  |  -/+: 종료",
+    "footer.controls.open": "선택",
+    "footer.controls.sync_all": "클라우드",
+    "footer.controls.lang": "언어",
+    "footer.controls.exit": "종료",
     "footer.game_count": "개 게임",
 
     "detail.upload": "업로드",
@@ -28,6 +31,12 @@
     "sync.syncing": "동기화 진행 중...",
     "sync.complete": "동기화가 완료되었습니다.",
     "sync.syncing_game": "동기화 중...",
+    "sync.no_uploads": "업로드할 세이브가 없습니다.",
+    "card.state.disconnected": "백업 없음",
+    "card.state.local_only": "클라우드 없음",
+    "card.state.up_to_date": "최신",
+    "card.state.needs_upload": "업로드 필요",
+    "card.state.cloud_newer": "클라우드 최신",
 
     "auth.title": "Dropbox 연동 설정",
     "auth.setup_time": "스마트폰으로 간단하게 설정 가능한 과정입니다.",

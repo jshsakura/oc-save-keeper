@@ -3,9 +3,12 @@
     "app.slogan": "Safe save backup and cross-device sync",
 
     "status.connected": "Connected",
-    "status.disconnected": "Not connected",
+    "status.disconnected": "Cloud offline",
 
-    "footer.controls": "A: Select  |  Y: Language  |  L/R: Page  |  -/+: Exit",
+    "footer.controls.open": "Open",
+    "footer.controls.sync_all": "Cloud",
+    "footer.controls.lang": "Lang",
+    "footer.controls.exit": "Exit",
     "footer.game_count": " games",
 
     "detail.upload": "Upload",
@@ -28,6 +31,12 @@
     "sync.syncing": "Syncing...",
     "sync.complete": "Sync complete.",
     "sync.syncing_game": "Syncing...",
+    "sync.no_uploads": "No uploads needed.",
+    "card.state.disconnected": "No backup yet",
+    "card.state.local_only": "No cloud backup",
+    "card.state.up_to_date": "Up to date",
+    "card.state.needs_upload": "Needs upload",
+    "card.state.cloud_newer": "Cloud newer",
 
     "auth.title": "Dropbox Setup",
     "auth.setup_time": "2-minute phone setup",

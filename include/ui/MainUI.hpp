@@ -21,23 +21,30 @@
 
 namespace ui {
 
-namespace Color {
-    constexpr SDL_Color Background = {241, 244, 248, 255};
-    constexpr SDL_Color Header = {250, 252, 255, 255};
-    constexpr SDL_Color Card = {255, 255, 255, 255};
-    constexpr SDL_Color CardHover = {236, 247, 255, 255};
-    constexpr SDL_Color Accent = {52, 152, 219, 255};
-    constexpr SDL_Color Warning = {233, 165, 61, 255};
-    constexpr SDL_Color Error = {201, 92, 92, 255};
-    constexpr SDL_Color Text = {41, 56, 76, 255};
-    constexpr SDL_Color TextDim = {111, 124, 142, 255};
-    constexpr SDL_Color Synced = {74, 163, 116, 255};
-    constexpr SDL_Color NotSynced = {186, 132, 87, 255};
-    constexpr SDL_Color Border = {214, 223, 232, 255};
-    constexpr SDL_Color BorderStrong = {187, 201, 216, 255};
-    constexpr SDL_Color Poster = {222, 231, 241, 255};
-    constexpr SDL_Color TitleStrip = {246, 249, 252, 255};
-    constexpr SDL_Color AccentSoft = {226, 242, 252, 255};
+struct ColorPalette {
+    SDL_Color Background;
+    SDL_Color Header;
+    SDL_Color Card;
+    SDL_Color CardHover;
+    SDL_Color Accent;
+    SDL_Color AccentSoft;
+    SDL_Color Warning;
+    SDL_Color Error;
+    SDL_Color Text;
+    SDL_Color TextDim;
+    SDL_Color Synced;
+    SDL_Color NotSynced;
+    SDL_Color Border;
+    SDL_Color BorderStrong;
+    SDL_Color Poster;
+    SDL_Color TitleStrip;
+    SDL_Color Shadow;
+    SDL_Color SelectionGlow;
+};
+
+namespace Theme {
+    ColorPalette Light();
+    ColorPalette Dark();
 }
 
 // UI State
@@ -45,9 +52,10 @@ enum class State {
     Main,           // Game list
     GameDetail,     // Selected game options
     VersionHistory, // Version list
+    CloudPicker,    // Remote download picker
+    UserPicker,     // User selection
     Auth,           // Dropbox token input
-    SyncAll,        // Batch sync progress
-    Settings
+    SyncAll         // Batch sync progress
 };
 
 // Button
@@ -68,11 +76,22 @@ struct Button {
 
 // Game card
 struct GameCard {
+    enum class SyncState {
+        Unknown,
+        Disconnected,
+        LocalOnly,
+        UpToDate,
+        NeedsUpload,
+        CloudNewer
+    };
+
     core::TitleInfo* title;
     SDL_Rect rect;
     SDL_Texture* icon;
     bool selected;
     bool synced;
+    SyncState syncState;
+    std::string syncLabel;
 };
 
 // Version item
@@ -89,6 +108,12 @@ struct VersionItem {
     bool selected;
 };
 
+struct UserChip {
+    core::UserInfo* user;
+    SDL_Rect rect;
+    bool selected;
+};
+
 class MainUI {
 public:
     MainUI(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveManager& saveMgr);
@@ -96,6 +121,9 @@ public:
     
     bool initialize();
     void handleEvent(const SDL_Event& event);
+#ifdef __SWITCH__
+    void handlePadButtons(u64 keysDown);
+#endif
     void update();
     void render();
     
@@ -106,12 +134,16 @@ private:
     network::Dropbox& m_dropbox;
     core::SaveManager& m_saveManager;
     
+    // Palette
+    ColorPalette m_colors;
+    
     // Fonts
     TTF_Font* m_fontLarge;
     TTF_Font* m_fontMedium;
     TTF_Font* m_fontSmall;
 #ifdef __SWITCH__
     bool m_plInitialized;
+    AppletFocusState m_lastFocusState;
 #endif
     
     // State
@@ -124,19 +156,25 @@ private:
     
     // Version items
     std::vector<VersionItem> m_versionItems;
+    std::vector<UserChip> m_userChips;
     int m_selectedVersionIndex;
-    
+    int m_selectedUserIndex;
+    int m_selectedButtonIndex;
     // Buttons
     std::vector<Button> m_buttons;
     SDL_Rect m_authTokenBox;
     SDL_Rect m_languageButton;
-    
-    // Auth
-    std::string m_authToken;
+    SDL_Rect m_refreshButton;
+    SDL_Rect m_statusButton;
+    SDL_Rect m_userButton;
     
     // Current game
     core::TitleInfo* m_selectedTitle;
     
+    // Auth
+    std::string m_authToken;
+    std::string m_authUrl;
+    bool m_authSessionStarted;
     // Sync progress
     int m_syncProgress;
     int m_syncTotal;
@@ -151,14 +189,15 @@ private:
     int m_screenHeight;
     int m_gridCols;
     int m_gridRows;
-    int m_currentPage;
+    int m_scrollRow;
+    float m_scrollOffset; // For smooth scrolling animation
     
     // Dimensions
     static constexpr int CARD_WIDTH = 190;
     static constexpr int CARD_HEIGHT = 252;
     static constexpr int CARD_MARGIN = 12;
-    static constexpr int HEADER_HEIGHT = 96;
-    static constexpr int FOOTER_HEIGHT = 72;
+    static constexpr int HEADER_HEIGHT = 90; // Slightly slimmer
+    static constexpr int FOOTER_HEIGHT = 64; // Slightly slimmer
     
     // Render methods
     void renderHeader();
@@ -167,33 +206,52 @@ private:
     void renderGameDetail();
     void renderVersionHistory();
     void renderAuthScreen();
+    void renderUserPicker();
     void renderSyncProgress();
+    void renderScrollBar();
+    void renderSelectionGlow(const SDL_Rect& rect);
+    
+    // Premium UI helpers (The peak of beauty)
+    void renderRoundedRect(const SDL_Rect& rect, int radius, SDL_Color color);
+    void renderFilledRoundedRect(const SDL_Rect& rect, int radius, SDL_Color color);
+    void renderVerticalGradient(const SDL_Rect& rect, SDL_Color top, SDL_Color bottom);
+    void renderGlassPanel(const SDL_Rect& rect, int radius, SDL_Color baseColor, bool hasRimLight = true);
+    void renderAuraBackground();
     
     // Helpers
-    void renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color = Color::Text);
-    void renderTextCentered(const std::string& text, int x, int y, int w, TTF_Font* font, SDL_Color color = Color::Text);
+    void renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color = SDL_Color{32, 34, 39, 255});
+    void renderTextCentered(const std::string& text, int x, int y, int w, TTF_Font* font, SDL_Color color = SDL_Color{32, 34, 39, 255});
+    
+    // Animation state for selected items
+    float m_selectionScale = 1.0f;
+    float m_selectionAlpha = 0.0f;
+    
     void renderButton(const Button& btn);
-    void renderCard(const GameCard& card);
+    void renderCard(const GameCard& card, float scale = 1.0f);
     void renderSyncBadge(int x, int y, bool synced);
+    void renderIcon(SDL_Texture* texture, const SDL_Rect& rect, int radius, bool selected);
     std::string fitText(TTF_Font* font, const std::string& text, int maxWidth) const;
     
     SDL_Texture* loadIcon(const std::string& path);
     
     void updateGameCards();
+    void refreshSyncStates(bool autoUpload = false);
     void handleTouch(int x, int y, bool pressed);
     void handleButtonPress(const Button& btn);
     void toggleLanguage();
     void clampSelection();
     int getItemsPerPage() const;
-    int getPageCount() const;
     int getVisibleStartIndex() const;
     
     // Actions
     void syncToDropbox();
-    void downloadFromDropbox();
     void backupLocal();
     void showVersionHistory();
+    void showCloudPicker();
+    void downloadCloudItem(VersionItem* item);
     void restoreVersion(VersionItem* item);
+    void showUserPicker();
+    void selectUser(size_t index);
     void syncAllGames();
     void connectDropbox();
     void openTokenKeyboard();

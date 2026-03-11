@@ -4,6 +4,8 @@
  */
 
 #include "core/SaveManager.hpp"
+#include "core/MetadataLogic.hpp"
+#include "core/SyncLogic.hpp"
 #include "fs/FileUtil.hpp"
 #include "fs/ScopedSaveMount.hpp"
 #include "zip/ZipArchive.hpp"
@@ -14,6 +16,9 @@
 #include <ctime>
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
+#include <map>
+#include <set>
 
 namespace core {
 
@@ -23,6 +28,7 @@ constexpr const char* BACKUP_BASE_PATH = "/switch/oc-save-keeper/backups";
 constexpr const char* CONFIG_BASE_PATH = "/switch/oc-save-keeper";
 constexpr const char* TEMP_BASE_PATH = "/switch/oc-save-keeper/temp";
 constexpr const char* ICON_BASE_PATH = "/switch/oc-save-keeper/icons";
+constexpr const char* USER_ICON_BASE_PATH = "/switch/oc-save-keeper/user-icons";
 constexpr const char* DEVICE_ID_PATH = "/switch/oc-save-keeper/device_id.txt";
 constexpr const char* DEVICE_PRIORITY_PATH = "/switch/oc-save-keeper/device_priority.txt";
 constexpr const char* META_ENTRY_NAME = ".dropkeep.meta";
@@ -133,12 +139,11 @@ SaveManager::~SaveManager() {
 }
 
 bool SaveManager::initialize() {
-    LOG_INFO("Initializing SaveManager...");
-    
     // Create directories
     mkdir(CONFIG_BASE_PATH, 0777);
     mkdir(BACKUP_BASE_PATH, 0777);
     mkdir(ICON_BASE_PATH, 0777);
+    mkdir(USER_ICON_BASE_PATH, 0777);
 
     if (!loadDeviceConfig()) {
         LOG_ERROR("Failed to load device config");
@@ -157,7 +162,6 @@ bool SaveManager::initialize() {
     }
     
     m_initialized = true;
-    LOG_INFO("SaveManager initialized with %zu users", m_users.size());
     return true;
 }
 
@@ -184,8 +188,6 @@ bool SaveManager::loadDeviceConfig() {
         return false;
     }
 
-    LOG_INFO("Loaded device config: id=%s label=%s priority=%d",
-             m_deviceId.c_str(), m_deviceLabel.c_str(), m_devicePriority);
     return true;
 }
 
@@ -256,9 +258,18 @@ bool SaveManager::loadUsers() {
             user.id = std::to_string(static_cast<unsigned long long>(uids[i].uid[0])) + "-" +
                       std::to_string(static_cast<unsigned long long>(uids[i].uid[1]));
             user.name = profileBase.nickname;
-            user.iconPath = "";
+            char userIconPath[256];
+            std::snprintf(userIconPath, sizeof(userIconPath), "%s/%s.jpg", USER_ICON_BASE_PATH, user.id.c_str());
+            u32 imageSize = 0;
+            if (R_SUCCEEDED(accountProfileGetImageSize(&profile, &imageSize)) && imageSize > 0) {
+                std::vector<unsigned char> image(imageSize);
+                if (R_SUCCEEDED(accountProfileLoadImage(&profile, image.data(), image.size(), &imageSize)) && imageSize > 0) {
+                    if (writeBinaryFile(userIconPath, image.data(), imageSize)) {
+                        user.iconPath = userIconPath;
+                    }
+                }
+            }
             m_users.push_back(user);
-            LOG_INFO("Found user: %s", user.name.c_str());
         }
         
         accountProfileClose(&profile);
@@ -280,36 +291,82 @@ bool SaveManager::loadUsers() {
     mockUser.id = "mock-user-1";
     mockUser.name = "TestUser";
     m_users.push_back(mockUser);
-    LOG_INFO("Created mock user for development");
 #endif
     
     return !m_users.empty();
 }
 
 void SaveManager::scanTitles() {
-    LOG_INFO("Scanning titles...");
     m_titles.clear();
     
 #ifdef __SWITCH__
-    Result rc = nsInitialize();
+    std::set<uint64_t> titleIds;
+    std::map<uint64_t, std::pair<SaveType, int64_t>> titleSaveInfo;
+
+    FsSaveDataFilter filter{};
+    FsSaveDataInfoReader reader;
+    Result rc = fsOpenSaveDataInfoReaderWithFilter(&reader, FsSaveDataSpaceId_All, &filter);
+    if (R_SUCCEEDED(rc)) {
+        FsSaveDataInfo entries[256]{};
+        while (true) {
+            s64 recordCount = 0;
+            rc = fsSaveDataInfoReaderRead(&reader, entries, 256, &recordCount);
+            if (R_FAILED(rc) || recordCount <= 0) {
+                break;
+            }
+
+            for (s64 i = 0; i < recordCount; ++i) {
+                const auto& entry = entries[i];
+                if (entry.application_id == 0) {
+                    continue;
+                }
+
+                switch (entry.save_data_type) {
+                    case FsSaveDataType_Account:
+                        titleIds.insert(entry.application_id);
+                        titleSaveInfo[entry.application_id] = {convertSaveType(entry.save_data_type), entry.size};
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        fsSaveDataInfoReaderClose(&reader);
+    } else {
+        LOG_WARNING("fsOpenSaveDataInfoReaderWithFilter failed: 0x%x", rc);
+    }
+
+    rc = nsInitialize();
     if (R_FAILED(rc)) {
         LOG_ERROR("nsInitialize failed: 0x%x", rc);
         return;
     }
 
-    // Scan SD card for installed titles
-    NsApplicationRecord records[1024];
-    s32 recordCount = 0;
-    
-    rc = nsListApplicationRecord(records, 1024, 0, &recordCount);
-    if (R_FAILED(rc)) {
-        LOG_ERROR("nsListApplicationRecord failed: 0x%x", rc);
-        nsExit();
-        return;
-    }
-    
-    for (s32 i = 0; i < recordCount; i++) {
-        scanTitle(records[i].application_id);
+    if (!titleIds.empty()) {
+        for (uint64_t titleId : titleIds) {
+            scanTitle(titleId);
+            if (auto* title = getTitleById(titleId)) {
+                const auto it = titleSaveInfo.find(titleId);
+                if (it != titleSaveInfo.end()) {
+                    title->hasSave = true;
+                    title->saveType = it->second.first;
+                    title->saveSize = it->second.second;
+                }
+            }
+        }
+    } else {
+        NsApplicationRecord records[1024];
+        s32 recordCount = 0;
+        rc = nsListApplicationRecord(records, 1024, 0, &recordCount);
+        if (R_FAILED(rc)) {
+            LOG_ERROR("nsListApplicationRecord failed: 0x%x", rc);
+            nsExit();
+            return;
+        }
+
+        for (s32 i = 0; i < recordCount; i++) {
+            scanTitle(records[i].application_id);
+        }
     }
 
     nsExit();
@@ -388,16 +445,14 @@ bool SaveManager::scanTitle(uint64_t titleId) {
 
         if (R_SUCCEEDED(rc)) {
             for (s64 i = 0; i < totalEntries && i < 16; i++) {
-                info.hasSave = true;
-                info.saveType = convertSaveType(entries[i].save_data_type);
-                info.saveSize = entries[i].size;
-
-                // Prefer account save when available, but still keep device/shared
-                // saves visible when that's the only save type present.
-                if (entries[i].save_data_type == FsSaveDataType_Account) {
-                    info.saveType = SaveType::Account;
-                    break;
+                if (entries[i].save_data_type != FsSaveDataType_Account) {
+                    continue;
                 }
+
+                info.hasSave = true;
+                info.saveType = SaveType::Account;
+                info.saveSize = entries[i].size;
+                break;
             }
         }
     } else if (m_selectedUser) {
@@ -454,17 +509,6 @@ std::vector<TitleInfo*> SaveManager::getTitlesWithSaves() {
             result.push_back(&title);
         }
     }
-
-    // When account services are unavailable on homebrew launch, save probing can
-    // fail even though installed titles exist. In that case, still show the
-    // scanned titles so the UI remains usable and the user can see what was
-    // detected on the system.
-    if (result.empty()) {
-        for (auto& title : m_titles) {
-            result.push_back(&title);
-        }
-    }
-
     return result;
 }
 
@@ -473,8 +517,10 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
         LOG_ERROR("Invalid title or no user selected");
         return false;
     }
-    
-    LOG_INFO("Backing up: %s -> %s", title->name.c_str(), backupName.c_str());
+    if (!title->hasSave || title->saveType != SaveType::Account) {
+        LOG_ERROR("Backup is only supported for account save data");
+        return false;
+    }
     
     // Create backup directory first
     std::string backupDir = getBackupPath(title);
@@ -513,7 +559,6 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
     title->saveSize = fs::getDirectorySize(backupPath);
     writeBackupMetadata(title, backupPath, backupName, "local");
     
-    LOG_INFO("Backup complete: %s (%ld bytes)", backupName.c_str(), title->saveSize);
     return true;
 }
 
@@ -522,8 +567,10 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
         LOG_ERROR("Invalid title or no user selected");
         return false;
     }
-    
-    LOG_INFO("Restoring: %s from %s", title->name.c_str(), backupPath.c_str());
+    if (!title->hasSave || title->saveType != SaveType::Account) {
+        LOG_ERROR("Restore is only supported for account save data");
+        return false;
+    }
     
     // Verify backup exists
     DIR* dir = opendir(backupPath.c_str());
@@ -562,15 +609,11 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
         return false;
     }
 #else
-    LOG_INFO("Development mode: skipping actual restore");
 #endif
-    
-    LOG_INFO("Restore complete: %s", title->name.c_str());
     return true;
 }
 
 bool SaveManager::deleteBackup(const std::string& backupPath) {
-    LOG_INFO("Deleting backup: %s", backupPath.c_str());
     const bool deleted = fs::deleteDirectory(backupPath);
     remove(getBackupMetadataPath(backupPath).c_str());
     remove((backupPath + ".zip").c_str());
@@ -687,7 +730,6 @@ bool SaveManager::createVersionedBackup(TitleInfo* title, int maxVersions) {
     while (versions.size() > (size_t)maxVersions) {
         BackupVersion& oldest = versions.back();
         deleteBackup(oldest.path);
-        LOG_INFO("Deleted old backup: %s", oldest.name.c_str());
         versions.pop_back();
     }
     
@@ -700,8 +742,6 @@ bool SaveManager::backupAll() {
     int successCount = 0;
     int failCount = 0;
     
-    LOG_INFO("Starting backup all (%zu titles)...", titles.size());
-    
     for (auto title : titles) {
         if (createVersionedBackup(title, DEFAULT_MAX_VERSIONS)) {
             successCount++;
@@ -712,7 +752,6 @@ bool SaveManager::backupAll() {
         }
     }
     
-    LOG_INFO("Backup all complete: %d success, %d failed", successCount, failCount);
     return allSuccess;
 }
 
@@ -749,26 +788,10 @@ bool SaveManager::writeBackupMetadata(TitleInfo* title,
     meta.devicePriority = m_devicePriority;
     meta.size = fs::getDirectorySize(backupPath);
 
-    FILE* file = fopen(getBackupMetadataPath(backupPath).c_str(), "w");
-    if (!file) {
+    if (!writeBackupMetadataFile(getBackupMetadataPath(backupPath), meta)) {
         LOG_ERROR("Failed to write metadata for %s", backupPath.c_str());
         return false;
     }
-
-    fprintf(file, "title_id=%llu\n", static_cast<unsigned long long>(meta.titleId));
-    fprintf(file, "title_name=%s\n", meta.titleName.c_str());
-    fprintf(file, "backup_name=%s\n", meta.backupName.c_str());
-    fprintf(file, "revision_id=%s\n", meta.revisionId.c_str());
-    fprintf(file, "device_id=%s\n", meta.deviceId.c_str());
-    fprintf(file, "device_label=%s\n", meta.deviceLabel.c_str());
-    fprintf(file, "user_id=%s\n", meta.userId.c_str());
-    fprintf(file, "user_name=%s\n", meta.userName.c_str());
-    fprintf(file, "source=%s\n", meta.source.c_str());
-    fprintf(file, "created_at=%lld\n", static_cast<long long>(meta.createdAt));
-    fprintf(file, "device_priority=%d\n", meta.devicePriority);
-    fprintf(file, "size=%lld\n", static_cast<long long>(meta.size));
-
-    fclose(file);
     return true;
 }
 
@@ -777,53 +800,7 @@ bool SaveManager::readBackupMetadata(const std::string& backupPath, BackupMetada
 }
 
 bool SaveManager::readMetadataFile(const std::string& metadataPath, BackupMetadata& outMeta) {
-    FILE* file = fopen(metadataPath.c_str(), "r");
-    if (!file) {
-        return false;
-    }
-
-    outMeta = {};
-    char line[512];
-    while (fgets(line, sizeof(line), file)) {
-        line[strcspn(line, "\r\n")] = 0;
-        char* delimiter = strchr(line, '=');
-        if (!delimiter) {
-            continue;
-        }
-
-        *delimiter = 0;
-        const char* key = line;
-        const char* value = delimiter + 1;
-
-        if (strcmp(key, "title_id") == 0) {
-            outMeta.titleId = std::strtoull(value, nullptr, 10);
-        } else if (strcmp(key, "title_name") == 0) {
-            outMeta.titleName = value;
-        } else if (strcmp(key, "backup_name") == 0) {
-            outMeta.backupName = value;
-        } else if (strcmp(key, "revision_id") == 0) {
-            outMeta.revisionId = value;
-        } else if (strcmp(key, "device_id") == 0) {
-            outMeta.deviceId = value;
-        } else if (strcmp(key, "device_label") == 0) {
-            outMeta.deviceLabel = value;
-        } else if (strcmp(key, "user_id") == 0) {
-            outMeta.userId = value;
-        } else if (strcmp(key, "user_name") == 0) {
-            outMeta.userName = value;
-        } else if (strcmp(key, "source") == 0) {
-            outMeta.source = value;
-        } else if (strcmp(key, "created_at") == 0) {
-            outMeta.createdAt = static_cast<std::time_t>(std::atoll(value));
-        } else if (strcmp(key, "device_priority") == 0) {
-            outMeta.devicePriority = std::atoi(value);
-        } else if (strcmp(key, "size") == 0) {
-            outMeta.size = std::atoll(value);
-        }
-    }
-
-    fclose(file);
-    return outMeta.titleId != 0 || !outMeta.backupName.empty();
+    return readBackupMetadataFile(metadataPath, outMeta);
 }
 
 SyncDecision SaveManager::evaluateIncomingMetadata(TitleInfo* title, const BackupMetadata& incomingMeta) const {
@@ -847,46 +824,7 @@ SyncDecision SaveManager::evaluateIncomingMetadata(TitleInfo* title, const Backu
 }
 
 SyncDecision SaveManager::decideSync(const BackupMetadata* localMeta, const BackupMetadata& incomingMeta) const {
-    if (!localMeta) {
-        return {true, "No local backup metadata found"};
-    }
-
-    if (!incomingMeta.userId.empty() && !localMeta->userId.empty() && incomingMeta.userId != localMeta->userId) {
-        return {false, "Different user save detected; manual restore only"};
-    }
-
-    if (!incomingMeta.deviceId.empty() && !localMeta->deviceId.empty() && incomingMeta.deviceId != localMeta->deviceId) {
-        if (m_priorityPolicy == SyncPriorityPolicy::PreferPriority) {
-            if (incomingMeta.devicePriority > localMeta->devicePriority) {
-                return {true, "Different device save accepted by higher priority"};
-            }
-            if (incomingMeta.devicePriority < localMeta->devicePriority) {
-                return {false, "Different device save kept out by local priority"};
-            }
-        }
-    }
-
-    if (m_priorityPolicy == SyncPriorityPolicy::PreferPriority) {
-        if (incomingMeta.devicePriority > localMeta->devicePriority) {
-            return {true, "Incoming backup has higher device priority"};
-        }
-        if (incomingMeta.devicePriority < localMeta->devicePriority) {
-            return {false, "Local backup has higher device priority"};
-        }
-    }
-
-    if (incomingMeta.createdAt > localMeta->createdAt) {
-        return {true, "Incoming backup is newer"};
-    }
-    if (incomingMeta.createdAt < localMeta->createdAt) {
-        return {false, "Local backup is newer"};
-    }
-
-    if (m_priorityPolicy == SyncPriorityPolicy::PreferNewest) {
-        return {false, "Timestamps match; keeping local backup"};
-    }
-
-    return {false, "Priority and timestamp are tied; keeping local backup"};
+    return decideSyncByPolicy(m_priorityPolicy, localMeta, incomingMeta);
 }
 
 std::string SaveManager::exportBackupArchive(TitleInfo* title, const std::string& backupPath) {
@@ -955,17 +893,7 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
         FILE* metaFile = fopen(incomingMetaPath.c_str(), "r");
         if (metaFile) {
             fclose(metaFile);
-
-            FILE* dst = fopen(getBackupMetadataPath(tempDir).c_str(), "w");
-            FILE* src = fopen(incomingMetaPath.c_str(), "r");
-            if (src && dst) {
-                char buffer[512];
-                while (fgets(buffer, sizeof(buffer), src)) {
-                    fputs(buffer, dst);
-                }
-            }
-            if (src) fclose(src);
-            if (dst) fclose(dst);
+            copyMetadataFile(incomingMetaPath, getBackupMetadataPath(tempDir));
         }
     }
 
@@ -1018,22 +946,7 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
     finalMeta.revisionId = importName;
     finalMeta.source = "cloud";
 
-    FILE* file = fopen(getBackupMetadataPath(importPath).c_str(), "w");
-    if (file) {
-        fprintf(file, "title_id=%llu\n", static_cast<unsigned long long>(finalMeta.titleId));
-        fprintf(file, "title_name=%s\n", finalMeta.titleName.c_str());
-        fprintf(file, "backup_name=%s\n", finalMeta.backupName.c_str());
-        fprintf(file, "revision_id=%s\n", finalMeta.revisionId.c_str());
-        fprintf(file, "device_id=%s\n", finalMeta.deviceId.c_str());
-        fprintf(file, "device_label=%s\n", finalMeta.deviceLabel.c_str());
-        fprintf(file, "user_id=%s\n", finalMeta.userId.c_str());
-        fprintf(file, "user_name=%s\n", finalMeta.userName.c_str());
-        fprintf(file, "source=%s\n", finalMeta.source.c_str());
-        fprintf(file, "created_at=%lld\n", static_cast<long long>(finalMeta.createdAt));
-        fprintf(file, "device_priority=%d\n", finalMeta.devicePriority);
-        fprintf(file, "size=%lld\n", static_cast<long long>(finalMeta.size));
-        fclose(file);
-    }
+    writeBackupMetadataFile(getBackupMetadataPath(importPath), finalMeta);
 
     const bool restored = restoreSave(title, importPath);
     fs::deleteDirectory(tempDir);

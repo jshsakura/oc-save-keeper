@@ -2,17 +2,26 @@
 # oc-save-keeper - Safe save backup and sync for Nintendo Switch
 #---------------------------------------------------------------------------------
 .SUFFIXES:
+.NOTPARALLEL: test switch-build all
 
-ifeq ($(strip $(DEVKITPRO)),)
-$(error "Please set DEVKITPRO in your environment")
-endif
+HOST_CXX ?= g++
+HOST_JSON_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
+HOST_JSON_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
+HOST_CXXFLAGS := -std=c++20 -Wall -Wextra -O0 -g -I$(CURDIR)/include -I$(CURDIR) $(HOST_JSON_CFLAGS)
+HOST_LDFLAGS := $(HOST_JSON_LIBS)
+TEST_BUILD := build-host
+TEST_BIN := $(TEST_BUILD)/unit-tests
+TEST_SOURCES := $(wildcard $(CURDIR)/tests/*.cpp)
+TEST_HEADERS := $(shell if [ -d "$(TOPDIR)/include" ] && [ -d "$(TOPDIR)/tests" ]; then find $(TOPDIR)/include $(TOPDIR)/tests \( -name '*.hpp' -o -name '*.h' \); fi)
 
 TOPDIR ?= $(CURDIR)
+ifneq ($(strip $(DEVKITPRO)),)
 include $(DEVKITPRO)/libnx/switch_rules
+endif
 
 TARGET		:=	oc-save-keeper
 BUILD		:=	build
-SOURCES		:=	source source/core source/ui source/network source/utils source/fs source/zip
+SOURCES		:=	source source/core source/ui source/network source/utils source/fs source/zip source/ui/saves
 DATA		:=	data
 INCLUDES	:=	include
 APP_TITLE   :=  OC Save Keeper
@@ -53,13 +62,27 @@ export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) $(foreach dir,$(
 export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 export BUILD_EXEFS_SRC := $(TOPDIR)/$(EXEFS_SRC)
 
-.PHONY: $(BUILD) clean all
+.PHONY: $(BUILD) clean all test switch-build
 all: $(BUILD)
+switch-build: $(BUILD)
+ifeq ($(strip $(DEVKITPRO)),)
+$(BUILD):
+	@echo "Please set DEVKITPRO in your environment"
+	@exit 1
+else
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+endif
+test: $(TEST_BIN)
+	@$(TEST_BIN)
+
+$(TEST_BIN): $(TEST_SOURCES) $(TEST_HEADERS)
+	@[ -d $(TEST_BUILD) ] || mkdir -p $(TEST_BUILD)
+	@$(HOST_CXX) $(HOST_CXXFLAGS) $(TEST_SOURCES) -o $(TEST_BIN) $(HOST_LDFLAGS)
+
 clean:
-	@rm -fr $(BUILD) $(TARGET).nro $(TARGET).nacp $(TARGET).elf
+	@rm -fr $(BUILD) $(TEST_BUILD) $(TARGET).nro $(TARGET).nacp $(TARGET).elf
 else
 .PHONY:	all
 DEPENDS	:=	$(OFILES:.o=.d)

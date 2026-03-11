@@ -38,9 +38,6 @@ public:
             rc = fsdevMountDevice(mountName.c_str(), saveFs);
             if (R_SUCCEEDED(rc)) {
                 m_isOpen = true;
-                if (m_log) {
-                    LOG_INFO("Mounted save: %s (0x%016lX)", m_mountName.c_str(), titleId);
-                }
             } else {
                 fsFsClose(&saveFs);
                 LOG_ERROR("fsdevMountDevice failed: 0x%x", rc);
@@ -62,9 +59,6 @@ public:
 #ifdef __SWITCH__
             fsdevUnmountDevice(m_mountName.c_str());
 #endif
-            if (m_log) {
-                LOG_INFO("Unmounted save: %s", m_mountName.c_str());
-            }
         }
     }
     
@@ -126,9 +120,6 @@ public:
         if (R_FAILED(rc)) {
             LOG_ERROR("fsdevCommitDevice failed: 0x%x", rc);
             return false;
-        }
-        if (m_log) {
-            LOG_INFO("Committed save data: %s", m_mountName.c_str());
         }
 #endif
         return true;

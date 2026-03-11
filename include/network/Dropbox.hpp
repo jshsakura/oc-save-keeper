@@ -29,6 +29,7 @@ struct DropboxFile {
 struct DropboxAuthState {
     std::string authorizeUrl;   // https://www.dropbox.com/oauth2/authorize?...
     std::string csrfToken;      // State parameter for security
+    std::string codeVerifier;
     bool isWaiting;
     std::string message;
 };
@@ -43,6 +44,8 @@ public:
     std::string getAuthorizeUrl();                    // Get URL to show user
     bool checkAuthentication();                       // Check if user authorized (polling)
     bool isAuthenticated() const;
+    bool exchangeAuthorizationCode(const std::string& input);
+    void cancelPendingAuthorization();
     bool setAccessToken(const std::string& token);
     void logout();
     
@@ -72,7 +75,10 @@ private:
     
     // Tokens
     std::string m_accessToken;
+    std::string m_refreshToken;
+    std::time_t m_tokenExpiresAt;
     std::string m_csrfToken;
+    std::string m_codeVerifier;
     bool m_authenticated;
     
     // Curl
@@ -87,6 +93,7 @@ private:
     bool loadToken();
     bool saveToken();
     bool refreshToken();
+    bool ensureAccessToken();
     
     static size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userp);
     static size_t readCallback(void* ptr, size_t size, size_t nmemb, void* userp);

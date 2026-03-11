@@ -5,9 +5,59 @@
 #include "ui/MainUI.hpp"
 #include "utils/Language.hpp"
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <cstring>
 
 namespace ui {
+
+namespace Theme {
+    ColorPalette Light() {
+        return {
+            {248, 250, 252, 255}, // Background: Slate 50
+            {255, 255, 255, 255}, // Header: White
+            {255, 255, 255, 255}, // Card: White
+            {241, 245, 249, 255}, // CardHover: Slate 100
+            {59, 130, 246, 255},  // Accent: Blue 500
+            {219, 234, 254, 255}, // AccentSoft: Blue 100
+            {245, 158, 11, 255},  // Warning: Amber 500
+            {239, 68, 68, 255},   // Error: Red 500
+            {15, 23, 42, 255},    // Text: Slate 900
+            {100, 116, 139, 255}, // TextDim: Slate 500
+            {34, 197, 94, 255},   // Synced: Green 500
+            {148, 163, 184, 255}, // NotSynced: Slate 400
+            {226, 232, 240, 255}, // Border: Slate 200
+            {59, 130, 246, 255},  // BorderStrong: Blue 500
+            {248, 250, 252, 255}, // Poster: Slate 50
+            {255, 255, 255, 255}, // TitleStrip: White
+            {0, 0, 0, 20},        // Shadow
+            {59, 130, 246, 40}    // SelectionGlow
+        };
+    }
+
+    ColorPalette Dark() {
+        return {
+            {15, 23, 42, 255},    // Background: Slate 900
+            {30, 41, 59, 255},    // Header: Slate 800
+            {30, 41, 59, 255},    // Card: Slate 800
+            {51, 65, 85, 255},    // CardHover: Slate 700
+            {56, 189, 248, 255},  // Accent: Sky 400
+            {12, 74, 110, 255},   // AccentSoft: Sky 900
+            {251, 191, 36, 255},  // Warning: Amber 400
+            {248, 113, 113, 255}, // Error: Red 400
+            {248, 250, 252, 255}, // Text: Slate 50
+            {148, 163, 184, 255}, // TextDim: Slate 400
+            {34, 197, 94, 255},   // Synced: Green 500
+            {71, 85, 105, 255},   // NotSynced: Slate 600
+            {51, 65, 85, 255},    // Border: Slate 700
+            {56, 189, 248, 255},  // BorderStrong: Sky 400
+            {15, 23, 42, 255},    // Poster: Slate 900
+            {30, 41, 59, 255},    // TitleStrip: Slate 800
+            {0, 0, 0, 150},       // Shadow
+            {56, 189, 248, 60}    // SelectionGlow
+        };
+    }
+}
 
 #ifdef __SWITCH__
 namespace {
@@ -28,6 +78,67 @@ TTF_Font* openSharedFont(const PlFontData& font, int size) {
 }
 #endif
 
+namespace {
+
+bool readLatestLocalMetadata(core::SaveManager& saveManager, core::TitleInfo* title, core::BackupMetadata& outMeta) {
+    auto versions = saveManager.getBackupVersions(title);
+    for (const auto& version : versions) {
+        if (saveManager.readBackupMetadata(version.path, outMeta)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string fileNameFromPath(const std::string& path) {
+    const size_t slash = path.find_last_of('/');
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+std::string directoryFromPath(const std::string& path) {
+    const size_t slash = path.find_last_of('/');
+    return slash == std::string::npos ? "" : path.substr(0, slash);
+}
+
+bool endsWith(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::string formatStorageSize(int64_t bytes) {
+    if (bytes <= 0) {
+        return "0 B";
+    }
+
+    char buffer[32];
+    if (bytes < 1024) {
+        std::snprintf(buffer, sizeof(buffer), "%lld B", static_cast<long long>(bytes));
+        return buffer;
+    }
+
+    const double kb = bytes / 1024.0;
+    if (kb < 1024.0) {
+        std::snprintf(buffer, sizeof(buffer), kb < 10.0 ? "%.1f KB" : "%.0f KB", kb);
+        return buffer;
+    }
+
+    const double mb = kb / 1024.0;
+    if (mb < 1024.0) {
+        std::snprintf(buffer, sizeof(buffer), mb < 10.0 ? "%.1f MB" : "%.0f MB", mb);
+        return buffer;
+    }
+
+    const double gb = mb / 1024.0;
+    std::snprintf(buffer, sizeof(buffer), gb < 10.0 ? "%.1f GB" : "%.0f GB", gb);
+    return buffer;
+}
+
+std::string closeLabel() {
+    return utils::Language::instance().currentLang() == "ko" ? "닫기" : "Close";
+}
+
+} // namespace
+
 MainUI::MainUI(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveManager& saveMgr)
     : m_renderer(renderer)
     , m_dropbox(dropbox)
@@ -37,14 +148,20 @@ MainUI::MainUI(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveMana
     , m_fontSmall(nullptr)
 #ifdef __SWITCH__
     , m_plInitialized(false)
+    , m_lastFocusState(AppletFocusState_InFocus)
 #endif
     , m_state(State::Main)
     , m_shouldExit(false)
     , m_selectedIndex(0)
     , m_selectedVersionIndex(0)
+    , m_selectedUserIndex(0)
+    , m_selectedButtonIndex(0)
     , m_selectedTitle(nullptr)
+    , m_authUrl("")
+    , m_authSessionStarted(false)
     , m_syncProgress(0)
     , m_syncTotal(0)
+    , m_syncStatus("")
     , m_touchX(0)
     , m_touchY(0)
     , m_touchPressed(false) {
@@ -52,9 +169,13 @@ MainUI::MainUI(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveMana
     m_screenHeight = 720;
     m_gridCols = 1;
     m_gridRows = 1;
-    m_currentPage = 0;
+    m_scrollRow = 0;
+    m_scrollOffset = 0.0f;
     m_authTokenBox = {0, 0, 0, 0};
     m_languageButton = {0, 0, 0, 0};
+    m_refreshButton = {0, 0, 0, 0};
+    m_statusButton = {0, 0, 0, 0};
+    m_userButton = {0, 0, 0, 0};
 }
 
 MainUI::~MainUI() {
@@ -71,6 +192,19 @@ MainUI::~MainUI() {
 
 bool MainUI::initialize() {
     SDL_GetRendererOutputSize(m_renderer, &m_screenWidth, &m_screenHeight);
+
+    // Detect system theme
+    m_colors = Theme::Dark(); // Default
+#ifdef __SWITCH__
+    ColorSetId colorSetId = ColorSetId_Dark;
+    if (R_SUCCEEDED(setsysInitialize())) {
+        setsysGetColorSetId(&colorSetId);
+        setsysExit();
+    }
+    if (colorSetId == ColorSetId_Light) {
+        m_colors = Theme::Light();
+    }
+#endif
 
     if (TTF_Init() < 0) {
         LOG_ERROR("TTF_Init failed: %s", TTF_GetError());
@@ -136,6 +270,7 @@ bool MainUI::initialize() {
     // Scan titles
     m_saveManager.scanTitles();
     updateGameCards();
+    refreshSyncStates();
     
     return true;
 }
@@ -148,35 +283,112 @@ void MainUI::updateGameCards() {
     const int outerMargin = 14;
     const int gridGap = 12;
     const int contentHeight = m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - outerMargin * 2;
-    const int titleCount = std::max(1, static_cast<int>(titles.size()));
-    m_gridCols = std::max(1, std::min(6, titleCount > 0 ? titleCount : 6));
+    m_gridCols = 6;
     m_gridRows = 2;
-    if (titleCount <= m_gridCols) {
-        m_gridRows = 1;
-    }
     const int cardWidth = std::max(150, (m_screenWidth - outerMargin * 2 - gridGap * (m_gridCols - 1)) / m_gridCols);
-    const int cardHeight = std::max(236, (contentHeight - gridGap * (m_gridRows - 1)) / m_gridRows);
-    const int itemsPerPage = getItemsPerPage();
-    if (itemsPerPage > 0) {
-        m_currentPage = std::clamp(m_selectedIndex / itemsPerPage, 0, std::max(0, getPageCount() - 1));
-    }
-    
+    const int preferredCardHeight = cardWidth + 64;
+    const int maxCardHeight = std::max(220, (contentHeight - gridGap * (m_gridRows - 1)) / m_gridRows);
+    const int cardHeight = std::min(preferredCardHeight, maxCardHeight);
+    const int firstVisibleIndex = getVisibleStartIndex();
+
     for (size_t i = 0; i < titles.size(); i++) {
         auto* title = titles[i];
         GameCard card;
         card.title = title;
         card.selected = false;
-        card.synced = false; // TODO: Check sync status
+        card.synced = false;
+        card.syncState = GameCard::SyncState::Unknown;
+        card.syncLabel.clear();
 
-        const int indexInPage = static_cast<int>(i) % std::max(1, itemsPerPage);
-        const int row = indexInPage / m_gridCols;
-        const int col = indexInPage % m_gridCols;
+        const int indexInView = static_cast<int>(i) - firstVisibleIndex;
+        const int row = indexInView / m_gridCols;
+        const int col = indexInView % m_gridCols;
         int x = outerMargin + col * (cardWidth + gridGap);
         int y = HEADER_HEIGHT + outerMargin + row * (cardHeight + gridGap);
         card.rect = {x, y, cardWidth, cardHeight};
         card.icon = nullptr;
         
         m_gameCards.push_back(card);
+    }
+}
+
+void MainUI::refreshSyncStates(bool autoUpload) {
+    if (m_dropbox.isAuthenticated()) {
+        m_state = State::SyncAll;
+        m_syncProgress = 0;
+        m_syncTotal = std::max(1, static_cast<int>(m_gameCards.size()));
+        m_syncStatus = "Refreshing cloud status";
+    }
+
+    for (auto& card : m_gameCards) {
+        if (m_dropbox.isAuthenticated()) {
+            m_syncStatus = card.title->name + " " + LANG("sync.downloading");
+        }
+        card.synced = false;
+        card.syncState = GameCard::SyncState::Unknown;
+        card.syncLabel.clear();
+
+        core::BackupMetadata localMeta;
+        const bool hasLocalMeta = readLatestLocalMetadata(m_saveManager, card.title, localMeta);
+        if (!m_dropbox.isAuthenticated()) {
+            card.syncState = hasLocalMeta ? GameCard::SyncState::LocalOnly : GameCard::SyncState::Disconnected;
+            card.syncLabel = hasLocalMeta ? LANG("card.state.local_only") : LANG("card.state.disconnected");
+            continue;
+        }
+
+        char localMetaPath[256];
+        std::snprintf(localMetaPath, sizeof(localMetaPath), "/switch/oc-save-keeper/temp/%016llX_card.meta",
+                      static_cast<unsigned long long>(card.title->titleId));
+        std::string dropboxMetaPath = "/" + m_saveManager.getCloudMetadataPath(card.title);
+        if (!m_dropbox.downloadFile(dropboxMetaPath, localMetaPath)) {
+            card.syncState = hasLocalMeta ? GameCard::SyncState::NeedsUpload : GameCard::SyncState::LocalOnly;
+            card.syncLabel = hasLocalMeta ? LANG("card.state.needs_upload") : LANG("card.state.local_only");
+            continue;
+        }
+
+        core::BackupMetadata remoteMeta;
+        const bool hasRemoteMeta = m_saveManager.readMetadataFile(localMetaPath, remoteMeta);
+        remove(localMetaPath);
+        if (!hasRemoteMeta) {
+            card.syncState = hasLocalMeta ? GameCard::SyncState::NeedsUpload : GameCard::SyncState::LocalOnly;
+            card.syncLabel = hasLocalMeta ? LANG("card.state.needs_upload") : LANG("card.state.local_only");
+            continue;
+        }
+
+        if (!hasLocalMeta) {
+            card.syncState = GameCard::SyncState::CloudNewer;
+            card.syncLabel = LANG("card.state.cloud_newer");
+            if (m_dropbox.isAuthenticated()) {
+                m_syncProgress++;
+            }
+            continue;
+        }
+
+        core::SyncDecision incoming = m_saveManager.decideSync(&localMeta, remoteMeta);
+        core::SyncDecision outgoing = m_saveManager.decideSync(&remoteMeta, localMeta);
+        if (outgoing.useIncoming && !incoming.useIncoming) {
+            card.syncState = GameCard::SyncState::NeedsUpload;
+            card.syncLabel = LANG("card.state.needs_upload");
+            if (autoUpload) {
+                m_selectedTitle = card.title;
+                syncToDropbox();
+            }
+        } else if (incoming.useIncoming && !outgoing.useIncoming) {
+            card.syncState = GameCard::SyncState::CloudNewer;
+            card.syncLabel = LANG("card.state.cloud_newer");
+        } else {
+            card.syncState = GameCard::SyncState::UpToDate;
+            card.syncLabel = LANG("card.state.up_to_date");
+            card.synced = true;
+        }
+        if (m_dropbox.isAuthenticated()) {
+            m_syncProgress++;
+        }
+    }
+
+    if (m_dropbox.isAuthenticated()) {
+        m_syncStatus = LANG("sync.complete");
+        m_state = State::Main;
     }
 }
 
@@ -187,12 +399,35 @@ void MainUI::handleEvent(const SDL_Event& event) {
             break;
             
         case SDL_JOYBUTTONDOWN: {
+#ifdef __SWITCH__
+            break;
+#endif
             int button = event.jbutton.button;
             switch (button) {
                 case 0: // A
                     if (m_state == State::Main && m_selectedIndex < (int)m_gameCards.size()) {
                         m_selectedTitle = m_gameCards[m_selectedIndex].title;
+                        m_selectedButtonIndex = 0;
                         m_state = State::GameDetail;
+                    } else if (m_state == State::Auth &&
+                               m_selectedButtonIndex >= 0 &&
+                               m_selectedButtonIndex < (int)m_buttons.size()) {
+                        handleButtonPress(m_buttons[m_selectedButtonIndex]);
+                    } else if (m_state == State::GameDetail &&
+                               m_selectedButtonIndex >= 0 &&
+                               m_selectedButtonIndex < (int)m_buttons.size()) {
+                        handleButtonPress(m_buttons[m_selectedButtonIndex]);
+                    } else if (m_state == State::CloudPicker &&
+                               m_selectedButtonIndex >= 0 &&
+                               m_selectedButtonIndex < (int)m_buttons.size()) {
+                        handleButtonPress(m_buttons[m_selectedButtonIndex]);
+                    } else if (m_state == State::CloudPicker &&
+                               m_selectedVersionIndex < (int)m_versionItems.size()) {
+                        downloadCloudItem(&m_versionItems[m_selectedVersionIndex]);
+                    } else if (m_state == State::VersionHistory &&
+                               m_selectedButtonIndex >= 0 &&
+                               m_selectedButtonIndex < (int)m_buttons.size()) {
+                        handleButtonPress(m_buttons[m_selectedButtonIndex]);
                     } else if (m_state == State::VersionHistory &&
                                m_selectedVersionIndex < (int)m_versionItems.size()) {
                         restoreVersion(&m_versionItems[m_selectedVersionIndex]);
@@ -200,7 +435,13 @@ void MainUI::handleEvent(const SDL_Event& event) {
                     break;
                 case 1: // B
                     if (m_state == State::Auth) {
+                        m_dropbox.cancelPendingAuthorization();
+                        m_authSessionStarted = false;
+                        m_authUrl.clear();
+                        m_authToken.clear();
                         m_state = State::Main;
+                    } else if (m_state == State::CloudPicker) {
+                        m_state = State::GameDetail;
                     } else if (m_state == State::GameDetail) {
                         m_state = State::Main;
                         m_selectedTitle = nullptr;
@@ -210,7 +451,9 @@ void MainUI::handleEvent(const SDL_Event& event) {
                     break;
                 case 2: // X
                     if (m_state == State::Main) {
-                        syncAllGames();
+                        m_saveManager.scanTitles();
+                        updateGameCards();
+                        refreshSyncStates();
                     } else if (m_state == State::Auth) {
                         connectDropbox();
                     }
@@ -221,16 +464,20 @@ void MainUI::handleEvent(const SDL_Event& event) {
                     }
                     break;
                 case 4: // L
-                    if (m_state == State::Main && m_currentPage > 0) {
-                        m_currentPage--;
-                        m_selectedIndex = m_currentPage * getItemsPerPage();
+                    if (m_state == State::Main && m_scrollRow > 0) {
+                        m_scrollRow = std::max(0, m_scrollRow - m_gridRows);
+                        m_selectedIndex = std::max(0, m_scrollRow * m_gridCols);
                         clampSelection();
                     }
                     break;
                 case 5: // R
-                    if (m_state == State::Main && m_currentPage + 1 < getPageCount()) {
-                        m_currentPage++;
-                        m_selectedIndex = m_currentPage * getItemsPerPage();
+                    if (m_state == State::Main) {
+                        const int totalRows = std::max(1, ((int)m_gameCards.size() + m_gridCols - 1) / m_gridCols);
+                        const int maxScrollRow = std::max(0, totalRows - m_gridRows);
+                        if (m_scrollRow < maxScrollRow) {
+                            m_scrollRow = std::min(maxScrollRow, m_scrollRow + m_gridRows);
+                            m_selectedIndex = std::min((int)m_gameCards.size() - 1, m_scrollRow * m_gridCols);
+                        }
                         clampSelection();
                     }
                     break;
@@ -238,13 +485,64 @@ void MainUI::handleEvent(const SDL_Event& event) {
                 case 13: // D-pad down
                 case 14: // D-pad left
                 case 15: // D-pad right
-                    if (m_state == State::Main && !m_gameCards.empty()) {
-                        int nextIndex = m_selectedIndex;
-                        if (button == 12) nextIndex -= m_gridCols;
-                        if (button == 13) nextIndex += m_gridCols;
+                    if ((m_state == State::VersionHistory || m_state == State::CloudPicker)) {
+                        if ((button == 14 || button == 15) && !m_buttons.empty()) {
+                            if (button == 15) {
+                                m_selectedButtonIndex = 0;
+                            } else {
+                                m_selectedButtonIndex = -1;
+                            }
+                            break;
+                        }
+                        if (m_selectedButtonIndex >= 0) {
+                            break;
+                        }
+                        if (!m_versionItems.empty()) {
+                            int nextIndex = m_selectedVersionIndex;
+                            if (button == 12) nextIndex -= 1;
+                            if (button == 13) nextIndex += 1;
+                            nextIndex = std::clamp(nextIndex, 0, (int)m_versionItems.size() - 1);
+                            m_selectedVersionIndex = nextIndex;
+                        }
+                    } else if (m_state == State::Auth && !m_buttons.empty()) {
+                        int nextIndex = m_selectedButtonIndex < 0 ? 0 : m_selectedButtonIndex;
                         if (button == 14) nextIndex -= 1;
                         if (button == 15) nextIndex += 1;
-                        nextIndex = std::clamp(nextIndex, 0, (int)m_gameCards.size() - 1);
+                        nextIndex = std::clamp(nextIndex, 0, (int)m_buttons.size() - 1);
+                        m_selectedButtonIndex = nextIndex;
+                    } else if (m_state == State::GameDetail && !m_buttons.empty()) {
+                        int nextIndex = m_selectedButtonIndex;
+                        if (button == 12) nextIndex -= 1;
+                        if (button == 13) nextIndex += 1;
+                        nextIndex = std::clamp(nextIndex, 0, (int)m_buttons.size() - 1);
+                        m_selectedButtonIndex = nextIndex;
+                    } else if (m_state == State::Main && !m_gameCards.empty()) {
+                        const int totalItems = (int)m_gameCards.size();
+                        const int currentRow = m_selectedIndex / m_gridCols;
+                        const int currentCol = m_selectedIndex % m_gridCols;
+                        int nextIndex = m_selectedIndex;
+
+                        if (button == 12) { // up
+                            const int candidate = (currentRow - 1) * m_gridCols + currentCol;
+                            if (currentRow > 0 && candidate >= 0) {
+                                nextIndex = candidate;
+                            }
+                        } else if (button == 13) { // down
+                            const int candidate = (currentRow + 1) * m_gridCols + currentCol;
+                            if (candidate < totalItems) {
+                                nextIndex = candidate;
+                            }
+                        } else if (button == 14) { // left
+                            if (currentCol > 0) {
+                                nextIndex = m_selectedIndex - 1;
+                            }
+                        } else if (button == 15) { // right
+                            const int candidate = m_selectedIndex + 1;
+                            if ((currentCol + 1) < m_gridCols && candidate < totalItems) {
+                                nextIndex = candidate;
+                            }
+                        }
+
                         m_selectedIndex = nextIndex;
                         clampSelection();
                     }
@@ -253,10 +551,6 @@ void MainUI::handleEvent(const SDL_Event& event) {
                 case 11: // Minus
                     m_shouldExit = true;
                     break;
-            }
-
-            if (m_state == State::Auth && button == 0) {
-                openTokenKeyboard();
             }
             break;
         }
@@ -276,13 +570,209 @@ void MainUI::handleEvent(const SDL_Event& event) {
     }
 }
 
+#ifdef __SWITCH__
+void MainUI::handlePadButtons(u64 keysDown) {
+    if (keysDown & HidNpadButton_A) {
+        if (m_state == State::Main && m_selectedIndex < (int)m_gameCards.size()) {
+            m_selectedTitle = m_gameCards[m_selectedIndex].title;
+            m_selectedButtonIndex = 0;
+            m_state = State::GameDetail;
+        } else if (m_state == State::Auth &&
+                   m_selectedButtonIndex >= 0 &&
+                   m_selectedButtonIndex < (int)m_buttons.size()) {
+            handleButtonPress(m_buttons[m_selectedButtonIndex]);
+        } else if (m_state == State::UserPicker &&
+                   m_selectedUserIndex >= 0 &&
+                   m_selectedUserIndex < (int)m_userChips.size()) {
+            selectUser(m_selectedUserIndex);
+        } else if (m_state == State::GameDetail &&
+                   m_selectedButtonIndex >= 0 &&
+                   m_selectedButtonIndex < (int)m_buttons.size()) {
+            handleButtonPress(m_buttons[m_selectedButtonIndex]);
+        } else if (m_state == State::CloudPicker &&
+                   m_selectedButtonIndex >= 0 &&
+                   m_selectedButtonIndex < (int)m_buttons.size()) {
+            handleButtonPress(m_buttons[m_selectedButtonIndex]);
+        } else if (m_state == State::CloudPicker &&
+                   m_selectedVersionIndex < (int)m_versionItems.size()) {
+            downloadCloudItem(&m_versionItems[m_selectedVersionIndex]);
+        } else if (m_state == State::VersionHistory &&
+                   m_selectedButtonIndex >= 0 &&
+                   m_selectedButtonIndex < (int)m_buttons.size()) {
+            handleButtonPress(m_buttons[m_selectedButtonIndex]);
+        } else if (m_state == State::VersionHistory &&
+                   m_selectedVersionIndex < (int)m_versionItems.size()) {
+            restoreVersion(&m_versionItems[m_selectedVersionIndex]);
+        }
+    }
+
+    if (keysDown & HidNpadButton_B) {
+        if (m_state == State::Auth) {
+            m_dropbox.cancelPendingAuthorization();
+            m_authSessionStarted = false;
+            m_authUrl.clear();
+            m_authToken.clear();
+            m_state = State::Main;
+        } else if (m_state == State::UserPicker) {
+            m_state = State::Main;
+        } else if (m_state == State::CloudPicker) {
+            m_state = State::GameDetail;
+        } else if (m_state == State::GameDetail) {
+            m_state = State::Main;
+            m_selectedTitle = nullptr;
+        } else if (m_state == State::VersionHistory) {
+            m_state = State::GameDetail;
+        }
+    }
+
+    if (keysDown & HidNpadButton_X) {
+        if (m_state == State::Main) {
+            m_saveManager.scanTitles();
+            updateGameCards();
+            refreshSyncStates();
+        } else if (m_state == State::Auth) {
+            connectDropbox();
+        }
+    }
+
+    if (keysDown & HidNpadButton_Y) {
+        if (m_state == State::Main) {
+            toggleLanguage();
+        }
+    }
+
+    if (keysDown & HidNpadButton_L) {
+        if (m_state == State::Main && m_scrollRow > 0) {
+            m_scrollRow = std::max(0, m_scrollRow - m_gridRows);
+            m_selectedIndex = std::max(0, m_scrollRow * m_gridCols);
+            clampSelection();
+        }
+    }
+
+    if (keysDown & HidNpadButton_R) {
+        if (m_state == State::Main) {
+            const int totalRows = std::max(1, ((int)m_gameCards.size() + m_gridCols - 1) / m_gridCols);
+            const int maxScrollRow = std::max(0, totalRows - m_gridRows);
+            if (m_scrollRow < maxScrollRow) {
+                m_scrollRow = std::min(maxScrollRow, m_scrollRow + m_gridRows);
+                m_selectedIndex = std::min((int)m_gameCards.size() - 1, m_scrollRow * m_gridCols);
+            }
+            clampSelection();
+        }
+    }
+
+    const bool up = (keysDown & HidNpadButton_Up) != 0;
+    const bool down = (keysDown & HidNpadButton_Down) != 0;
+    const bool left = (keysDown & HidNpadButton_Left) != 0;
+    const bool right = (keysDown & HidNpadButton_Right) != 0;
+
+    if (m_state == State::Auth && !m_buttons.empty()) {
+        int nextIndex = m_selectedButtonIndex < 0 ? 0 : m_selectedButtonIndex;
+        if (left) nextIndex -= 1;
+        if (right) nextIndex += 1;
+        m_selectedButtonIndex = std::clamp(nextIndex, 0, (int)m_buttons.size() - 1);
+        return;
+    }
+
+    if ((m_state == State::VersionHistory || m_state == State::CloudPicker)) {
+        if (right && !m_buttons.empty()) {
+            m_selectedButtonIndex = 0;
+            return;
+        }
+        if (left) {
+            m_selectedButtonIndex = -1;
+            return;
+        }
+        if (m_selectedButtonIndex >= 0) {
+            return;
+        }
+        if (!m_versionItems.empty()) {
+            int nextIndex = m_selectedVersionIndex;
+            if (up) nextIndex -= 1;
+            if (down) nextIndex += 1;
+            m_selectedVersionIndex = std::clamp(nextIndex, 0, (int)m_versionItems.size() - 1);
+        }
+        return;
+    }
+
+    if (m_state == State::UserPicker && !m_userChips.empty()) {
+        int nextIndex = m_selectedUserIndex;
+        if (up) nextIndex -= 1;
+        if (down) nextIndex += 1;
+        m_selectedUserIndex = std::clamp(nextIndex, 0, (int)m_userChips.size() - 1);
+        return;
+    }
+
+    if (m_state == State::GameDetail && !m_buttons.empty()) {
+        int nextIndex = m_selectedButtonIndex;
+        if (up) nextIndex -= 1;
+        if (down) nextIndex += 1;
+        m_selectedButtonIndex = std::clamp(nextIndex, 0, (int)m_buttons.size() - 1);
+        return;
+    }
+
+    if (m_state != State::Main || m_gameCards.empty()) {
+        return;
+    }
+
+    const int totalItems = (int)m_gameCards.size();
+    const int currentRow = m_selectedIndex / m_gridCols;
+    const int currentCol = m_selectedIndex % m_gridCols;
+    int nextIndex = m_selectedIndex;
+
+    if (up) {
+        const int candidate = (currentRow - 1) * m_gridCols + currentCol;
+        if (currentRow > 0 && candidate >= 0) {
+            nextIndex = candidate;
+        }
+    } else if (down) {
+        const int candidate = (currentRow + 1) * m_gridCols + currentCol;
+        if (candidate < totalItems) {
+            nextIndex = candidate;
+        }
+    } else if (left) {
+        if (currentCol > 0) {
+            nextIndex = m_selectedIndex - 1;
+        }
+    } else if (right) {
+        const int candidate = m_selectedIndex + 1;
+        if ((currentCol + 1) < m_gridCols && candidate < totalItems) {
+            nextIndex = candidate;
+        }
+    }
+
+    m_selectedIndex = nextIndex;
+    clampSelection();
+}
+#endif
+
 void MainUI::handleTouch(int x, int y, bool pressed) {
     if (!pressed) return;
     
     if (m_state == State::Main) {
+        if (x >= m_statusButton.x && x < m_statusButton.x + m_statusButton.w &&
+            y >= m_statusButton.y && y < m_statusButton.y + m_statusButton.h) {
+            if (!m_dropbox.isAuthenticated()) {
+                m_state = State::Auth;
+            }
+            return;
+        }
+
         if (x >= m_languageButton.x && x < m_languageButton.x + m_languageButton.w &&
             y >= m_languageButton.y && y < m_languageButton.y + m_languageButton.h) {
             toggleLanguage();
+            return;
+        }
+
+        if (x >= m_userButton.x && x < m_userButton.x + m_userButton.w &&
+            y >= m_userButton.y && y < m_userButton.y + m_userButton.h) {
+            showUserPicker();
+            return;
+        }
+
+        if (x >= m_refreshButton.x && x < m_refreshButton.x + m_refreshButton.w &&
+            y >= m_refreshButton.y && y < m_refreshButton.y + m_refreshButton.h) {
+            refreshSyncStates();
             return;
         }
 
@@ -300,13 +790,15 @@ void MainUI::handleTouch(int x, int y, bool pressed) {
                 break;
             }
         }
-    } else if (m_state == State::GameDetail || m_state == State::Auth || m_state == State::VersionHistory) {
-        if (m_state == State::VersionHistory) {
+    } else if (m_state == State::GameDetail || m_state == State::Auth || m_state == State::VersionHistory || m_state == State::CloudPicker) {
+        if (m_state == State::VersionHistory || m_state == State::CloudPicker) {
             for (size_t i = 0; i < m_versionItems.size(); i++) {
                 SDL_Rect& r = m_versionItems[i].rect;
                 if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
                     m_selectedVersionIndex = i;
-                    restoreVersion(&m_versionItems[i]);
+                    if (m_state == State::VersionHistory) {
+                        restoreVersion(&m_versionItems[i]);
+                    }
                     return;
                 }
             }
@@ -325,6 +817,14 @@ void MainUI::handleTouch(int x, int y, bool pressed) {
             openTokenKeyboard();
             return;
         }
+    } else if (m_state == State::UserPicker) {
+        for (size_t i = 0; i < m_userChips.size(); ++i) {
+            const SDL_Rect& r = m_userChips[i].rect;
+            if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
+                selectUser(i);
+                return;
+            }
+        }
     }
 }
 
@@ -335,6 +835,7 @@ void MainUI::handleButtonPress(const Button& btn) {
     std::string backupText = LANG("detail.backup");
     std::string historyText = LANG("detail.history");
     std::string backText = LANG("detail.back");
+    std::string closeText = closeLabel();
     std::string connectText = LANG("auth.connect");
     std::string cancelText = LANG("auth.cancel");
     
@@ -346,7 +847,7 @@ void MainUI::handleButtonPress(const Button& btn) {
         }
     } else if (btn.text == downloadText) {
         if (m_dropbox.isAuthenticated()) {
-            downloadFromDropbox();
+            showCloudPicker();
         } else {
             m_state = State::Auth;
         }
@@ -357,8 +858,10 @@ void MainUI::handleButtonPress(const Button& btn) {
     } else if (btn.text == backText) {
         m_state = State::Main;
         m_selectedTitle = nullptr;
-    } else if (btn.text == "X") {
+    } else if (btn.text == "X" || btn.text == closeText) {
         if (m_state == State::VersionHistory) {
+            m_state = State::GameDetail;
+        } else if (m_state == State::CloudPicker) {
             m_state = State::GameDetail;
         } else {
             m_state = State::Main;
@@ -367,18 +870,52 @@ void MainUI::handleButtonPress(const Button& btn) {
     } else if (btn.text == connectText) {
         connectDropbox();
     } else if (btn.text == cancelText) {
+        m_dropbox.cancelPendingAuthorization();
+        m_authSessionStarted = false;
+        m_authUrl.clear();
+        m_authToken.clear();
         m_state = State::Main;
     }
 }
 
 void MainUI::update() {
     SDL_GetRendererOutputSize(m_renderer, &m_screenWidth, &m_screenHeight);
+
+#ifdef __SWITCH__
+    const AppletFocusState focusState = appletGetFocusState();
+    if (focusState == AppletFocusState_InFocus && m_lastFocusState != AppletFocusState_InFocus) {
+        m_saveManager.scanTitles();
+        updateGameCards();
+        refreshSyncStates();
+    }
+    m_lastFocusState = focusState;
+#endif
+    
+    // Smooth selection pulse animation
+    static float timer = 0;
+    timer += 0.06f;
+    m_selectionScale = 1.0f + 0.025f * sin(timer);
+    m_selectionAlpha = 180.0f + 75.0f * sin(timer);
+    
+    // Smooth scrolling
+    float targetOffset = static_cast<float>(m_scrollRow);
+    m_scrollOffset += (targetOffset - m_scrollOffset) * 0.25f;
+}
+
+void MainUI::renderIcon(SDL_Texture* texture, const SDL_Rect& rect, bool selected) {
+    if (!texture) return;
+    
+    if (selected) {
+        SDL_Rect glow = {rect.x - 4, rect.y - 4, rect.w + 8, rect.h + 8};
+        SDL_SetRenderDrawColor(m_renderer, m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, 80);
+        SDL_RenderFillRect(m_renderer, &glow);
+    }
+    
+    SDL_RenderCopy(m_renderer, texture, nullptr, &rect);
 }
 
 void MainUI::render() {
-    SDL_SetRenderDrawColor(m_renderer, Color::Background.r, Color::Background.g,
-                          Color::Background.b, Color::Background.a);
-    SDL_RenderClear(m_renderer);
+    renderAuraBackground();
     
     switch (m_state) {
         case State::Main:
@@ -389,12 +926,24 @@ void MainUI::render() {
             
         case State::GameDetail:
             renderHeader();
+            renderGameList();
+            renderFooter();
             renderGameDetail();
             break;
             
         case State::VersionHistory:
+        case State::CloudPicker:
             renderHeader();
+            renderGameList();
+            renderFooter();
             renderVersionHistory();
+            break;
+
+        case State::UserPicker:
+            renderHeader();
+            renderGameList();
+            renderFooter();
+            renderUserPicker();
             break;
             
         case State::Auth:
@@ -411,394 +960,623 @@ void MainUI::render() {
 }
 
 void MainUI::renderHeader() {
-    SDL_Rect headerRect = {0, 0, m_screenWidth, HEADER_HEIGHT};
-    SDL_SetRenderDrawColor(m_renderer, Color::Header.r, Color::Header.g,
-                          Color::Header.b, Color::Header.a);
-    SDL_RenderFillRect(m_renderer, &headerRect);
-    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-    SDL_RenderDrawLine(m_renderer, 0, HEADER_HEIGHT - 1, m_screenWidth, HEADER_HEIGHT - 1);
-    
-    renderText(LANG("app.name"), 24, 16, m_fontLarge, Color::Text);
-    SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, 255);
-    SDL_Rect accentBar = {24, 62, 108, 4};
-    SDL_RenderFillRect(m_renderer, &accentBar);
-    
-    // Connection status
+    // Floating Header (No background bar, just soft aura blend)
+    SDL_Rect logoBar = {32, 32, 6, 42};
+    renderFilledRoundedRect(logoBar, 3, m_colors.Accent);
+    renderText(LANG("app.name"), 52, 28, m_fontLarge, m_colors.Text);
+
     bool connected = m_dropbox.isAuthenticated();
     std::string status = connected ? LANG("status.connected") : LANG("status.disconnected");
-    SDL_Color statusColor = connected ? Color::Synced : Color::NotSynced;
-    const std::string slogan = LANG("app.slogan");
-    m_languageButton = {m_screenWidth - 92, 28, 64, 38};
+    SDL_Color statusColor = connected ? m_colors.Synced : m_colors.TextDim;
+    
+    m_languageButton = {m_screenWidth - 110, 34, 76, 38};
 
-    int statusWidth = 0;
-    int statusHeight = 0;
-    TTF_SizeUTF8(m_fontMedium, status.c_str(), &statusWidth, &statusHeight);
-    SDL_Rect statusChip = {m_languageButton.x - statusWidth - 46, 10, statusWidth + 26, 30};
-    SDL_SetRenderDrawColor(m_renderer,
-                           connected ? Color::AccentSoft.r : Color::TitleStrip.r,
-                           connected ? Color::AccentSoft.g : Color::TitleStrip.g,
-                           connected ? Color::AccentSoft.b : Color::TitleStrip.b,
-                           255);
-    SDL_RenderFillRect(m_renderer, &statusChip);
-    SDL_SetRenderDrawColor(m_renderer, statusColor.r, statusColor.g, statusColor.b, 255);
-    SDL_RenderDrawRect(m_renderer, &statusChip);
-    renderText(status, statusChip.x + 13, 12, m_fontSmall, statusColor);
+    int statusWidth = 0, statusHeight = 0;
+    TTF_SizeUTF8(m_fontSmall, status.c_str(), &statusWidth, &statusHeight);
+    m_statusButton = {m_languageButton.x - statusWidth - 44, 34, statusWidth + 32, 38};
+    
+    // Status Badge (Glassy)
+    renderGlassPanel(m_statusButton, 19, SDL_Color{255, 255, 255, 15}, true);
+    renderTextCentered(status, m_statusButton.x, m_statusButton.y + (m_statusButton.h - statusHeight) / 2, m_statusButton.w, m_fontSmall, statusColor);
 
-    int sloganWidth = 0;
-    int sloganHeight = 0;
-    TTF_SizeUTF8(m_fontSmall, slogan.c_str(), &sloganWidth, &sloganHeight);
-    renderText(slogan, m_languageButton.x - sloganWidth - 20, 46, m_fontSmall, Color::TextDim);
-    SDL_SetRenderDrawColor(m_renderer, Color::TitleStrip.r, Color::TitleStrip.g, Color::TitleStrip.b, 255);
-    SDL_RenderFillRect(m_renderer, &m_languageButton);
-    SDL_SetRenderDrawColor(m_renderer, Color::BorderStrong.r, Color::BorderStrong.g, Color::BorderStrong.b, 255);
-    SDL_RenderDrawRect(m_renderer, &m_languageButton);
+    // Language Toggle (Glassy)
+    renderGlassPanel(m_languageButton, 19, SDL_Color{255, 255, 255, 15}, true);
     renderTextCentered(utils::Language::instance().currentLang() == "ko" ? "KO" : "EN",
-                       m_languageButton.x, m_languageButton.y + 5, m_languageButton.w, m_fontSmall, Color::Accent);
+                       m_languageButton.x, m_languageButton.y + (m_languageButton.h - statusHeight) / 2, m_languageButton.w, m_fontSmall, m_colors.Accent);
 }
 
 void MainUI::renderFooter() {
-    SDL_Rect footerRect = {0, m_screenHeight - FOOTER_HEIGHT, m_screenWidth, FOOTER_HEIGHT};
-    SDL_SetRenderDrawColor(m_renderer, Color::Header.r, Color::Header.g,
-                          Color::Header.b, Color::Header.a);
-    SDL_RenderFillRect(m_renderer, &footerRect);
-    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-    SDL_RenderDrawLine(m_renderer, 0, m_screenHeight - FOOTER_HEIGHT, m_screenWidth, m_screenHeight - FOOTER_HEIGHT);
+    // Airy Footer (Floating Pills)
+    auto renderPill = [&](const std::string& key, const std::string& label, int& x) {
+        int kw, kh, lw, lh;
+        TTF_SizeUTF8(m_fontSmall, key.c_str(), &kw, &kh);
+        TTF_SizeUTF8(m_fontSmall, label.c_str(), &lw, &lh);
+        
+        int pillW = kw + lw + 48;
+        SDL_Rect pill = {x, m_screenHeight - 64, pillW, 36};
+        renderGlassPanel(pill, 18, SDL_Color{255, 255, 255, 10}, true);
+        
+        renderText(key, pill.x + 16, pill.y + (pill.h - kh) / 2, m_fontSmall, m_colors.Accent);
+        renderText(label, pill.x + kw + 28, pill.y + (pill.h - lh) / 2, m_fontSmall, m_colors.TextDim);
+        
+        x += pillW + 16;
+    };
+
+    int currentX = 32;
+    renderPill("A", utils::Language::instance().currentLang() == "ko" ? "선택" : "Select", currentX);
+    renderPill("B", utils::Language::instance().currentLang() == "ko" ? "뒤로" : "Back", currentX);
+    renderPill("X", utils::Language::instance().currentLang() == "ko" ? "새로고침" : "Refresh", currentX);
+
+    core::UserInfo* selectedUser = m_saveManager.getSelectedUser();
+    const std::string userName = selectedUser ? selectedUser->name : std::string("User");
+    int userTextW = 0, userTextH = 0;
+    TTF_SizeUTF8(m_fontSmall, userName.c_str(), &userTextW, &userTextH);
+    const int chipW = std::min(280, std::max(160, userTextW + 72));
+    m_userButton = {m_screenWidth - chipW - 32, m_screenHeight - 64, chipW, 40};
     
-    renderText(LANG("footer.controls"), 
-              20, m_screenHeight - FOOTER_HEIGHT + 16, m_fontSmall, Color::TextDim);
-    
-    std::string count = std::to_string(m_gameCards.size()) + LANG("footer.game_count");
-    int countWidth = 0;
-    int countHeight = 0;
-    TTF_SizeUTF8(m_fontSmall, count.c_str(), &countWidth, &countHeight);
-    renderText(count, m_screenWidth - countWidth - 20, m_screenHeight - FOOTER_HEIGHT + 16, m_fontSmall, Color::TextDim);
+    renderGlassPanel(m_userButton, 20, SDL_Color{255, 255, 255, 15}, true);
+    renderText(fitText(m_fontSmall, userName, m_userButton.w - 64), m_userButton.x + 52, m_userButton.y + 9, m_fontSmall, m_colors.Text);
 }
 
 void MainUI::renderGameList() {
     const int startIndex = getVisibleStartIndex();
     const int endIndex = std::min((int)m_gameCards.size(), startIndex + getItemsPerPage());
+    
+    // Calculate layout parameters
+    const int outerMargin = 14;
+    const int gridGap = 12;
+    const int contentHeight = m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - outerMargin * 2;
+    const int cardWidth = std::max(150, (m_screenWidth - outerMargin * 2 - gridGap * (m_gridCols - 1)) / m_gridCols);
+    const int preferredCardHeight = cardWidth + 64;
+    const int maxCardHeight = std::max(220, (contentHeight - gridGap * (m_gridRows - 1)) / m_gridRows);
+    const int cardHeight = std::min(preferredCardHeight, maxCardHeight);
+
     for (int i = startIndex; i < endIndex; i++) {
         GameCard& card = m_gameCards[i];
         card.selected = ((int)i == m_selectedIndex);
         
-        if (card.rect.y + card.rect.h < HEADER_HEIGHT ||
-            card.rect.y > m_screenHeight - FOOTER_HEIGHT) {
-            continue;
-        }
-        
+        // Recalculate card rect based on current scroll position
+        const int indexInView = i - startIndex;
+        const int row = indexInView / m_gridCols;
+        const int col = indexInView % m_gridCols;
+        card.rect.x = outerMargin + col * (cardWidth + gridGap);
+        card.rect.y = HEADER_HEIGHT + outerMargin + row * (cardHeight + gridGap);
+        card.rect.w = cardWidth;
+        card.rect.h = cardHeight;
+
         renderCard(card);
+    }
+
+    renderScrollBar();
+}
+
+void MainUI::renderScrollBar() {
+    const int totalRows = std::max(1, ((int)m_gameCards.size() + m_gridCols - 1) / m_gridCols);
+    if (totalRows <= m_gridRows) return;
+
+    const int barWidth = 6;
+    const int barMargin = 16;
+    const int trackHeight = m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - barMargin * 2;
+    const int handleHeight = std::max(30, (trackHeight * m_gridRows) / totalRows);
+    
+    const int maxScroll = totalRows - m_gridRows;
+    const int scrollY = (m_scrollRow * (trackHeight - handleHeight)) / maxScroll;
+
+    SDL_Rect trackRect = {m_screenWidth - barWidth - 8, HEADER_HEIGHT + barMargin, barWidth, trackHeight};
+    SDL_Rect handleRect = {trackRect.x, trackRect.y + scrollY, barWidth, handleHeight};
+
+    renderFilledRoundedRect(trackRect, 3, m_colors.AccentSoft);
+    renderFilledRoundedRect(handleRect, 3, m_colors.Accent);
+}
+
+void MainUI::renderSelectionGlow(const SDL_Rect& rect) {
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    Uint8 alphaBase = static_cast<Uint8>(m_selectionAlpha / 4);
+    for (int i = 1; i <= 10; i++) {
+        SDL_Rect glow = {rect.x - i, rect.y - i, rect.w + i * 2, rect.h + i * 2};
+        SDL_Color c = m_colors.Accent;
+        Uint8 alpha = static_cast<Uint8>(alphaBase / i);
+        renderRoundedRect(glow, 16 + i, SDL_Color{c.r, c.g, c.b, alpha});
     }
 }
 
-void MainUI::renderCard(const GameCard& card) {
-    SDL_Color bgColor = card.selected ? Color::CardHover : Color::Card;
-    SDL_SetRenderDrawColor(m_renderer, bgColor.r, bgColor.g, bgColor.b, bgColor.a);
-    SDL_RenderFillRect(m_renderer, &card.rect);
-    SDL_SetRenderDrawColor(m_renderer,
-                           card.selected ? Color::BorderStrong.r : Color::Border.r,
-                           card.selected ? Color::BorderStrong.g : Color::Border.g,
-                           card.selected ? Color::BorderStrong.b : Color::Border.b,
-                           255);
-    SDL_RenderDrawRect(m_renderer, &card.rect);
+void MainUI::renderRoundedRect(const SDL_Rect& rect, int radius, SDL_Color color) {
+    SDL_SetRenderDrawColor(m_renderer, color.r, color.g, color.b, color.a);
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+
+    // Draw lines
+    SDL_RenderDrawLine(m_renderer, rect.x + radius, rect.y, rect.x + rect.w - radius, rect.y);
+    SDL_RenderDrawLine(m_renderer, rect.x + radius, rect.y + rect.h - 1, rect.x + rect.w - radius, rect.y + rect.h - 1);
+    SDL_RenderDrawLine(m_renderer, rect.x, rect.y + radius, rect.x, rect.y + rect.h - radius);
+    SDL_RenderDrawLine(m_renderer, rect.x + rect.w - 1, rect.y + radius, rect.x + rect.w - 1, rect.y + rect.h - radius);
+
+    // Draw corners
+    auto drawCorner = [&](int cx, int cy, int startAngle, int endAngle) {
+        for (int i = 0; i <= 90; i++) {
+            double angle = (startAngle + i) * M_PI / 180.0;
+            int x = static_cast<int>(cx + radius * cos(angle));
+            int y = static_cast<int>(cy + radius * sin(angle));
+            SDL_RenderDrawPoint(m_renderer, x, y);
+        }
+    };
+
+    drawCorner(rect.x + rect.w - radius - 1, rect.y + radius, 270, 360);
+    drawCorner(rect.x + radius, rect.y + radius, 180, 270);
+    drawCorner(rect.x + radius, rect.y + rect.h - radius - 1, 90, 180);
+    drawCorner(rect.x + rect.w - radius - 1, rect.y + rect.h - radius - 1, 0, 90);
+}
+
+void MainUI::renderFilledRoundedRect(const SDL_Rect& rect, int radius, SDL_Color color) {
+    SDL_SetRenderDrawColor(m_renderer, color.r, color.g, color.b, color.a);
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+
+    // Body rectangles
+    SDL_Rect midBody = {rect.x + radius, rect.y, rect.w - radius * 2, rect.h};
+    SDL_Rect leftBody = {rect.x, rect.y + radius, radius, rect.h - radius * 2};
+    SDL_Rect rightBody = {rect.x + rect.w - radius, rect.y + radius, radius, rect.h - radius * 2};
     
+    SDL_RenderFillRect(m_renderer, &midBody);
+    SDL_RenderFillRect(m_renderer, &leftBody);
+    SDL_RenderFillRect(m_renderer, &rightBody);
+
+    // Corners
+    auto fillCorner = [&](int cx, int cy, int startAngle) {
+        for (int x = 0; x <= radius; x++) {
+            int y = static_cast<int>(sqrt(radius * radius - x * x));
+            if (startAngle == 270) // Top right
+                SDL_RenderDrawLine(m_renderer, cx + x, cy, cx + x, cy - y);
+            else if (startAngle == 180) // Top left
+                SDL_RenderDrawLine(m_renderer, cx - x, cy, cx - x, cy - y);
+            else if (startAngle == 90) // Bottom left
+                SDL_RenderDrawLine(m_renderer, cx - x, cy, cx - x, cy + y);
+            else if (startAngle == 0) // Bottom right
+                SDL_RenderDrawLine(m_renderer, cx + x, cy, cx + x, cy + y);
+        }
+    };
+
+    fillCorner(rect.x + rect.w - radius - 1, rect.y + radius, 270);
+    fillCorner(rect.x + radius, rect.y + radius, 180);
+    fillCorner(rect.x + radius, rect.y + rect.h - radius - 1, 90);
+    fillCorner(rect.x + rect.w - radius - 1, rect.y + rect.h - radius - 1, 0);
+}
+
+void MainUI::renderVerticalGradient(const SDL_Rect& rect, SDL_Color top, SDL_Color bottom) {
+    for (int y = 0; y < rect.h; ++y) {
+        float t = static_cast<float>(y) / rect.h;
+        Uint8 r = static_cast<Uint8>(top.r + t * (bottom.r - top.r));
+        Uint8 g = static_cast<Uint8>(top.g + t * (bottom.g - top.g));
+        Uint8 b = static_cast<Uint8>(top.b + t * (bottom.b - top.b));
+        Uint8 a = static_cast<Uint8>(top.a + t * (bottom.a - top.a));
+        SDL_SetRenderDrawColor(m_renderer, r, g, b, a);
+        SDL_RenderDrawLine(m_renderer, rect.x, rect.y + y, rect.x + rect.w - 1, rect.y + y);
+    }
+}
+
+void MainUI::renderAuraBackground() {
+    // Deep Base
+    SDL_Rect screenRect = {0, 0, m_screenWidth, m_screenHeight};
+    SDL_SetRenderDrawColor(m_renderer, 10, 15, 28, 255);
+    SDL_RenderFillRect(m_renderer, &screenRect);
+
+    // Subtle Aurora Light from Top-Left
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    for (int i = 0; i < 400; i += 4) {
+        Uint8 alpha = static_cast<Uint8>(25.0f * (1.0f - (static_cast<float>(i) / 400.0f)));
+        SDL_Rect lightRect = {0, 0, m_screenWidth + 200 - i, i * 2};
+        SDL_SetRenderDrawColor(m_renderer, 14, 165, 233, alpha); // Sky Blue
+        SDL_RenderFillRect(m_renderer, &lightRect);
+    }
+}
+
+void MainUI::renderGlassPanel(const SDL_Rect& rect, int radius, SDL_Color baseColor, bool hasRimLight) {
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    
+    // Ambient Shadow
+    SDL_Rect shadow = {rect.x + 4, rect.y + 12, rect.w, rect.h};
+    renderFilledRoundedRect(shadow, radius, SDL_Color{0, 0, 0, 80});
+
+    // Glass Base
+    renderFilledRoundedRect(rect, radius, baseColor);
+
+    // Rim Light (Top Edge Highlight)
+    if (hasRimLight) {
+        SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 40);
+        SDL_RenderDrawLine(m_renderer, rect.x + radius, rect.y, rect.x + rect.w - radius, rect.y);
+    }
+    
+    // Subtle Inner Border
+    renderRoundedRect(rect, radius, SDL_Color{255, 255, 255, 12});
+}
+
+void MainUI::renderCard(const GameCard& card, float unused_scale) {
+    SDL_Rect rect = card.rect;
+    float scale = 1.0f;
+    int yOffset = 0;
+
     if (card.selected) {
-        SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g,
-                              Color::Accent.b, Color::Accent.a);
-        SDL_Rect topBar = {card.rect.x, card.rect.y, card.rect.w, 5};
-        SDL_RenderFillRect(m_renderer, &topBar);
-        SDL_RenderDrawRect(m_renderer, &card.rect);
+        scale = m_selectionScale;
+        yOffset = -12; // Ethereal lift
+        
+        rect.w = static_cast<int>(rect.w * scale);
+        rect.h = static_cast<int>(rect.h * scale);
+        rect.x -= (rect.w - card.rect.w) / 2;
+        rect.y -= (rect.h - card.rect.h) / 2;
+        rect.y += yOffset;
     }
 
-    const int horizontalPadding = 10;
-    const int verticalPadding = 10;
-    const int titleStripHeight = 46;
-    const int posterHeight = std::max(150, card.rect.h - (verticalPadding * 2) - titleStripHeight);
-    SDL_Rect iconRect = {
-        card.rect.x + horizontalPadding,
-        card.rect.y + verticalPadding,
-        card.rect.w - horizontalPadding * 2,
-        posterHeight
-    };
-    SDL_Texture* iconTexture = loadIcon(card.title->iconPath);
+    const int borderRadius = 20; // More organic rounding
+    
+    // Premium Glass Material
+    SDL_Color glassColor = card.selected ? SDL_Color{45, 55, 75, 200} : SDL_Color{30, 41, 59, 140};
+    renderGlassPanel(rect, borderRadius, glassColor, true);
 
+    if (card.selected) {
+        renderSelectionGlow(rect);
+    }
+
+    const int padding = 16;
+    const int iconSize = rect.w - padding * 2;
+    SDL_Rect iconRect = {rect.x + padding, rect.y + padding, iconSize, iconSize};
+    
+    // Icon Area
+    SDL_Texture* iconTexture = loadIcon(card.title->iconPath);
     if (iconTexture) {
         SDL_RenderCopy(m_renderer, iconTexture, nullptr, &iconRect);
-    } else {
-        SDL_SetRenderDrawColor(m_renderer, Color::Poster.r, Color::Poster.g, Color::Poster.b, 255);
-        SDL_RenderFillRect(m_renderer, &iconRect);
-        renderTextCentered("NO IMAGE", iconRect.x, iconRect.y + (iconRect.h / 2) - 12, iconRect.w, m_fontSmall, Color::TextDim);
-    }
-    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-    SDL_RenderDrawRect(m_renderer, &iconRect);
-
-    if (iconTexture) {
         SDL_DestroyTexture(iconTexture);
+    } else {
+        renderFilledRoundedRect(iconRect, 14, SDL_Color{15, 23, 42, 255});
+        renderTextCentered("?", iconRect.x, iconRect.y + (iconRect.h / 2) - 20, iconRect.w, m_fontLarge, m_colors.TextDim);
+    }
+    // Subtle rim on icon
+    renderRoundedRect(iconRect, 14, SDL_Color{255, 255, 255, 25});
+
+    // Content Area
+    int textY = iconRect.y + iconRect.h + 14;
+    renderText(fitText(m_fontSmall, card.title->name, rect.w - padding * 2), rect.x + padding, textY, m_fontSmall, m_colors.Text);
+
+    if (!card.syncLabel.empty()) {
+        SDL_Color statusColor = card.selected ? m_colors.Accent : m_colors.TextDim;
+        renderText(fitText(m_fontSmall, card.syncLabel, rect.w - padding * 2), rect.x + padding, textY + 26, m_fontSmall, statusColor);
     }
 
-    SDL_Rect titleRect = {
-        card.rect.x + horizontalPadding,
-        card.rect.y + card.rect.h - verticalPadding - titleStripHeight,
-        card.rect.w - horizontalPadding * 2,
-        titleStripHeight
-    };
-    SDL_Color titleBg = card.selected ? Color::AccentSoft : Color::TitleStrip;
-    SDL_SetRenderDrawColor(m_renderer, titleBg.r, titleBg.g, titleBg.b, 255);
-    SDL_RenderFillRect(m_renderer, &titleRect);
-    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-    SDL_RenderDrawRect(m_renderer, &titleRect);
-
-    std::string name = fitText(m_fontSmall, card.title->name, titleRect.w - 14);
-    renderTextCentered(name, titleRect.x + 7, titleRect.y + 10, titleRect.w - 14, m_fontSmall, Color::Text);
-
-    renderSyncBadge(card.rect.x + card.rect.w - 40, card.rect.y + 10, card.synced);
+    if (card.synced) {
+        renderSyncBadge(rect.x + rect.w - 28, rect.y + 12, true);
+    }
 }
 
 void MainUI::renderSyncBadge(int x, int y, bool synced) {
-    SDL_Color color = synced ? Color::Synced : Color::NotSynced;
-    SDL_Rect badgeRect = {x, y, 30, 30};
-    SDL_SetRenderDrawColor(m_renderer, color.r, color.g, color.b, 200);
-    SDL_RenderFillRect(m_renderer, &badgeRect);
-    SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 180);
-    SDL_RenderDrawRect(m_renderer, &badgeRect);
+    SDL_Rect badgeRect = {x, y, 20, 20};
+    SDL_Color color = synced ? m_colors.Synced : m_colors.NotSynced;
     
-    const char* icon = synced ? "✓" : "○";
-    renderTextCentered(icon, x, y + 5, 30, m_fontSmall, Color::Card);
+    renderFilledRoundedRect(badgeRect, 10, color);
+    
+    // Draw a small white checkmark for synced
+    if (synced) {
+        SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 255);
+        SDL_RenderDrawLine(m_renderer, x + 5, y + 10, x + 9, y + 14);
+        SDL_RenderDrawLine(m_renderer, x + 9, y + 14, x + 15, y + 6);
+    }
 }
 
 void MainUI::renderGameDetail() {
     if (!m_selectedTitle) return;
-    
-    SDL_Rect detailRect = {56, HEADER_HEIGHT + 24, m_screenWidth - 112, m_screenHeight - HEADER_HEIGHT - 96};
-    SDL_SetRenderDrawColor(m_renderer, Color::Card.r, Color::Card.g,
-                          Color::Card.b, Color::Card.a);
-    SDL_RenderFillRect(m_renderer, &detailRect);
-    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-    SDL_RenderDrawRect(m_renderer, &detailRect);
-    
-    const int panelPadding = 30;
-    const int posterWidth = 276;
-    const int posterHeight = 356;
-    SDL_Rect posterRect = {detailRect.x + panelPadding, detailRect.y + panelPadding, posterWidth, posterHeight};
-    SDL_SetRenderDrawColor(m_renderer, Color::Poster.r, Color::Poster.g, Color::Poster.b, 255);
-    SDL_RenderFillRect(m_renderer, &posterRect);
-    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-    SDL_RenderDrawRect(m_renderer, &posterRect);
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 140); // Deep overlay
+    SDL_RenderFillRect(m_renderer, nullptr);
 
-    SDL_Texture* posterTexture = loadIcon(m_selectedTitle->iconPath);
-    if (posterTexture) {
+    const int sideWidth = std::min(760, std::max(680, (m_screenWidth * 12) / 20));
+    SDL_Rect sideRect{m_screenWidth - sideWidth - 32, 48, sideWidth, m_screenHeight - 96};
+    
+    // Premium Detail Glass
+    renderGlassPanel(sideRect, 32, SDL_Color{30, 41, 59, 230}, true);
+
+    SDL_Rect posterRect{sideRect.x + 40, sideRect.y + 40, 144, 144};
+    if (SDL_Texture* posterTexture = loadIcon(m_selectedTitle->iconPath)) {
         SDL_RenderCopy(m_renderer, posterTexture, nullptr, &posterRect);
         SDL_DestroyTexture(posterTexture);
-    } else {
-        renderTextCentered("NO IMAGE", posterRect.x, posterRect.y + (posterRect.h / 2) - 12, posterRect.w, m_fontMedium, Color::TextDim);
     }
+    renderRoundedRect(posterRect, 20, SDL_Color{255, 255, 255, 30});
 
-    const int rightX = posterRect.x + posterRect.w + 28;
-    const int rightWidth = detailRect.x + detailRect.w - rightX - panelPadding;
-    const int labelWidth = 180;
-    int y = detailRect.y + panelPadding;
+    const int infoX = posterRect.x + posterRect.w + 32;
+    const int infoW = sideRect.x + sideRect.w - infoX - 40;
+    renderText(fitText(m_fontLarge, m_selectedTitle->name, infoW), infoX, sideRect.y + 54, m_fontLarge, m_colors.Text);
+    renderText(fitText(m_fontMedium, m_selectedTitle->publisher, infoW), infoX, sideRect.y + 108, m_fontMedium, m_colors.TextDim);
 
-    renderText(fitText(m_fontLarge, m_selectedTitle->name, rightWidth), rightX, y, m_fontLarge, Color::Text);
-    y += 46;
-
-    renderText(m_selectedTitle->publisher, rightX, y, m_fontMedium, Color::TextDim);
-    y += 38;
-
-    char idStr[32];
-    snprintf(idStr, sizeof(idStr), "Title ID: %016lX", m_selectedTitle->titleId);
-    renderText(idStr, rightX, y, m_fontSmall, Color::TextDim);
-    y += 46;
-
-    auto renderInfoRow = [&](const std::string& label, const std::string& value) {
-        SDL_Rect rowRect = {rightX, y, rightWidth, 48};
-        SDL_SetRenderDrawColor(m_renderer, Color::TitleStrip.r, Color::TitleStrip.g, Color::TitleStrip.b, 255);
-        SDL_RenderFillRect(m_renderer, &rowRect);
-        SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-        SDL_RenderDrawRect(m_renderer, &rowRect);
-        renderText(label, rowRect.x + 16, rowRect.y + 10, m_fontSmall, Color::TextDim);
-        renderText(fitText(m_fontSmall, value, rowRect.w - labelWidth - 32), rowRect.x + labelWidth, rowRect.y + 10, m_fontSmall, Color::Text);
-        y += 56;
+    // Tags
+    auto drawTag = [&](const std::string& text, int x, int y, SDL_Color color) {
+        int tw = 0, th = 0;
+        TTF_SizeUTF8(m_fontSmall, text.c_str(), &tw, &th);
+        SDL_Rect tag{x, y, tw + 28, 34};
+        renderGlassPanel(tag, 17, SDL_Color{color.r, color.g, color.b, 40}, false);
+        renderText(text, tag.x + 14, tag.y + (tag.h - th)/2, m_fontSmall, color);
+        return tag.w;
     };
-    
-    char sizeValue[32];
-    snprintf(sizeValue, sizeof(sizeValue), "%.2f MB", m_selectedTitle->saveSize / (1024.0 * 1024.0));
-    renderInfoRow(LANG("detail.save_size"), sizeValue);
 
-    auto versions = m_saveManager.getBackupVersions(m_selectedTitle);
-    if (!versions.empty()) {
-        const auto& latest = versions.front();
-        renderInfoRow(LANG("detail.latest_device"), latest.deviceLabel.empty() ? "-" : latest.deviceLabel);
-        renderInfoRow(LANG("detail.latest_user"), latest.userName.empty() ? "-" : latest.userName);
-        renderInfoRow(LANG("detail.latest_source"), latest.source.empty() ? "-" : latest.source);
-    }
-    
-    renderInfoRow("Dropbox", m_dropbox.isAuthenticated() ? LANG("status.connected") : LANG("status.disconnected"));
-    
+    int tagX = infoX;
+    tagX += drawTag(formatStorageSize(m_selectedTitle->saveSize), tagX, sideRect.y + 154, m_colors.Accent) + 12;
+    drawTag("STABLE", tagX, sideRect.y + 154, m_colors.Synced);
+
+    const auto versions = m_saveManager.getBackupVersions(m_selectedTitle);
+    const std::string backupCount = versions.empty() ? LANG("detail.no_backup") : std::to_string(versions.size()) + " " + LANG("detail.versions");
+
+    auto drawRow = [&](const std::string& label, const std::string& value, int y) {
+        SDL_Rect row{sideRect.x + 40, y, sideRect.w - 80, 84};
+        renderGlassPanel(row, 16, SDL_Color{255, 255, 255, 8}, false);
+        renderText(label, row.x + 24, row.y + 16, m_fontSmall, m_colors.TextDim);
+        renderText(fitText(m_fontMedium, value, row.w - 48), row.x + 24, row.y + 44, m_fontMedium, m_colors.Text);
+    };
+
+    int rowY = sideRect.y + 220;
+    drawRow(LANG("detail.recent_backup"), backupCount, rowY); rowY += 100;
+    drawRow(LANG("detail.latest_device"), versions.empty() ? m_saveManager.getDeviceLabel() : versions.front().deviceLabel, rowY); rowY += 100;
+    drawRow(LANG("detail.latest_user"), versions.empty() ? LANG("history.unknown_user") : versions.front().userName, rowY);
+
     m_buttons.clear();
-    int btnW = std::min(220, (detailRect.w - 70) / 4);
-    int btnH = 56;
-    int gap = 12;
-    int rowWidth = btnW * 4 + gap * 3;
-    int rowX = detailRect.x + (detailRect.w - rowWidth) / 2;
-    int rowY = detailRect.y + detailRect.h - 82;
-    m_buttons.emplace_back(detailRect.x + detailRect.w - 64, detailRect.y + 16, 40, 40, "X");
-    m_buttons.emplace_back(rowX, rowY, btnW, btnH, LANG("detail.upload"));
-    m_buttons.emplace_back(rowX + btnW + gap, rowY, btnW, btnH, LANG("detail.download"));
-    m_buttons.emplace_back(rowX + (btnW + gap) * 2, rowY, btnW, btnH, LANG("detail.backup"));
-    m_buttons.emplace_back(rowX + (btnW + gap) * 3, rowY, btnW, btnH, LANG("detail.history"));
+    const int btnW = (sideRect.w - 80 - 24) / 2;
+    const int btnH = 56;
+    const int startY = sideRect.y + sideRect.h - 160;
     
-    for (const auto& btn : m_buttons) {
+    m_buttons.emplace_back(sideRect.x + 40, startY, btnW, btnH, LANG("detail.upload"));
+    m_buttons.emplace_back(sideRect.x + 40 + btnW + 24, startY, btnW, btnH, LANG("detail.download"));
+    m_buttons.emplace_back(sideRect.x + 40, startY + 72, btnW, btnH, LANG("detail.backup"));
+    m_buttons.emplace_back(sideRect.x + 40 + btnW + 24, startY + 72, btnW, btnH, LANG("detail.history"));
+    
+    // Close button (Extreme Minimalism)
+    m_buttons.emplace_back(sideRect.x + sideRect.w - 120, sideRect.y + 24, 80, 40, "X");
+
+    for (size_t i = 0; i < m_buttons.size(); ++i) {
+        auto& btn = m_buttons[i];
+        btn.hover = static_cast<int>(i) == m_selectedButtonIndex;
         renderButton(btn);
     }
 }
 
 void MainUI::renderButton(const Button& btn) {
-    const bool isClose = btn.text == "X";
+    const bool isClose = btn.text == "X" || btn.text == closeLabel();
     const bool isPrimary = btn.text == LANG("detail.upload") ||
                            btn.text == LANG("detail.download") ||
                            btn.text == LANG("auth.connect");
-    SDL_Color bgColor = btn.hover
-        ? (isPrimary ? Color::Accent : Color::CardHover)
-        : (isClose ? Color::Header : (isPrimary ? Color::Accent : Color::Card));
-    SDL_SetRenderDrawColor(m_renderer, bgColor.r, bgColor.g, bgColor.b, bgColor.a);
-    SDL_RenderFillRect(m_renderer, &btn.rect);
-    SDL_SetRenderDrawColor(m_renderer,
-                           isClose ? Color::TextDim.r : (isPrimary ? Color::Accent.r : Color::Border.r),
-                           isClose ? Color::TextDim.g : (isPrimary ? Color::Accent.g : Color::Border.g),
-                           isClose ? Color::TextDim.b : (isPrimary ? Color::Accent.b : Color::Border.b),
-                           255);
-    SDL_RenderDrawRect(m_renderer, &btn.rect);
+    
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    
+    SDL_Color bgColor;
+    SDL_Color textColor;
+    SDL_Color borderColor;
+
+    if (isClose) {
+        bgColor = btn.hover ? m_colors.AccentSoft : m_colors.Card;
+        textColor = m_colors.TextDim;
+        borderColor = m_colors.Border;
+    } else if (isPrimary) {
+        bgColor = btn.hover ? SDL_Color{m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, 220} : m_colors.Accent;
+        textColor = SDL_Color{255, 255, 255, 255};
+        borderColor = m_colors.Accent;
+    } else {
+        bgColor = btn.hover ? m_colors.AccentSoft : m_colors.Card;
+        textColor = m_colors.Text;
+        borderColor = m_colors.Border;
+    }
+
+    const int radius = btn.rect.h / 2;
+    renderFilledRoundedRect(btn.rect, radius, bgColor);
+    renderRoundedRect(btn.rect, radius, btn.hover ? m_colors.Accent : borderColor);
     
     TTF_Font* font = m_fontMedium;
-    int textW = 0;
-    int textH = 0;
+    int textW, textH;
     TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
     if (textW > btn.rect.w - 24) {
         font = m_fontSmall;
         TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
     }
-    renderTextCentered(fitText(font, btn.text, btn.rect.w - 24),
-                       btn.rect.x, btn.rect.y + (btn.rect.h - textH) / 2 - 2,
-                       btn.rect.w, font, isClose ? Color::Text : (isPrimary ? Color::Card : Color::Text));
+    renderTextCentered(fitText(font, btn.text, btn.rect.w - 16),
+                       btn.rect.x, btn.rect.y + (btn.rect.h - textH) / 2,
+                       btn.rect.w, font, textColor);
 }
 
 void MainUI::renderAuthScreen() {
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 200);
+    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 180);
     SDL_RenderFillRect(m_renderer, nullptr);
     
-    int panelWidth = std::min(m_screenWidth - 80, 1180);
-    int panelHeight = std::min(m_screenHeight - 80, 620);
+    int panelWidth = std::min(m_screenWidth - 120, 1000);
+    int panelHeight = std::min(m_screenHeight - 120, 580);
     SDL_Rect authRect = {(m_screenWidth - panelWidth) / 2, (m_screenHeight - panelHeight) / 2, panelWidth, panelHeight};
-    SDL_SetRenderDrawColor(m_renderer, Color::Card.r, Color::Card.g, Color::Card.b, 255);
-    SDL_RenderFillRect(m_renderer, &authRect);
-    SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-    SDL_RenderDrawRect(m_renderer, &authRect);
     
-    renderTextCentered(LANG("auth.title"), authRect.x, authRect.y + 20, authRect.w, m_fontLarge, Color::Accent);
+    renderFilledRoundedRect(SDL_Rect{authRect.x+6, authRect.y+8, authRect.w, authRect.h}, 24, m_colors.Shadow);
+    renderFilledRoundedRect(authRect, 24, m_colors.Card);
+    renderRoundedRect(authRect, 24, m_colors.Border);
+    
+    renderTextCentered(LANG("auth.title"), authRect.x, authRect.y + 30, authRect.w, m_fontLarge, m_colors.Accent);
 
-    int left = authRect.x + 50;
-    int y = authRect.y + 90;
+    int left = authRect.x + 60;
+    int y = authRect.y + 100;
 
-    renderText(LANG("auth.setup_time"), left, y, m_fontMedium, Color::Warning);
-    y += 48;
-    renderText("1. dropbox.com/developers/apps", left, y, m_fontMedium, Color::Text);
-    y += 42;
-    renderText("2. Create App -> Dropbox API -> App folder", left, y, m_fontMedium, Color::Text);
-    y += 42;
-    renderText("3. Generate access token on your phone", left, y, m_fontMedium, Color::Text);
-    y += 56;
-    renderText("4. Press A or tap the token box to open the keyboard", left, y, m_fontMedium, Color::Accent);
+    renderText("PKCE setup (one-time)", left, y, m_fontMedium, m_colors.Warning);
+    y += 44;
+    renderText("1. Press Connect to generate an authorization URL", left, y, m_fontMedium, m_colors.Text);
+    y += 38;
+    renderText("2. Open the URL on your phone and approve access", left, y, m_fontMedium, m_colors.Text);
+    y += 38;
+    renderText("3. Copy the code from redirected URL (?code=...)", left, y, m_fontMedium, m_colors.Text);
+    y += 38;
+    renderText("4. Press A or tap the box and paste code (or full URL)", left, y, m_fontMedium, m_colors.Accent);
     y += 50;
 
-    m_authTokenBox = {left, y, authRect.w - 100, 76};
-    SDL_SetRenderDrawColor(m_renderer, Color::TitleStrip.r, Color::TitleStrip.g, Color::TitleStrip.b, 255);
-    SDL_RenderFillRect(m_renderer, &m_authTokenBox);
-    SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, 255);
-    SDL_RenderDrawRect(m_renderer, &m_authTokenBox);
+    if (!m_authUrl.empty()) {
+        const std::string authUrlText = fitText(m_fontSmall, m_authUrl, authRect.w - 120);
+        renderText(authUrlText, left, y, m_fontSmall, m_colors.Warning);
+        y += 34;
+    }
+
+    m_authTokenBox = {left, y, authRect.w - 120, 64};
+    renderFilledRoundedRect(m_authTokenBox, 12, m_colors.AccentSoft);
+    renderRoundedRect(m_authTokenBox, 12, m_colors.Border);
     
     if (m_authToken.empty()) {
-        renderText(LANG("auth.token_placeholder"), m_authTokenBox.x + 18, y + 24, m_fontMedium, Color::TextDim);
+        renderText("Paste authorization code or redirected URL", m_authTokenBox.x + 20, y + 18, m_fontSmall, m_colors.TextDim);
     } else {
         std::string preview = m_authToken;
-        if (preview.size() > 56) {
-            preview = preview.substr(0, 53) + "...";
-        }
-        renderText(preview, m_authTokenBox.x + 18, y + 24, m_fontMedium, Color::Text);
+        if (preview.size() > 60) preview = preview.substr(0, 57) + "...";
+        renderText(preview, m_authTokenBox.x + 20, y + 18, m_fontSmall, m_colors.Text);
     }
-    y += 100;
+    y += 90;
     
     m_buttons.clear();
-    int buttonWidth = 240;
-    int gap = 28;
-    int totalWidth = buttonWidth * 2 + gap;
-    int buttonX = authRect.x + (authRect.w - totalWidth) / 2;
-    m_buttons.emplace_back(buttonX, y, buttonWidth, 58, LANG("auth.connect"));
-    m_buttons.emplace_back(buttonX + buttonWidth + gap, y, buttonWidth, 58, LANG("auth.cancel"));
+    int btnW = 220;
+    int btnH = 48;
+    int gap = 24;
+    int totalWidth = btnW * 2 + gap;
+    int startBtnX = authRect.x + (authRect.w - totalWidth) / 2;
+    m_buttons.emplace_back(startBtnX, y, btnW, btnH, LANG("auth.connect"));
+    m_buttons.emplace_back(startBtnX + btnW + gap, y, btnW, btnH, LANG("auth.cancel"));
     
-    for (const auto& btn : m_buttons) {
+    if (m_selectedButtonIndex < 0 || m_selectedButtonIndex >= (int)m_buttons.size()) {
+        m_selectedButtonIndex = 0;
+    }
+    
+    for (size_t i = 0; i < m_buttons.size(); ++i) {
+        auto& btn = m_buttons[i];
+        btn.hover = static_cast<int>(i) == m_selectedButtonIndex;
         renderButton(btn);
+    }
+}
+
+void MainUI::renderUserPicker() {
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 160);
+    SDL_RenderFillRect(m_renderer, nullptr);
+
+    const int panelWidth = 380;
+    const int panelHeight = std::min(120 + static_cast<int>(m_saveManager.getUsers().size()) * 80, m_screenHeight - 160);
+    SDL_Rect panel{m_screenWidth - panelWidth - 30, m_screenHeight - FOOTER_HEIGHT - panelHeight - 10, panelWidth, panelHeight};
+    
+    renderFilledRoundedRect(SDL_Rect{panel.x+6, panel.y+8, panel.w, panel.h}, 24, m_colors.Shadow);
+    renderFilledRoundedRect(panel, 24, m_colors.Card);
+    renderRoundedRect(panel, 24, m_colors.Border);
+
+    renderText(utils::Language::instance().currentLang() == "ko" ? "사용자 전환" : "Switch User",
+               panel.x + 24, panel.y + 24, m_fontMedium, m_colors.Text);
+
+    m_userChips.clear();
+    int y = panel.y + 70;
+    const auto& users = m_saveManager.getUsers();
+    for (size_t i = 0; i < users.size(); ++i) {
+        UserChip chip;
+        chip.user = const_cast<core::UserInfo*>(&users[i]);
+        chip.selected = static_cast<int>(i) == m_selectedUserIndex;
+        chip.rect = {panel.x + 20, y, panel.w - 40, 68};
+        m_userChips.push_back(chip);
+
+        SDL_Color chipBg = chip.selected ? m_colors.AccentSoft : m_colors.Poster;
+        renderFilledRoundedRect(chip.rect, 16, chipBg);
+        renderRoundedRect(chip.rect, 16, chip.selected ? m_colors.Accent : m_colors.Border);
+
+        SDL_Rect avatarRect{chip.rect.x + 12, chip.rect.y + 10, 48, 48};
+        bool renderedAvatar = false;
+        if (!chip.user->iconPath.empty()) {
+            if (SDL_Texture* avatarTexture = loadIcon(chip.user->iconPath)) {
+                SDL_RenderCopy(m_renderer, avatarTexture, nullptr, &avatarRect);
+                SDL_DestroyTexture(avatarTexture);
+                renderedAvatar = true;
+            }
+        }
+        if (!renderedAvatar) {
+            renderFilledRoundedRect(avatarRect, 24, m_colors.Border);
+        }
+
+        renderText(fitText(m_fontMedium, chip.user->name, chip.rect.w - 100), chip.rect.x + 72, chip.rect.y + 12, m_fontMedium, m_colors.Text);
+        renderText(fitText(m_fontSmall, chip.user->id, chip.rect.w - 100), chip.rect.x + 72, chip.rect.y + 38, m_fontSmall, m_colors.TextDim);
+        y += 76;
     }
 }
 
 void MainUI::renderVersionHistory() {
-    renderText(LANG("history.title"), 72, HEADER_HEIGHT + 16, m_fontLarge, Color::Text);
+    const bool isCloudPicker = m_state == State::CloudPicker;
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 160);
+    SDL_RenderFillRect(m_renderer, nullptr);
+
+    const int listWidth = std::min(720, std::max(600, (m_screenWidth * 11) / 20));
+    SDL_Rect listRect{m_screenWidth - listWidth - 20, HEADER_HEIGHT + 20, listWidth, m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - 40};
     
+    // Shadow and Background
+    renderFilledRoundedRect(SDL_Rect{listRect.x+6, listRect.y+8, listRect.w, listRect.h}, 24, m_colors.Shadow);
+    renderFilledRoundedRect(listRect, 24, m_colors.Card);
+    renderRoundedRect(listRect, 24, m_colors.Border);
+
+    renderText(isCloudPicker ? LANG("detail.download") : LANG("history.title"), listRect.x + 32, listRect.y + 24, m_fontLarge, m_colors.Text);
     if (m_selectedTitle) {
-        renderText(fitText(m_fontMedium, m_selectedTitle->name, m_screenWidth - 360), 300, HEADER_HEIGHT + 22, m_fontMedium, Color::TextDim);
+        renderText(fitText(m_fontSmall, m_selectedTitle->name, listRect.w - 64), listRect.x + 32, listRect.y + 68, m_fontSmall, m_colors.TextDim);
     }
-    
-    int y = HEADER_HEIGHT + 64;
-    
-    for (size_t i = 0; i < m_versionItems.size(); i++) {
+
+    int y = listRect.y + 110;
+    for (size_t i = 0; i < m_versionItems.size() && i < 5; i++) {
         VersionItem& item = m_versionItems[i];
         item.selected = ((int)i == m_selectedVersionIndex);
-        item.rect = {100, y, m_screenWidth - 200, 60};
+        item.rect = {listRect.x + 24, y, listRect.w - 48, 88};
+
+        SDL_Color itemBg = item.selected ? m_colors.AccentSoft : m_colors.Poster;
+        renderFilledRoundedRect(item.rect, 16, itemBg);
+        renderRoundedRect(item.rect, 16, item.selected ? m_colors.Accent : m_colors.Border);
+
+        const std::string sizeLabel = formatStorageSize(static_cast<int64_t>(item.size));
+        const std::string deviceLabel = item.deviceLabel.empty()
+            ? (item.isLocal ? m_saveManager.getDeviceLabel() : std::string(LANG("history.unknown_device")))
+            : item.deviceLabel;
+        const std::string sourceLabel = item.sourceLabel.empty()
+            ? (item.isLocal ? std::string("LOCAL") : std::string("CLOUD"))
+            : item.sourceLabel;
+
+        // Source Badge
+        int badgeW = sourceLabel == "LOCAL" ? 70 : 80;
+        SDL_Rect sourceBadge{item.rect.x + 20, item.rect.y + 50, badgeW, 24};
+        SDL_Color badgeColor = item.isLocal ? m_colors.Synced : m_colors.Accent;
+        renderFilledRoundedRect(sourceBadge, 12, SDL_Color{badgeColor.r, badgeColor.g, badgeColor.b, 40});
+        renderRoundedRect(sourceBadge, 12, badgeColor);
+        renderTextCentered(sourceLabel, sourceBadge.x, sourceBadge.y + 2, sourceBadge.w, m_fontSmall, badgeColor);
+
+        renderText(fitText(m_fontMedium, item.name, item.rect.w - 40), item.rect.x + 20, item.rect.y + 12, m_fontMedium, m_colors.Text);
+        renderText(fitText(m_fontSmall, deviceLabel, item.rect.w - 150), item.rect.x + 20 + badgeW + 15, item.rect.y + 52, m_fontSmall, m_colors.TextDim);
         
-        SDL_Color bgColor = item.selected ? Color::CardHover : Color::Card;
-        SDL_SetRenderDrawColor(m_renderer, bgColor.r, bgColor.g, bgColor.b, bgColor.a);
-        SDL_RenderFillRect(m_renderer, &item.rect);
-        SDL_SetRenderDrawColor(m_renderer, Color::Border.r, Color::Border.g, Color::Border.b, 255);
-        SDL_RenderDrawRect(m_renderer, &item.rect);
-        
-        if (item.selected) {
-            SDL_SetRenderDrawColor(m_renderer, Color::Accent.r, Color::Accent.g, Color::Accent.b, Color::Accent.a);
-            SDL_RenderDrawRect(m_renderer, &item.rect);
-        }
-        
-        const char* icon = item.isLocal ? "💾" : "☁️";
-        renderText(icon, item.rect.x + 20, item.rect.y + 18, m_fontMedium, Color::Text);
-        
-        char timeStr[64];
-        strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M", localtime(&item.timestamp));
-        renderText(timeStr, item.rect.x + 70, item.rect.y + 18, m_fontMedium, Color::Text);
-        renderText(fitText(m_fontSmall, item.deviceLabel.empty() ? LANG("history.unknown_device") : item.deviceLabel, 360),
-                   item.rect.x + 320, item.rect.y + 10, m_fontSmall, Color::TextDim);
-        renderText(fitText(m_fontSmall, item.userName.empty() ? LANG("history.unknown_user") : item.userName, 360),
-                   item.rect.x + 320, item.rect.y + 30, m_fontSmall, Color::TextDim);
-        renderText(fitText(m_fontSmall, item.sourceLabel.empty() ? LANG("history.unknown_source") : item.sourceLabel, 220),
-                   item.rect.x + 760, item.rect.y + 18, m_fontSmall, Color::Accent);
-        
-        y += 70;
+        int sizeWidth = 0, sizeHeight = 0;
+        TTF_SizeUTF8(m_fontSmall, sizeLabel.c_str(), &sizeWidth, &sizeHeight);
+        renderText(sizeLabel, item.rect.x + item.rect.w - 20 - sizeWidth, item.rect.y + 52, m_fontSmall, m_colors.TextDim);
+
+        y += 100;
     }
-    
+
     m_buttons.clear();
-    m_buttons.emplace_back(m_screenWidth - 72, HEADER_HEIGHT + 12, 40, 40, "X");
-    for (const auto& btn : m_buttons) {
-        renderButton(btn);
-    }
+    SDL_Rect closeBtnRect = {listRect.x + listRect.w - 180, listRect.y + 24, 150, 40};
+    m_buttons.emplace_back(closeBtnRect.x, closeBtnRect.y, closeBtnRect.w, closeBtnRect.h, closeLabel());
+    
+    Button closeBtn = m_buttons.front();
+    closeBtn.hover = m_selectedButtonIndex == 0;
+    renderButton(closeBtn);
 }
 
 void MainUI::renderSyncProgress() {
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 200);
+    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 180);
     SDL_RenderFillRect(m_renderer, nullptr);
     
     SDL_Rect progressRect = {m_screenWidth / 2 - 300, m_screenHeight / 2 - 100, 600, 200};
-    SDL_SetRenderDrawColor(m_renderer, Color::Card.r, Color::Card.g, Color::Card.b, 255);
-    SDL_RenderFillRect(m_renderer, &progressRect);
+    renderFilledRoundedRect(SDL_Rect{progressRect.x+6, progressRect.y+8, progressRect.w, progressRect.h}, 24, m_colors.Shadow);
+    renderFilledRoundedRect(progressRect, 24, m_colors.Card);
+    renderRoundedRect(progressRect, 24, m_colors.Border);
     
-    renderTextCentered(LANG("sync.syncing"), progressRect.x, progressRect.y + 20, progressRect.w, m_fontLarge, Color::Accent);
-    renderTextCentered(m_syncStatus, progressRect.x, progressRect.y + 120, progressRect.w, m_fontMedium, Color::Text);
+    renderTextCentered(LANG("sync.syncing"), progressRect.x, progressRect.y + 30, progressRect.w, m_fontLarge, m_colors.Accent);
+
+    // Progress bar
+    SDL_Rect track = {progressRect.x + 40, progressRect.y + 90, progressRect.w - 80, 12};
+    renderFilledRoundedRect(track, 6, m_colors.AccentSoft);
+    
+    float progress = static_cast<float>(m_syncProgress) / std::max(1, m_syncTotal);
+    SDL_Rect fill = {track.x, track.y, static_cast<int>(track.w * progress), track.h};
+    if (fill.w > 0) {
+        renderFilledRoundedRect(fill, 6, m_colors.Accent);
+    }
+    
+    renderTextCentered(m_syncStatus, progressRect.x, progressRect.y + 130, progressRect.w, m_fontSmall, m_colors.Text);
 }
 
 void MainUI::renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color) {
@@ -862,7 +1640,7 @@ SDL_Texture* MainUI::loadIcon(const std::string& path) {
 
 // Actions
 void MainUI::syncToDropbox() {
-    if (!m_selectedTitle || !m_dropbox.isAuthenticated()) return;
+    if (!m_selectedTitle || !m_selectedTitle->hasSave || !m_dropbox.isAuthenticated()) return;
     
     m_syncStatus = LANG("sync.uploading");
     
@@ -888,8 +1666,15 @@ void MainUI::syncToDropbox() {
     // Upload metadata first so another device can reject stale archives without
     // paying the cost of downloading the full ZIP.
     std::string dropboxMetaPath = "/" + m_saveManager.getCloudMetadataPath(m_selectedTitle);
+    const std::string cloudDir = directoryFromPath(dropboxPath);
+    const std::string archiveName = fileNameFromPath(archivePath);
+    const std::string metaName = fileNameFromPath(localMetaPath);
+    const std::string revisionDropboxPath = cloudDir.empty() ? ("/" + archiveName) : ("/" + cloudDir + "/" + archiveName);
+    const std::string revisionMetaDropboxPath = cloudDir.empty() ? ("/" + metaName) : ("/" + cloudDir + "/" + metaName);
 
-    if (m_dropbox.uploadFile(localMetaPath, dropboxMetaPath) &&
+    if (m_dropbox.uploadFile(localMetaPath, revisionMetaDropboxPath) &&
+        m_dropbox.uploadFile(archivePath, revisionDropboxPath) &&
+        m_dropbox.uploadFile(localMetaPath, dropboxMetaPath) &&
         m_dropbox.uploadFile(archivePath, dropboxPath)) {
         m_syncStatus = "Uploaded with metadata-aware sync";
     } else {
@@ -899,59 +1684,10 @@ void MainUI::syncToDropbox() {
     updateGameCards();
 }
 
-void MainUI::downloadFromDropbox() {
-    if (!m_selectedTitle || !m_dropbox.isAuthenticated()) return;
-    
-    m_syncStatus = LANG("sync.downloading");
-    
-    char localMeta[256];
-    char localZip[256];
-    std::snprintf(localMeta, sizeof(localMeta), "/switch/oc-save-keeper/temp/%016llX_latest.meta",
-                  static_cast<unsigned long long>(m_selectedTitle->titleId));
-    std::snprintf(localZip, sizeof(localZip), "/switch/oc-save-keeper/temp/%016llX_latest.zip",
-                  static_cast<unsigned long long>(m_selectedTitle->titleId));
-
-    // The low-memory path pulls the tiny metadata sidecar first and only
-    // downloads the archive if the conflict policy accepts it.
-    std::string dropboxMetaPath = "/" + m_saveManager.getCloudMetadataPath(m_selectedTitle);
-    if (!m_dropbox.downloadFile(dropboxMetaPath, localMeta)) {
-        m_syncStatus = "Cloud metadata download failed";
-        return;
-    }
-
-    core::BackupMetadata incomingMeta;
-    if (!m_saveManager.readMetadataFile(localMeta, incomingMeta)) {
-        remove(localMeta);
-        m_syncStatus = "Cloud metadata invalid";
-        return;
-    }
-
-    core::SyncDecision precheck = m_saveManager.evaluateIncomingMetadata(m_selectedTitle, incomingMeta);
-    remove(localMeta);
-    if (!precheck.useIncoming) {
-        m_syncStatus = precheck.reason;
-        return;
-    }
-
-    std::string dropboxPath = "/" + m_saveManager.getCloudPath(m_selectedTitle);
-    if (!m_dropbox.downloadFile(dropboxPath, localZip)) {
-        m_syncStatus = "Dropbox download failed";
-        return;
-    }
-
-    std::string reason;
-    if (m_saveManager.importBackupArchive(m_selectedTitle, localZip, &reason, true)) {
-        m_syncStatus = reason.empty() ? "Download complete" : reason;
-    } else {
-        m_syncStatus = reason.empty() ? "Import failed" : reason;
-    }
-
-    remove(localZip);
-}
-
 void MainUI::backupLocal() {
-    if (!m_selectedTitle) return;
+    if (!m_selectedTitle || !m_selectedTitle->hasSave) return;
     m_saveManager.createVersionedBackup(m_selectedTitle);
+    updateGameCards();
 }
 
 void MainUI::showVersionHistory() {
@@ -975,7 +1711,122 @@ void MainUI::showVersionHistory() {
     }
     
     m_selectedVersionIndex = 0;
+    m_selectedButtonIndex = -1;
     m_state = State::VersionHistory;
+}
+
+void MainUI::showCloudPicker() {
+    if (!m_selectedTitle || !m_selectedTitle->hasSave || !m_dropbox.isAuthenticated()) return;
+
+    m_syncStatus = LANG("sync.downloading");
+    m_state = State::SyncAll;
+    m_syncProgress = 0;
+    m_syncTotal = 1;
+
+    m_versionItems.clear();
+    const std::string cloudFolder = directoryFromPath("/" + m_saveManager.getCloudPath(m_selectedTitle));
+    auto remoteFiles = m_dropbox.listFolder(cloudFolder);
+    for (const auto& remote : remoteFiles) {
+        if (remote.isFolder || !endsWith(remote.name, ".meta") || remote.name == "latest.meta") {
+            continue;
+        }
+
+        char tempMeta[256];
+        std::snprintf(tempMeta, sizeof(tempMeta), "/switch/oc-save-keeper/temp/%016llX_%s",
+                      static_cast<unsigned long long>(m_selectedTitle->titleId),
+                      remote.name.c_str());
+        if (!m_dropbox.downloadFile(remote.path, tempMeta)) {
+            continue;
+        }
+
+        core::BackupMetadata incomingMeta;
+        const bool validMeta = m_saveManager.readMetadataFile(tempMeta, incomingMeta);
+        remove(tempMeta);
+        if (!validMeta) {
+            continue;
+        }
+
+        VersionItem item;
+        item.name = incomingMeta.backupName.empty() ? remote.name : incomingMeta.backupName;
+        item.path = remote.path.substr(0, remote.path.size() - 5) + ".zip";
+        item.deviceLabel = incomingMeta.deviceLabel.empty() ? LANG("history.unknown_device") : incomingMeta.deviceLabel;
+        item.userName = incomingMeta.userName.empty() ? LANG("history.unknown_user") : incomingMeta.userName;
+        item.sourceLabel = incomingMeta.source.empty() ? "cloud" : incomingMeta.source;
+        item.timestamp = incomingMeta.createdAt != 0 ? incomingMeta.createdAt : remote.modifiedTime;
+        item.size = incomingMeta.size > 0 ? incomingMeta.size : static_cast<int64_t>(remote.size);
+        item.isLocal = false;
+        item.selected = false;
+        m_versionItems.push_back(item);
+    }
+
+    std::sort(m_versionItems.begin(), m_versionItems.end(), [](const VersionItem& a, const VersionItem& b) {
+        return a.timestamp > b.timestamp;
+    });
+    if (!m_versionItems.empty()) {
+        m_versionItems[0].selected = true;
+    }
+
+    m_selectedVersionIndex = 0;
+    m_selectedButtonIndex = -1;
+    m_state = State::CloudPicker;
+}
+
+void MainUI::showUserPicker() {
+    m_selectedUserIndex = 0;
+    const auto& users = m_saveManager.getUsers();
+    core::UserInfo* selectedUser = m_saveManager.getSelectedUser();
+    for (size_t i = 0; i < users.size(); ++i) {
+        if (selectedUser == &users[i]) {
+            m_selectedUserIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    m_state = State::UserPicker;
+}
+
+void MainUI::selectUser(size_t index) {
+    if (!m_saveManager.selectUser(index)) {
+        m_state = State::Main;
+        return;
+    }
+
+    m_selectedTitle = nullptr;
+    m_selectedIndex = 0;
+    m_scrollRow = 0;
+    m_selectedUserIndex = static_cast<int>(index);
+    updateGameCards();
+    refreshSyncStates();
+    m_state = State::Main;
+}
+
+void MainUI::downloadCloudItem(VersionItem* item) {
+    if (!item || !m_selectedTitle || !m_dropbox.isAuthenticated()) {
+        m_state = State::GameDetail;
+        return;
+    }
+
+    m_syncStatus = LANG("sync.downloading");
+    char localZip[256];
+    std::snprintf(localZip, sizeof(localZip), "/switch/oc-save-keeper/temp/%016llX_selected.zip",
+                  static_cast<unsigned long long>(m_selectedTitle->titleId));
+
+    if (!m_dropbox.downloadFile(item->path, localZip)) {
+        m_syncStatus = "Dropbox download failed";
+        m_state = State::GameDetail;
+        return;
+    }
+
+    std::string reason;
+    if (m_saveManager.importBackupArchive(m_selectedTitle, localZip, &reason, false)) {
+        m_syncStatus = reason.empty() ? "Download complete" : reason;
+    } else {
+        m_syncStatus = reason.empty() ? "Import failed" : reason;
+    }
+
+    remove(localZip);
+    updateGameCards();
+    refreshSyncStates();
+    m_state = State::GameDetail;
 }
 
 void MainUI::restoreVersion(VersionItem* item) {
@@ -985,31 +1836,61 @@ void MainUI::restoreVersion(VersionItem* item) {
 }
 
 void MainUI::syncAllGames() {
+    if (!m_dropbox.isAuthenticated()) {
+        m_state = State::Auth;
+        return;
+    }
+
+    refreshSyncStates();
     m_state = State::SyncAll;
     m_syncProgress = 0;
     m_syncTotal = m_gameCards.size();
-    
+    int uploadedCount = 0;
+
     for (auto& card : m_gameCards) {
+        if (card.syncState != GameCard::SyncState::NeedsUpload) {
+            m_syncProgress++;
+            continue;
+        }
         m_syncStatus = card.title->name + " " + LANG("sync.syncing_game");
         m_selectedTitle = card.title;
         syncToDropbox();
+        uploadedCount++;
         m_syncProgress++;
     }
-    
-    m_syncStatus = LANG("sync.complete");
+
+    refreshSyncStates();
+    m_syncStatus = uploadedCount > 0 ? LANG("sync.complete") : LANG("sync.no_uploads");
     m_state = State::Main;
 }
 
 void MainUI::connectDropbox() {
-    if (m_authToken.empty()) {
+    if (!m_authSessionStarted) {
+        m_authUrl = m_dropbox.getAuthorizeUrl();
+        if (m_authUrl.empty()) {
+            m_syncStatus = "Failed to create authorize URL";
+            return;
+        }
+        m_authSessionStarted = true;
+        m_syncStatus = "Open URL on phone, then paste code";
         return;
     }
 
-    if (m_dropbox.setAccessToken(m_authToken)) {
+    if (m_authToken.empty()) {
+        m_syncStatus = "Paste authorization code first";
+        return;
+    }
+
+    if (m_dropbox.exchangeAuthorizationCode(m_authToken)) {
         m_syncStatus = "Dropbox connected";
+        m_authSessionStarted = false;
+        m_authUrl.clear();
+        m_authToken.clear();
+        updateGameCards();
+        refreshSyncStates(true);
         m_state = State::Main;
     } else {
-        m_syncStatus = "Failed to save Dropbox token";
+        m_syncStatus = "Auth code exchange failed";
     }
 }
 
@@ -1022,9 +1903,9 @@ void MainUI::openTokenKeyboard() {
     }
 
     swkbdConfigMakePresetDefault(&keyboard);
-    swkbdConfigSetHeaderText(&keyboard, "Dropbox access token");
-    swkbdConfigSetSubText(&keyboard, "Paste or type the generated token");
-    swkbdConfigSetGuideText(&keyboard, "Token");
+    swkbdConfigSetHeaderText(&keyboard, "Dropbox authorization code");
+    swkbdConfigSetSubText(&keyboard, "Paste code or redirected URL");
+    swkbdConfigSetGuideText(&keyboard, "Code");
     swkbdConfigSetInitialText(&keyboard, m_authToken.c_str());
     swkbdConfigSetStringLenMin(&keyboard, 1);
     swkbdConfigSetStringLenMax(&keyboard, 512);
@@ -1049,31 +1930,28 @@ void MainUI::toggleLanguage() {
 void MainUI::clampSelection() {
     if (m_gameCards.empty()) {
         m_selectedIndex = 0;
-        m_currentPage = 0;
+        m_scrollRow = 0;
         return;
     }
 
     m_selectedIndex = std::clamp(m_selectedIndex, 0, (int)m_gameCards.size() - 1);
-    const int itemsPerPage = getItemsPerPage();
-    if (itemsPerPage > 0) {
-        m_currentPage = std::clamp(m_selectedIndex / itemsPerPage, 0, std::max(0, getPageCount() - 1));
+    const int selectedRow = m_selectedIndex / std::max(1, m_gridCols);
+    const int totalRows = std::max(1, ((int)m_gameCards.size() + m_gridCols - 1) / m_gridCols);
+    const int maxScrollRow = std::max(0, totalRows - m_gridRows);
+    if (selectedRow < m_scrollRow) {
+        m_scrollRow = selectedRow;
+    } else if (selectedRow >= m_scrollRow + m_gridRows) {
+        m_scrollRow = selectedRow - m_gridRows + 1;
     }
+    m_scrollRow = std::clamp(m_scrollRow, 0, maxScrollRow);
 }
 
 int MainUI::getItemsPerPage() const {
-    return std::max(1, m_gridCols * m_gridRows);
-}
-
-int MainUI::getPageCount() const {
-    if (m_gameCards.empty()) {
-        return 1;
-    }
-    const int itemsPerPage = getItemsPerPage();
-    return std::max(1, (int(m_gameCards.size()) + itemsPerPage - 1) / itemsPerPage);
+    return 12;
 }
 
 int MainUI::getVisibleStartIndex() const {
-    return m_currentPage * getItemsPerPage();
+    return m_scrollRow * m_gridCols;
 }
 
 } // namespace ui

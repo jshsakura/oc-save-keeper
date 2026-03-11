@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <ctime>
+#include <cstdint>
 
 #ifdef __SWITCH__
 #include <switch.h>
