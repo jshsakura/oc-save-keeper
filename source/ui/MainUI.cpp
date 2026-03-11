@@ -897,6 +897,23 @@ void MainUI::update() {
     m_selectionScale = 1.0f + 0.025f * sin(timer);
     m_selectionAlpha = 180.0f + 75.0f * sin(timer);
     
+    // Background Drifting Animation
+    m_bgTimer += 0.005f;
+    
+    // Toast logic
+    if (m_toast.active) {
+        if (m_toast.timer > 0) {
+            m_toast.timer--;
+            if (m_toast.alpha < 255.0f) m_toast.alpha += 15.0f;
+        } else {
+            m_toast.alpha -= 10.0f;
+            if (m_toast.alpha <= 0.0f) {
+                m_toast.alpha = 0.0f;
+                m_toast.active = false;
+            }
+        }
+    }
+    
     // Smooth scrolling
     float targetOffset = static_cast<float>(m_scrollRow);
     m_scrollOffset += (targetOffset - m_scrollOffset) * 0.25f;
@@ -957,6 +974,8 @@ void MainUI::render() {
         default:
             break;
     }
+
+    renderToast();
 }
 
 void MainUI::renderHeader() {
@@ -1176,21 +1195,25 @@ void MainUI::renderAuraBackground() {
     SDL_SetRenderDrawColor(m_renderer, 10, 15, 28, 255);
     SDL_RenderFillRect(m_renderer, &screenRect);
 
-    // Simulated Web Mesh Gradient / Blurred Orbs
+    // Drifting Web Mesh Orbs
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
     
-    // Top-Left Orb (Primary Accent)
-    for (int i = 0; i < 500; i += 5) {
-        Uint8 alpha = static_cast<Uint8>(35.0f * (1.0f - std::pow(static_cast<float>(i) / 500.0f, 2.0f)));
-        SDL_Rect lightRect = {-100 + i/2, -100 + i/2, 800 - i, 800 - i};
+    // Top-Left Orb (Moves slowly)
+    int driftX = static_cast<int>(sin(m_bgTimer) * 50.0f);
+    int driftY = static_cast<int>(cos(m_bgTimer * 0.8f) * 40.0f);
+    for (int i = 0; i < 500; i += 10) {
+        Uint8 alpha = static_cast<Uint8>(30.0f * (1.0f - std::pow(static_cast<float>(i) / 500.0f, 2.0f)));
+        SDL_Rect lightRect = {-150 + driftX + i/2, -150 + driftY + i/2, 800 - i, 800 - i};
         renderRoundedRect(lightRect, (800 - i)/2, SDL_Color{m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, alpha});
     }
 
-    // Bottom-Right Orb (Secondary Tone - Purple/Indigo feel)
-    for (int i = 0; i < 600; i += 6) {
-        Uint8 alpha = static_cast<Uint8>(25.0f * (1.0f - std::pow(static_cast<float>(i) / 600.0f, 2.0f)));
-        SDL_Rect lightRect = {m_screenWidth - 500 + i/2, m_screenHeight - 400 + i/2, 900 - i, 900 - i};
-        renderRoundedRect(lightRect, (900 - i)/2, SDL_Color{124, 58, 237, alpha}); // Indigo 600
+    // Bottom-Right Orb (Moves in opposite phase)
+    int driftX2 = static_cast<int>(cos(m_bgTimer * 1.2f) * 60.0f);
+    int driftY2 = static_cast<int>(sin(m_bgTimer * 0.7f) * 50.0f);
+    for (int i = 0; i < 600; i += 12) {
+        Uint8 alpha = static_cast<Uint8>(20.0f * (1.0f - std::pow(static_cast<float>(i) / 600.0f, 2.0f)));
+        SDL_Rect lightRect = {m_screenWidth - 550 + driftX2 + i/2, m_screenHeight - 450 + driftY2 + i/2, 900 - i, 900 - i};
+        renderRoundedRect(lightRect, (900 - i)/2, SDL_Color{124, 58, 237, alpha}); // Indigo
     }
 }
 
@@ -1740,8 +1763,10 @@ void MainUI::syncToDropbox() {
         m_dropbox.uploadFile(localMetaPath, dropboxMetaPath) &&
         m_dropbox.uploadFile(archivePath, dropboxPath)) {
         m_syncStatus = "Uploaded with metadata-aware sync";
+        showToast(LANG("sync.complete"));
     } else {
         m_syncStatus = "Dropbox upload failed";
+        showToast("Upload failed", true);
     }
     
     updateGameCards();
@@ -1882,8 +1907,10 @@ void MainUI::downloadCloudItem(VersionItem* item) {
     std::string reason;
     if (m_saveManager.importBackupArchive(m_selectedTitle, localZip, &reason, false)) {
         m_syncStatus = reason.empty() ? "Download complete" : reason;
+        showToast(LANG("sync.complete"));
     } else {
         m_syncStatus = reason.empty() ? "Import failed" : reason;
+        showToast("Import failed", true);
     }
 
     remove(localZip);
@@ -1946,6 +1973,7 @@ void MainUI::connectDropbox() {
 
     if (m_dropbox.exchangeAuthorizationCode(m_authToken)) {
         m_syncStatus = "Dropbox connected";
+        showToast("Dropbox Connected!");
         m_authSessionStarted = false;
         m_authUrl.clear();
         m_authToken.clear();
@@ -1954,6 +1982,7 @@ void MainUI::connectDropbox() {
         m_state = State::Main;
     } else {
         m_syncStatus = "Auth code exchange failed";
+        showToast("Connection failed", true);
     }
 }
 
@@ -2007,6 +2036,33 @@ void MainUI::clampSelection() {
         m_scrollRow = selectedRow - m_gridRows + 1;
     }
     m_scrollRow = std::clamp(m_scrollRow, 0, maxScrollRow);
+}
+
+void MainUI::showToast(const std::string& message, bool isError) {
+    m_toast.message = message;
+    m_toast.isError = isError;
+    m_toast.timer = 180; // ~3 seconds at 60fps
+    m_toast.alpha = 0.0f;
+    m_toast.active = true;
+}
+
+void MainUI::renderToast() {
+    if (!m_toast.active) return;
+
+    int textW, textH;
+    TTF_SizeUTF8(m_fontSmall, m_toast.message.c_str(), &textW, &textH);
+    
+    int panelW = textW + 60;
+    int panelH = 44;
+    SDL_Rect toastRect = {(m_screenWidth - panelW) / 2, m_screenHeight - 120, panelW, panelH};
+    
+    Uint8 alpha = static_cast<Uint8>(m_toast.alpha);
+    SDL_Color bgColor = m_toast.isError ? SDL_Color{239, 68, 68, static_cast<Uint8>(alpha * 0.8f)} : SDL_Color{30, 41, 59, static_cast<Uint8>(alpha * 0.9f)};
+    
+    renderGlassPanel(toastRect, 22, bgColor, true);
+    
+    SDL_Color textColor = {255, 255, 255, alpha};
+    renderTextCentered(m_toast.message, toastRect.x, toastRect.y + (toastRect.h - textH)/2, toastRect.w, m_fontSmall, textColor);
 }
 
 int MainUI::getItemsPerPage() const {

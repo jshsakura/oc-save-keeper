@@ -218,16 +218,26 @@ private:
     void renderGlassPanel(const SDL_Rect& rect, int radius, SDL_Color baseColor, bool hasRimLight = true);
     void renderAuraBackground();
     void renderSoftShadow(const SDL_Rect& rect, int radius, int spread, SDL_Color color, int offsetY = 0);
+    void renderToast();
     
     // Helpers
     void renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color = SDL_Color{32, 34, 39, 255});
     void renderTextCentered(const std::string& text, int x, int y, int w, TTF_Font* font, SDL_Color color = SDL_Color{32, 34, 39, 255});
     void renderTextWithShadow(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color);
-
+    void showToast(const std::string& message, bool isError = false);
     
     // Animation state for selected items
     float m_selectionScale = 1.0f;
     float m_selectionAlpha = 0.0f;
+    float m_bgTimer = 0.0f;
+    
+    struct Toast {
+        std::string message;
+        bool isError = false;
+        float alpha = 0.0f;
+        int timer = 0;
+        bool active = false;
+    } m_toast;
     
     void renderButton(const Button& btn);
     void renderCard(const GameCard& card, float scale = 1.0f);
