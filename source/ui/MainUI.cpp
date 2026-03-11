@@ -6,6 +6,7 @@
 #include "utils/Language.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -1181,7 +1182,7 @@ void MainUI::renderRoundedRect(const SDL_Rect& rect, int radius, SDL_Color color
     // Draw corners
     auto drawCorner = [&](int cx, int cy, int startAngle, int endAngle) {
         for (int i = 0; i <= 90; i++) {
-            double angle = (startAngle + i) * M_PI / 180.0;
+            const double angle = (startAngle + i) * std::acos(-1.0) / 180.0;
             int x = static_cast<int>(cx + radius * cos(angle));
             int y = static_cast<int>(cy + radius * sin(angle));
             SDL_RenderDrawPoint(m_renderer, x, y);

@@ -10,6 +10,7 @@
 #include <SDL2/SDL_ttf.h>
 #include <vector>
 #include <string>
+#include <map>
 
 #ifdef __SWITCH__
 #include <switch.h>
@@ -255,7 +256,7 @@ private:
     void renderButton(const Button& btn);
     void renderCard(const GameCard& card, float scale = 1.0f);
     void renderSyncBadge(int x, int y, bool synced);
-    void renderIcon(SDL_Texture* texture, const SDL_Rect& rect, int radius, bool selected);
+    void renderIcon(SDL_Texture* texture, const SDL_Rect& rect, bool selected);
     std::string fitText(TTF_Font* font, const std::string& text, int maxWidth) const;
     
     SDL_Texture* loadIcon(const std::string& path);
