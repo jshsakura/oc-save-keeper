@@ -219,6 +219,7 @@ private:
     void renderAuraBackground();
     void renderSoftShadow(const SDL_Rect& rect, int radius, int spread, SDL_Color color, int offsetY = 0);
     void renderToast();
+    void renderParticles();
     
     // Helpers
     void renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color = SDL_Color{32, 34, 39, 255});
@@ -231,6 +232,17 @@ private:
     float m_selectionAlpha = 0.0f;
     float m_bgTimer = 0.0f;
     float m_overlayAlpha = 0.0f;
+    
+    struct Particle {
+        float x, y, size, speed, alpha;
+        float angle;
+    };
+    std::vector<Particle> m_particles;
+    void initParticles();
+
+    // Smart Cache
+    std::map<std::string, SDL_Texture*> m_iconCache;
+    void clearIconCache();
     
     struct Toast {
         std::string message;

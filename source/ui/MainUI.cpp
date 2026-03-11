@@ -176,9 +176,11 @@ MainUI::MainUI(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveMana
     m_refreshButton = {0, 0, 0, 0};
     m_statusButton = {0, 0, 0, 0};
     m_userButton = {0, 0, 0, 0};
+    initParticles();
 }
 
 MainUI::~MainUI() {
+    clearIconCache();
     if (m_fontLarge) TTF_CloseFont(m_fontLarge);
     if (m_fontMedium) TTF_CloseFont(m_fontMedium);
     if (m_fontSmall) TTF_CloseFont(m_fontSmall);
@@ -188,6 +190,43 @@ MainUI::~MainUI() {
     }
 #endif
     TTF_Quit();
+}
+
+void MainUI::initParticles() {
+    m_particles.clear();
+    for (int i = 0; i < 40; i++) {
+        m_particles.push_back({
+            static_cast<float>(rand() % 1280),
+            static_cast<float>(rand() % 720),
+            static_cast<float>(2 + rand() % 4),
+            0.15f + (rand() % 10) * 0.04f,
+            static_cast<float>(15 + rand() % 45),
+            static_cast<float>(rand() % 360)
+        });
+    }
+}
+
+void MainUI::clearIconCache() {
+    for (auto& pair : m_iconCache) {
+        if (pair.second) SDL_DestroyTexture(pair.second);
+    }
+    m_iconCache.clear();
+}
+
+void MainUI::renderParticles() {
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    for (auto& p : m_particles) {
+        p.y -= p.speed;
+        p.x += sin(m_bgTimer + p.angle) * 0.25f;
+        if (p.y < -20) {
+            p.y = 740;
+            p.x = rand() % 1280;
+        }
+        
+        SDL_Rect r = { static_cast<int>(p.x), static_cast<int>(p.y), static_cast<int>(p.size), static_cast<int>(p.size) };
+        SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, static_cast<Uint8>(p.alpha));
+        SDL_RenderFillRect(m_renderer, &r);
+    }
 }
 
 bool MainUI::initialize() {
@@ -942,6 +981,7 @@ void MainUI::renderIcon(SDL_Texture* texture, const SDL_Rect& rect, bool selecte
 
 void MainUI::render() {
     renderAuraBackground();
+    renderParticles();
     
     switch (m_state) {
         case State::Main:
@@ -1057,8 +1097,8 @@ void MainUI::renderFooter() {
 
 void MainUI::renderGameList() {
     // Smooth scrolling calculation: Offset cards by pixels instead of snapping to rows
-    const int outerMargin = 20;
-    const int gridGap = 16;
+    const int outerMargin = 32;
+    const int gridGap = 24;
     const int cardWidth = (m_screenWidth - outerMargin * 2 - gridGap * (m_gridCols - 1)) / m_gridCols;
     const int cardHeight = cardWidth + 70; // Professional aspect ratio
 
@@ -1730,15 +1770,23 @@ std::string MainUI::fitText(TTF_Font* font, const std::string& text, int maxWidt
 
 SDL_Texture* MainUI::loadIcon(const std::string& path) {
     if (path.empty()) return nullptr;
-    
+
+    // Check Cache
+    auto it = m_iconCache.find(path);
+    if (it != m_iconCache.end()) return it->second;
+
     SDL_Surface* surface = IMG_Load(path.c_str());
     if (!surface) return nullptr;
-    
+
     SDL_Texture* texture = SDL_CreateTextureFromSurface(m_renderer, surface);
     SDL_FreeSurface(surface);
+
+    if (texture) {
+        m_iconCache[path] = texture;
+    }
+
     return texture;
 }
-
 // Actions
 void MainUI::syncToDropbox() {
     if (!m_selectedTitle || !m_selectedTitle->hasSave || !m_dropbox.isAuthenticated()) return;
