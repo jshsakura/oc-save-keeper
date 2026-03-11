@@ -900,6 +900,15 @@ void MainUI::update() {
     // Background Drifting Animation
     m_bgTimer += 0.005f;
     
+    // Overlay Fade Logic
+    const bool showOverlay = (m_state != State::Main && m_state != State::SyncAll);
+    if (showOverlay) {
+        if (m_overlayAlpha < 255.0f) m_overlayAlpha += 20.0f;
+    } else {
+        if (m_overlayAlpha > 0.0f) m_overlayAlpha -= 20.0f;
+    }
+    m_overlayAlpha = std::clamp(m_overlayAlpha, 0.0f, 255.0f);
+
     // Toast logic
     if (m_toast.active) {
         if (m_toast.timer > 0) {
@@ -1047,32 +1056,34 @@ void MainUI::renderFooter() {
 }
 
 void MainUI::renderGameList() {
-    const int startIndex = getVisibleStartIndex();
-    const int endIndex = std::min((int)m_gameCards.size(), startIndex + getItemsPerPage());
-    
-    // Calculate layout parameters
-    const int outerMargin = 14;
-    const int gridGap = 12;
-    const int contentHeight = m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - outerMargin * 2;
-    const int cardWidth = std::max(150, (m_screenWidth - outerMargin * 2 - gridGap * (m_gridCols - 1)) / m_gridCols);
-    const int preferredCardHeight = cardWidth + 64;
-    const int maxCardHeight = std::max(220, (contentHeight - gridGap * (m_gridRows - 1)) / m_gridRows);
-    const int cardHeight = std::min(preferredCardHeight, maxCardHeight);
+    // Smooth scrolling calculation: Offset cards by pixels instead of snapping to rows
+    const int outerMargin = 20;
+    const int gridGap = 16;
+    const int cardWidth = (m_screenWidth - outerMargin * 2 - gridGap * (m_gridCols - 1)) / m_gridCols;
+    const int cardHeight = cardWidth + 70; // Professional aspect ratio
 
-    for (int i = startIndex; i < endIndex; i++) {
+    // We render a slightly larger range to ensure smooth entry/exit of cards during scroll
+    const int totalItems = static_cast<int>(m_gameCards.size());
+    
+    // Pixel-perfect offset based on smooth scroll timer
+    const int scrollPixelY = static_cast<int>(m_scrollOffset * (cardHeight + gridGap));
+
+    for (int i = 0; i < totalItems; i++) {
         GameCard& card = m_gameCards[i];
         card.selected = ((int)i == m_selectedIndex);
         
-        // Recalculate card rect based on current scroll position
-        const int indexInView = i - startIndex;
-        const int row = indexInView / m_gridCols;
-        const int col = indexInView % m_gridCols;
+        const int row = i / m_gridCols;
+        const int col = i % m_gridCols;
+        
         card.rect.x = outerMargin + col * (cardWidth + gridGap);
-        card.rect.y = HEADER_HEIGHT + outerMargin + row * (cardHeight + gridGap);
+        card.rect.y = HEADER_HEIGHT + outerMargin + row * (cardHeight + gridGap) - scrollPixelY;
         card.rect.w = cardWidth;
         card.rect.h = cardHeight;
 
-        renderCard(card);
+        // Culling: Only render if visible on screen to save performance
+        if (card.rect.y + card.rect.h > HEADER_HEIGHT && card.rect.y < m_screenHeight - FOOTER_HEIGHT) {
+            renderCard(card);
+        }
     }
 
     renderScrollBar();
@@ -1322,16 +1333,20 @@ void MainUI::renderSyncBadge(int x, int y, bool synced) {
 }
 
 void MainUI::renderGameDetail() {
-    if (!m_selectedTitle) return;
+    if (!m_selectedTitle || m_overlayAlpha <= 0.0f) return;
+    
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 140); // Deep overlay
+    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, static_cast<Uint8>(m_overlayAlpha * 0.55f)); // Dynamic overlay
     SDL_RenderFillRect(m_renderer, nullptr);
 
     const int sideWidth = std::min(760, std::max(680, (m_screenWidth * 12) / 20));
-    SDL_Rect sideRect{m_screenWidth - sideWidth - 32, 48, sideWidth, m_screenHeight - 96};
+    // Panel slides in slightly as alpha increases
+    int slideX = static_cast<int>((255.0f - m_overlayAlpha) * 0.2f);
+    SDL_Rect sideRect{m_screenWidth - sideWidth - 32 + slideX, 48, sideWidth, m_screenHeight - 96};
     
-    // Premium Detail Glass
-    renderGlassPanel(sideRect, 32, SDL_Color{30, 41, 59, 230}, true);
+    // Adjusted color alpha based on overlay state
+    SDL_Color glassColor = {30, 41, 59, static_cast<Uint8>(m_overlayAlpha * 0.9f)};
+    renderGlassPanel(sideRect, 32, glassColor, true);
 
     SDL_Rect posterRect{sideRect.x + 40, sideRect.y + 40, 144, 144};
     if (SDL_Texture* posterTexture = loadIcon(m_selectedTitle->iconPath)) {

@@ -226,10 +226,11 @@ private:
     void renderTextWithShadow(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color);
     void showToast(const std::string& message, bool isError = false);
     
-    // Animation state for selected items
+    // Animation & State
     float m_selectionScale = 1.0f;
     float m_selectionAlpha = 0.0f;
     float m_bgTimer = 0.0f;
+    float m_overlayAlpha = 0.0f;
     
     struct Toast {
         std::string message;
