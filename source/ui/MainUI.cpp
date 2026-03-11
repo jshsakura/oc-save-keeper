@@ -1546,8 +1546,10 @@ void MainUI::renderUserPicker() {
         if (!chip.user->iconPath.empty()) {
             if (SDL_Texture* avatarTexture = loadIcon(chip.user->iconPath)) {
                 SDL_RenderCopy(m_renderer, avatarTexture, nullptr, &avatarRect);
-                SDL_DestroyTexture(avatarTexture);
+                // CRITICAL FIX: DO NOT destroy cached texture!
                 renderedAvatar = true;
+            }
+        }
             }
         }
         if (!renderedAvatar) {
