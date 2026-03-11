@@ -217,10 +217,13 @@ private:
     void renderVerticalGradient(const SDL_Rect& rect, SDL_Color top, SDL_Color bottom);
     void renderGlassPanel(const SDL_Rect& rect, int radius, SDL_Color baseColor, bool hasRimLight = true);
     void renderAuraBackground();
+    void renderSoftShadow(const SDL_Rect& rect, int radius, int spread, SDL_Color color, int offsetY = 0);
     
     // Helpers
     void renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color = SDL_Color{32, 34, 39, 255});
     void renderTextCentered(const std::string& text, int x, int y, int w, TTF_Font* font, SDL_Color color = SDL_Color{32, 34, 39, 255});
+    void renderTextWithShadow(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color);
+
     
     // Animation state for selected items
     float m_selectionScale = 1.0f;

@@ -960,20 +960,25 @@ void MainUI::render() {
 }
 
 void MainUI::renderHeader() {
-    // Floating Header (No background bar, just soft aura blend)
-    SDL_Rect logoBar = {32, 32, 6, 42};
+    // Standard Base Y for Header alignment (Centered around 50px mark)
+    const int baseY = 32;
+    const int centerY = baseY + (42 / 2); // logoBar height is 42
+
+    // Floating Logo and Title
+    SDL_Rect logoBar = {32, baseY, 6, 42};
     renderFilledRoundedRect(logoBar, 3, m_colors.Accent);
-    renderText(LANG("app.name"), 52, 28, m_fontLarge, m_colors.Text);
+    renderText(LANG("app.name"), 54, baseY + 4, m_fontLarge, m_colors.Text);
 
     bool connected = m_dropbox.isAuthenticated();
     std::string status = connected ? LANG("status.connected") : LANG("status.disconnected");
     SDL_Color statusColor = connected ? m_colors.Synced : m_colors.TextDim;
     
-    m_languageButton = {m_screenWidth - 110, 34, 76, 38};
+    // Exact vertical centering for buttons
+    m_languageButton = {m_screenWidth - 110, centerY - (38 / 2), 76, 38};
 
     int statusWidth = 0, statusHeight = 0;
     TTF_SizeUTF8(m_fontSmall, status.c_str(), &statusWidth, &statusHeight);
-    m_statusButton = {m_languageButton.x - statusWidth - 44, 34, statusWidth + 32, 38};
+    m_statusButton = {m_languageButton.x - statusWidth - 48, centerY - (38 / 2), statusWidth + 32, 38};
     
     // Status Badge (Glassy)
     renderGlassPanel(m_statusButton, 19, SDL_Color{255, 255, 255, 15}, true);
@@ -986,15 +991,18 @@ void MainUI::renderHeader() {
 }
 
 void MainUI::renderFooter() {
-    // Airy Footer (Floating Pills)
+    const int footerY = m_screenHeight - 68;
+    const int footerH = 40;
+    const int footerCenterY = footerY + (footerH / 2);
+
     auto renderPill = [&](const std::string& key, const std::string& label, int& x) {
         int kw, kh, lw, lh;
         TTF_SizeUTF8(m_fontSmall, key.c_str(), &kw, &kh);
         TTF_SizeUTF8(m_fontSmall, label.c_str(), &lw, &lh);
         
         int pillW = kw + lw + 48;
-        SDL_Rect pill = {x, m_screenHeight - 64, pillW, 36};
-        renderGlassPanel(pill, 18, SDL_Color{255, 255, 255, 10}, true);
+        SDL_Rect pill = {x, footerY, pillW, footerH};
+        renderGlassPanel(pill, 20, SDL_Color{255, 255, 255, 10}, true);
         
         renderText(key, pill.x + 16, pill.y + (pill.h - kh) / 2, m_fontSmall, m_colors.Accent);
         renderText(label, pill.x + kw + 28, pill.y + (pill.h - lh) / 2, m_fontSmall, m_colors.TextDim);
@@ -1011,11 +1019,12 @@ void MainUI::renderFooter() {
     const std::string userName = selectedUser ? selectedUser->name : std::string("User");
     int userTextW = 0, userTextH = 0;
     TTF_SizeUTF8(m_fontSmall, userName.c_str(), &userTextW, &userTextH);
-    const int chipW = std::min(280, std::max(160, userTextW + 72));
-    m_userButton = {m_screenWidth - chipW - 32, m_screenHeight - 64, chipW, 40};
+    const int chipW = std::min(300, std::max(160, userTextW + 80));
+    m_userButton = {m_screenWidth - chipW - 32, footerY, chipW, footerH};
     
     renderGlassPanel(m_userButton, 20, SDL_Color{255, 255, 255, 15}, true);
-    renderText(fitText(m_fontSmall, userName, m_userButton.w - 64), m_userButton.x + 52, m_userButton.y + 9, m_fontSmall, m_colors.Text);
+    // User text with strict fitting to prevent overflow into boundaries
+    renderText(fitText(m_fontSmall, userName, m_userButton.w - 64), m_userButton.x + 52, m_userButton.y + (m_userButton.h - userTextH)/2, m_fontSmall, m_colors.Text);
 }
 
 void MainUI::renderGameList() {
@@ -1054,30 +1063,39 @@ void MainUI::renderScrollBar() {
     const int totalRows = std::max(1, ((int)m_gameCards.size() + m_gridCols - 1) / m_gridCols);
     if (totalRows <= m_gridRows) return;
 
-    const int barWidth = 6;
-    const int barMargin = 16;
-    const int trackHeight = m_screenHeight - HEADER_HEIGHT - FOOTER_HEIGHT - barMargin * 2;
-    const int handleHeight = std::max(30, (trackHeight * m_gridRows) / totalRows);
+    const int barWidth = 4; // Slimmer
+    const int trackHeight = m_screenHeight - 180; // Shorter track for airy feel
+    const int handleHeight = std::max(40, (trackHeight * m_gridRows) / totalRows);
     
     const int maxScroll = totalRows - m_gridRows;
     const int scrollY = (m_scrollRow * (trackHeight - handleHeight)) / maxScroll;
 
-    SDL_Rect trackRect = {m_screenWidth - barWidth - 8, HEADER_HEIGHT + barMargin, barWidth, trackHeight};
+    SDL_Rect trackRect = {m_screenWidth - 12, (m_screenHeight - trackHeight) / 2, barWidth, trackHeight};
     SDL_Rect handleRect = {trackRect.x, trackRect.y + scrollY, barWidth, handleHeight};
 
-    renderFilledRoundedRect(trackRect, 3, m_colors.AccentSoft);
-    renderFilledRoundedRect(handleRect, 3, m_colors.Accent);
+    renderFilledRoundedRect(trackRect, 2, SDL_Color{255, 255, 255, 20});
+    renderFilledRoundedRect(handleRect, 2, m_colors.Accent);
+}
+
+void MainUI::renderSoftShadow(const SDL_Rect& rect, int radius, int spread, SDL_Color color, int offsetY) {
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    for (int i = 0; i < spread; ++i) {
+        Uint8 alpha = static_cast<Uint8>(color.a * (1.0f - static_cast<float>(i) / spread));
+        // Exponential falloff for softer web-like shadow
+        alpha = static_cast<Uint8>(alpha * alpha / 255.0f); 
+        SDL_Rect shadowRect = {
+            rect.x - i, 
+            rect.y - i + offsetY, 
+            rect.w + (i * 2), 
+            rect.h + (i * 2)
+        };
+        renderRoundedRect(shadowRect, radius + i, SDL_Color{color.r, color.g, color.b, alpha});
+    }
 }
 
 void MainUI::renderSelectionGlow(const SDL_Rect& rect) {
-    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-    Uint8 alphaBase = static_cast<Uint8>(m_selectionAlpha / 4);
-    for (int i = 1; i <= 10; i++) {
-        SDL_Rect glow = {rect.x - i, rect.y - i, rect.w + i * 2, rect.h + i * 2};
-        SDL_Color c = m_colors.Accent;
-        Uint8 alpha = static_cast<Uint8>(alphaBase / i);
-        renderRoundedRect(glow, 16 + i, SDL_Color{c.r, c.g, c.b, alpha});
-    }
+    Uint8 alphaBase = static_cast<Uint8>(m_selectionAlpha);
+    renderSoftShadow(rect, 20, 24, SDL_Color{m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, static_cast<Uint8>(alphaBase / 2)}, 0);
 }
 
 void MainUI::renderRoundedRect(const SDL_Rect& rect, int radius, SDL_Color color) {
@@ -1158,34 +1176,49 @@ void MainUI::renderAuraBackground() {
     SDL_SetRenderDrawColor(m_renderer, 10, 15, 28, 255);
     SDL_RenderFillRect(m_renderer, &screenRect);
 
-    // Subtle Aurora Light from Top-Left
+    // Simulated Web Mesh Gradient / Blurred Orbs
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-    for (int i = 0; i < 400; i += 4) {
-        Uint8 alpha = static_cast<Uint8>(25.0f * (1.0f - (static_cast<float>(i) / 400.0f)));
-        SDL_Rect lightRect = {0, 0, m_screenWidth + 200 - i, i * 2};
-        SDL_SetRenderDrawColor(m_renderer, 14, 165, 233, alpha); // Sky Blue
-        SDL_RenderFillRect(m_renderer, &lightRect);
+    
+    // Top-Left Orb (Primary Accent)
+    for (int i = 0; i < 500; i += 5) {
+        Uint8 alpha = static_cast<Uint8>(35.0f * (1.0f - std::pow(static_cast<float>(i) / 500.0f, 2.0f)));
+        SDL_Rect lightRect = {-100 + i/2, -100 + i/2, 800 - i, 800 - i};
+        renderRoundedRect(lightRect, (800 - i)/2, SDL_Color{m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, alpha});
+    }
+
+    // Bottom-Right Orb (Secondary Tone - Purple/Indigo feel)
+    for (int i = 0; i < 600; i += 6) {
+        Uint8 alpha = static_cast<Uint8>(25.0f * (1.0f - std::pow(static_cast<float>(i) / 600.0f, 2.0f)));
+        SDL_Rect lightRect = {m_screenWidth - 500 + i/2, m_screenHeight - 400 + i/2, 900 - i, 900 - i};
+        renderRoundedRect(lightRect, (900 - i)/2, SDL_Color{124, 58, 237, alpha}); // Indigo 600
     }
 }
 
 void MainUI::renderGlassPanel(const SDL_Rect& rect, int radius, SDL_Color baseColor, bool hasRimLight) {
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
     
-    // Ambient Shadow
-    SDL_Rect shadow = {rect.x + 4, rect.y + 12, rect.w, rect.h};
-    renderFilledRoundedRect(shadow, radius, SDL_Color{0, 0, 0, 80});
+    // Deep web-like soft shadow
+    renderSoftShadow(rect, radius, 24, SDL_Color{0, 0, 0, 140}, 12);
 
     // Glass Base
     renderFilledRoundedRect(rect, radius, baseColor);
 
     // Rim Light (Top Edge Highlight)
     if (hasRimLight) {
-        SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 40);
+        SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 60);
         SDL_RenderDrawLine(m_renderer, rect.x + radius, rect.y, rect.x + rect.w - radius, rect.y);
+        // Soft corner highlights
+        SDL_SetRenderDrawColor(m_renderer, 255, 255, 255, 30);
+        SDL_RenderDrawPoint(m_renderer, rect.x + radius - 1, rect.y + 1);
+        SDL_RenderDrawPoint(m_renderer, rect.x + rect.w - radius, rect.y + 1);
     }
     
-    // Subtle Inner Border
-    renderRoundedRect(rect, radius, SDL_Color{255, 255, 255, 12});
+    // Subtle Inner Border (Glass reflection)
+    renderRoundedRect(rect, radius, SDL_Color{255, 255, 255, 18});
+    
+    // Inner dark shadow for 3D depth (Inset shadow)
+    SDL_Rect inset = {rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2};
+    renderRoundedRect(inset, radius, SDL_Color{0, 0, 0, 20});
 }
 
 void MainUI::renderCard(const GameCard& card, float unused_scale) {
@@ -1194,27 +1227,33 @@ void MainUI::renderCard(const GameCard& card, float unused_scale) {
     int yOffset = 0;
 
     if (card.selected) {
-        scale = m_selectionScale;
-        yOffset = -12; // Ethereal lift
+        // Strict scale limit to prevent overflowing into header or sides
+        scale = 1.0f + (m_selectionScale - 1.0f) * 0.8f; 
+        yOffset = -10; // Subtle lift
         
         rect.w = static_cast<int>(rect.w * scale);
         rect.h = static_cast<int>(rect.h * scale);
         rect.x -= (rect.w - card.rect.w) / 2;
         rect.y -= (rect.h - card.rect.h) / 2;
         rect.y += yOffset;
+
+        // Screen boundary safety check
+        if (rect.x < 16) rect.x = 16;
+        if (rect.x + rect.w > m_screenWidth - 16) rect.x = m_screenWidth - 16 - rect.w;
     }
 
     const int borderRadius = 20; // More organic rounding
     
-    // Premium Glass Material
-    SDL_Color glassColor = card.selected ? SDL_Color{45, 55, 75, 200} : SDL_Color{30, 41, 59, 140};
-    renderGlassPanel(rect, borderRadius, glassColor, true);
-
+    // Premium Glass Material with Web-like contrast
+    SDL_Color glassColor = card.selected ? SDL_Color{255, 255, 255, 20} : SDL_Color{30, 41, 59, 140};
     if (card.selected) {
+        // Render large soft glow behind the selected card
         renderSelectionGlow(rect);
     }
+    
+    renderGlassPanel(rect, borderRadius, glassColor, true);
 
-    const int padding = 16;
+    const int padding = 12;
     const int iconSize = rect.w - padding * 2;
     SDL_Rect iconRect = {rect.x + padding, rect.y + padding, iconSize, iconSize};
     
@@ -1224,23 +1263,24 @@ void MainUI::renderCard(const GameCard& card, float unused_scale) {
         SDL_RenderCopy(m_renderer, iconTexture, nullptr, &iconRect);
         SDL_DestroyTexture(iconTexture);
     } else {
-        renderFilledRoundedRect(iconRect, 14, SDL_Color{15, 23, 42, 255});
+        renderFilledRoundedRect(iconRect, 18, SDL_Color{15, 23, 42, 255});
         renderTextCentered("?", iconRect.x, iconRect.y + (iconRect.h / 2) - 20, iconRect.w, m_fontLarge, m_colors.TextDim);
     }
-    // Subtle rim on icon
-    renderRoundedRect(iconRect, 14, SDL_Color{255, 255, 255, 25});
+    // Deep inset shadow on icon to make it pop
+    renderRoundedRect(iconRect, 18, SDL_Color{0, 0, 0, 60});
+    renderRoundedRect(iconRect, 18, SDL_Color{255, 255, 255, 20}); // Subtle rim on icon
 
-    // Content Area
-    int textY = iconRect.y + iconRect.h + 14;
-    renderText(fitText(m_fontSmall, card.title->name, rect.w - padding * 2), rect.x + padding, textY, m_fontSmall, m_colors.Text);
+    // Content Area with shadow for high contrast
+    int textY = iconRect.y + iconRect.h + 16;
+    renderTextWithShadow(fitText(m_fontMedium, card.title->name, rect.w - padding * 2), rect.x + padding + 4, textY, m_fontMedium, m_colors.Text);
 
     if (!card.syncLabel.empty()) {
         SDL_Color statusColor = card.selected ? m_colors.Accent : m_colors.TextDim;
-        renderText(fitText(m_fontSmall, card.syncLabel, rect.w - padding * 2), rect.x + padding, textY + 26, m_fontSmall, statusColor);
+        renderTextWithShadow(fitText(m_fontSmall, card.syncLabel, rect.w - padding * 2), rect.x + padding + 4, textY + 32, m_fontSmall, statusColor);
     }
 
     if (card.synced) {
-        renderSyncBadge(rect.x + rect.w - 28, rect.y + 12, true);
+        renderSyncBadge(rect.x + rect.w - 32, rect.y + 14, true);
     }
 }
 
@@ -1341,36 +1381,53 @@ void MainUI::renderButton(const Button& btn) {
     
     SDL_Color bgColor;
     SDL_Color textColor;
-    SDL_Color borderColor;
 
     if (isClose) {
         bgColor = btn.hover ? m_colors.AccentSoft : m_colors.Card;
         textColor = m_colors.TextDim;
-        borderColor = m_colors.Border;
     } else if (isPrimary) {
-        bgColor = btn.hover ? SDL_Color{m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, 220} : m_colors.Accent;
+        bgColor = btn.hover ? SDL_Color{56, 189, 248, 255} : m_colors.Accent;
         textColor = SDL_Color{255, 255, 255, 255};
-        borderColor = m_colors.Accent;
     } else {
         bgColor = btn.hover ? m_colors.AccentSoft : m_colors.Card;
         textColor = m_colors.Text;
-        borderColor = m_colors.Border;
     }
 
     const int radius = btn.rect.h / 2;
-    renderFilledRoundedRect(btn.rect, radius, bgColor);
-    renderRoundedRect(btn.rect, radius, btn.hover ? m_colors.Accent : borderColor);
     
-    TTF_Font* font = m_fontMedium;
-    int textW, textH;
-    TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
-    if (textW > btn.rect.w - 24) {
-        font = m_fontSmall;
+    if (btn.hover) {
+        // CSS Box-shadow hover effect
+        renderSoftShadow(btn.rect, radius, 16, SDL_Color{bgColor.r, bgColor.g, bgColor.b, 100}, 4);
+        
+        // Slight scale up on hover simulation (just by drawing it 1px larger or shifting)
+        SDL_Rect hoverRect = {btn.rect.x, btn.rect.y - 1, btn.rect.w, btn.rect.h};
+        renderGlassPanel(hoverRect, radius, SDL_Color{bgColor.r, bgColor.g, bgColor.b, 200}, true);
+        
+        TTF_Font* font = m_fontMedium;
+        int textW, textH;
         TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
+        if (textW > btn.rect.w - 24) {
+            font = m_fontSmall;
+            TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
+        }
+        renderTextWithShadow(fitText(font, btn.text, btn.rect.w - 16),
+                           hoverRect.x + (hoverRect.w - textW) / 2, hoverRect.y + (hoverRect.h - textH) / 2,
+                           font, textColor);
+    } else {
+        // Default state
+        renderGlassPanel(btn.rect, radius, SDL_Color{bgColor.r, bgColor.g, bgColor.b, 160}, true);
+        
+        TTF_Font* font = m_fontMedium;
+        int textW, textH;
+        TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
+        if (textW > btn.rect.w - 24) {
+            font = m_fontSmall;
+            TTF_SizeUTF8(font, btn.text.c_str(), &textW, &textH);
+        }
+        renderTextWithShadow(fitText(font, btn.text, btn.rect.w - 16),
+                           btn.rect.x + (btn.rect.w - textW) / 2, btn.rect.y + (btn.rect.h - textH) / 2,
+                           font, textColor);
     }
-    renderTextCentered(fitText(font, btn.text, btn.rect.w - 16),
-                       btn.rect.x, btn.rect.y + (btn.rect.h - textH) / 2,
-                       btn.rect.w, font, textColor);
 }
 
 void MainUI::renderAuthScreen() {
@@ -1592,6 +1649,12 @@ void MainUI::renderText(const std::string& text, int x, int y, TTF_Font* font, S
         SDL_DestroyTexture(texture);
     }
     SDL_FreeSurface(surface);
+}
+
+void MainUI::renderTextWithShadow(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color) {
+    // Drop shadow for text
+    renderText(text, x, y + 2, font, SDL_Color{0, 0, 0, 180});
+    renderText(text, x, y, font, color);
 }
 
 void MainUI::renderTextCentered(const std::string& text, int x, int y, int w, TTF_Font* font, SDL_Color color) {
