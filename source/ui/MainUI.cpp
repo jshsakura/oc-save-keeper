@@ -1339,72 +1339,68 @@ void MainUI::renderGameDetail() {
     SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, static_cast<Uint8>(m_overlayAlpha * 0.55f)); // Dynamic overlay
     SDL_RenderFillRect(m_renderer, nullptr);
 
-    const int sideWidth = std::min(760, std::max(680, (m_screenWidth * 12) / 20));
-    // Panel slides in slightly as alpha increases
-    int slideX = static_cast<int>((255.0f - m_overlayAlpha) * 0.2f);
-    SDL_Rect sideRect{m_screenWidth - sideWidth - 32 + slideX, 48, sideWidth, m_screenHeight - 96};
+    const int sideWidth = std::min(800, std::max(720, (m_screenWidth * 13) / 20));
+    SDL_Rect sideRect{m_screenWidth - sideWidth - 40, 40, sideWidth, m_screenHeight - 80};
     
-    // Adjusted color alpha based on overlay state
-    SDL_Color glassColor = {30, 41, 59, static_cast<Uint8>(m_overlayAlpha * 0.9f)};
-    renderGlassPanel(sideRect, 32, glassColor, true);
+    // Opaque Surface
+    renderGlassPanel(sideRect, 32, m_colors.Card, false);
 
-    SDL_Rect posterRect{sideRect.x + 40, sideRect.y + 40, 144, 144};
+    SDL_Rect posterRect{sideRect.x + 40, sideRect.y + 40, 160, 160};
     if (SDL_Texture* posterTexture = loadIcon(m_selectedTitle->iconPath)) {
         SDL_RenderCopy(m_renderer, posterTexture, nullptr, &posterRect);
-        SDL_DestroyTexture(posterTexture);
     }
-    renderRoundedRect(posterRect, 20, SDL_Color{255, 255, 255, 30});
+    renderRoundedRect(posterRect, 20, m_colors.Border);
 
     const int infoX = posterRect.x + posterRect.w + 32;
-    const int infoW = sideRect.x + sideRect.w - infoX - 40;
-    renderText(fitText(m_fontLarge, m_selectedTitle->name, infoW), infoX, sideRect.y + 54, m_fontLarge, m_colors.Text);
-    renderText(fitText(m_fontMedium, m_selectedTitle->publisher, infoW), infoX, sideRect.y + 108, m_fontMedium, m_colors.TextDim);
+    // CRITICAL: Max width restricted to ensure title never hits the right side
+    const int infoW = sideRect.x + sideRect.w - infoX - 60; 
+    renderText(fitText(m_fontLarge, m_selectedTitle->name, infoW), infoX, sideRect.y + 60, m_fontLarge, m_colors.Text);
+    renderText(fitText(m_fontMedium, m_selectedTitle->publisher, infoW), infoX, sideRect.y + 110, m_fontMedium, m_colors.TextDim);
 
     // Tags
     auto drawTag = [&](const std::string& text, int x, int y, SDL_Color color) {
         int tw = 0, th = 0;
         TTF_SizeUTF8(m_fontSmall, text.c_str(), &tw, &th);
-        SDL_Rect tag{x, y, tw + 28, 34};
-        renderGlassPanel(tag, 17, SDL_Color{color.r, color.g, color.b, 40}, false);
-        renderText(text, tag.x + 14, tag.y + (tag.h - th)/2, m_fontSmall, color);
+        SDL_Rect tag{x, y, tw + 32, 40};
+        renderFilledRoundedRect(tag, 20, SDL_Color{color.r, color.g, color.b, 40});
+        renderRoundedRect(tag, 20, color);
+        renderText(text, tag.x + 16, tag.y + (tag.h - th)/2, m_fontSmall, color);
         return tag.w;
     };
 
     int tagX = infoX;
-    tagX += drawTag(formatStorageSize(m_selectedTitle->saveSize), tagX, sideRect.y + 154, m_colors.Accent) + 12;
-    drawTag("STABLE", tagX, sideRect.y + 154, m_colors.Synced);
+    tagX += drawTag(formatStorageSize(m_selectedTitle->saveSize), tagX, sideRect.y + 160, m_colors.Accent) + 16;
+    drawTag("STABLE", tagX, sideRect.y + 160, m_colors.Synced);
 
     const auto versions = m_saveManager.getBackupVersions(m_selectedTitle);
     const std::string backupCount = versions.empty() ? LANG("detail.no_backup") : std::to_string(versions.size()) + " " + LANG("detail.versions");
 
     // Standard Row rendering with guaranteed contrast
     auto drawRow = [&](const std::string& label, const std::string& value, int y) {
-        SDL_Rect row{sideRect.x + 40, y, sideRect.w - 80, 84};
+        SDL_Rect row{sideRect.x + 40, y, sideRect.w - 80, 90};
         // Opaque background for the row to ensure text visibility
         renderFilledRoundedRect(row, 16, m_colors.CardHover);
         renderRoundedRect(row, 16, m_colors.Border);
         
         renderText(label, row.x + 24, row.y + 16, m_fontSmall, m_colors.TextDim);
-        renderText(fitText(m_fontMedium, value, row.w - 48), row.x + 24, row.y + 44, m_fontMedium, m_colors.Text);
+        renderText(fitText(m_fontMedium, value, row.w - 48), row.x + 24, row.y + 46, m_fontMedium, m_colors.Text);
     };
 
-    int rowY = sideRect.y + 220;
-    drawRow(LANG("detail.recent_backup"), backupCount, rowY); rowY += 100;
-    drawRow(LANG("detail.latest_device"), versions.empty() ? m_saveManager.getDeviceLabel() : versions.front().deviceLabel, rowY); rowY += 100;
+    int rowY = sideRect.y + 230;
+    drawRow(LANG("detail.recent_backup"), backupCount, rowY); rowY += 105;
+    drawRow(LANG("detail.latest_device"), versions.empty() ? m_saveManager.getDeviceLabel() : versions.front().deviceLabel, rowY); rowY += 105;
     drawRow(LANG("detail.latest_user"), versions.empty() ? LANG("history.unknown_user") : versions.front().userName, rowY);
 
     m_buttons.clear();
     const int btnW = (sideRect.w - 80 - 24) / 2;
-    const int btnH = 64; // TALLER
+    const int btnH = 70; // LARGE ACCESSIBLE BUTTONS
     const int startY = sideRect.y + sideRect.h - 180;
     
     m_buttons.emplace_back(sideRect.x + 40, startY, btnW, btnH, LANG("detail.upload"));
     m_buttons.emplace_back(sideRect.x + 40 + btnW + 24, startY, btnW, btnH, LANG("detail.download"));
-    m_buttons.emplace_back(sideRect.x + 40, startY + 80, btnW, btnH, LANG("detail.backup"));
-    m_buttons.emplace_back(sideRect.x + 40 + btnW + 24, startY + 80, btnW, btnH, LANG("detail.history"));
-    
-    // Close button - TOP RIGHT properly
-    m_buttons.emplace_back(sideRect.x + sideRect.w - 100, sideRect.y + 20, 60, 60, "X");
+    m_buttons.emplace_back(sideRect.x + 40, startY + 85, btnW, btnH, LANG("detail.backup"));
+    // Explicit close button at the bottom right of the panel - NO MORE OVERLAP
+    m_buttons.emplace_back(sideRect.x + 40 + btnW + 24, startY + 85, btnW, btnH, closeLabel());
 
     for (size_t i = 0; i < m_buttons.size(); ++i) {
         auto& btn = m_buttons[i];
@@ -1461,64 +1457,52 @@ void MainUI::renderButton(const Button& btn) {
 
 void MainUI::renderAuthScreen() {
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 180);
+    SDL_SetRenderDrawColor(m_renderer, 10, 15, 28, 255); // Solid Base
     SDL_RenderFillRect(m_renderer, nullptr);
     
-    int panelWidth = std::min(m_screenWidth - 120, 1000);
-    int panelHeight = std::min(m_screenHeight - 120, 580);
+    int panelWidth = std::min(m_screenWidth - 100, 1100);
+    int panelHeight = std::min(m_screenHeight - 100, 640);
     SDL_Rect authRect = {(m_screenWidth - panelWidth) / 2, (m_screenHeight - panelHeight) / 2, panelWidth, panelHeight};
     
-    renderFilledRoundedRect(SDL_Rect{authRect.x+6, authRect.y+8, authRect.w, authRect.h}, 24, m_colors.Shadow);
-    renderFilledRoundedRect(authRect, 24, m_colors.Card);
-    renderRoundedRect(authRect, 24, m_colors.Border);
+    renderFilledRoundedRect(authRect, 32, m_colors.Card);
+    renderRoundedRect(authRect, 32, m_colors.BorderStrong);
     
-    renderTextCentered(LANG("auth.title"), authRect.x, authRect.y + 30, authRect.w, m_fontLarge, m_colors.Accent);
+    renderTextCentered(LANG("auth.title"), authRect.x, authRect.y + 40, authRect.w, m_fontLarge, m_colors.Accent);
 
     int left = authRect.x + 60;
-    int y = authRect.y + 100;
+    int y = authRect.y + 120;
 
-    renderText("PKCE setup (one-time)", left, y, m_fontMedium, m_colors.Warning);
-    y += 44;
-    renderText("1. Press Connect to generate an authorization URL", left, y, m_fontMedium, m_colors.Text);
-    y += 38;
-    renderText("2. Open the URL on your phone and approve access", left, y, m_fontMedium, m_colors.Text);
-    y += 38;
-    renderText("3. Copy the code from redirected URL (?code=...)", left, y, m_fontMedium, m_colors.Text);
-    y += 38;
-    renderText("4. Press A or tap the box and paste code (or full URL)", left, y, m_fontMedium, m_colors.Accent);
-    y += 50;
+    // Instructions - LARGE AND CLEAR
+    renderText("1. Press Connect to get URL", left, y, m_fontMedium, m_colors.Text); y += 50;
+    renderText("2. Open URL on phone/PC and approve", left, y, m_fontMedium, m_colors.Text); y += 50;
+    renderText("3. Copy the code from the success page", left, y, m_fontMedium, m_colors.Text); y += 50;
+    renderText("4. Paste code below and press Connect again", left, y, m_fontMedium, m_colors.Accent); y += 60;
 
     if (!m_authUrl.empty()) {
-        const std::string authUrlText = fitText(m_fontSmall, m_authUrl, authRect.w - 120);
-        renderText(authUrlText, left, y, m_fontSmall, m_colors.Warning);
-        y += 34;
+        renderFilledRoundedRect({left, y, authRect.w - 120, 44}, 8, m_colors.Poster);
+        renderText(fitText(m_fontSmall, m_authUrl, authRect.w - 140), left + 10, y + 8, m_fontSmall, m_colors.Warning);
+        y += 60;
     }
 
-    m_authTokenBox = {left, y, authRect.w - 120, 64};
-    renderFilledRoundedRect(m_authTokenBox, 12, m_colors.AccentSoft);
-    renderRoundedRect(m_authTokenBox, 12, m_colors.Border);
+    // MASSIVE TOKEN BOX
+    m_authTokenBox = {left, y, authRect.w - 120, 80};
+    renderFilledRoundedRect(m_authTokenBox, 16, m_colors.Poster);
+    renderRoundedRect(m_authTokenBox, 16, m_colors.Accent);
     
     if (m_authToken.empty()) {
-        renderText("Paste authorization code or redirected URL", m_authTokenBox.x + 20, y + 18, m_fontSmall, m_colors.TextDim);
+        renderText("Paste your code here...", m_authTokenBox.x + 20, m_authTokenBox.y + 24, m_fontMedium, m_colors.TextDim);
     } else {
-        std::string preview = m_authToken;
-        if (preview.size() > 60) preview = preview.substr(0, 57) + "...";
-        renderText(preview, m_authTokenBox.x + 20, y + 18, m_fontSmall, m_colors.Text);
+        renderText(fitText(m_fontMedium, m_authToken, m_authTokenBox.w - 40), m_authTokenBox.x + 20, m_authTokenBox.y + 24, m_fontMedium, m_colors.Text);
     }
-    y += 90;
+    y += 110;
     
     m_buttons.clear();
-    int btnW = 220;
-    int btnH = 48;
-    int gap = 24;
-    int totalWidth = btnW * 2 + gap;
-    int startBtnX = authRect.x + (authRect.w - totalWidth) / 2;
+    int btnW = 280; // BIGGER BUTTONS
+    int btnH = 70;
+    int gap = 40;
+    int startBtnX = authRect.x + (authRect.w - (btnW * 2 + gap)) / 2;
     m_buttons.emplace_back(startBtnX, y, btnW, btnH, LANG("auth.connect"));
     m_buttons.emplace_back(startBtnX + btnW + gap, y, btnW, btnH, LANG("auth.cancel"));
-    
-    if (m_selectedButtonIndex < 0 || m_selectedButtonIndex >= (int)m_buttons.size()) {
-        m_selectedButtonIndex = 0;
-    }
     
     for (size_t i = 0; i < m_buttons.size(); ++i) {
         auto& btn = m_buttons[i];
