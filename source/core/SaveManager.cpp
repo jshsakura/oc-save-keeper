@@ -8,6 +8,8 @@
 #include "core/SyncLogic.hpp"
 #include "fs/FileUtil.hpp"
 #include "fs/ScopedSaveMount.hpp"
+#include "utils/Paths.hpp"
+#include "utils/SettingsStore.hpp"
 #include "zip/ZipArchive.hpp"
 #include <sys/stat.h>
 #include <dirent.h>
@@ -24,11 +26,10 @@ namespace core {
 
 namespace {
 
-constexpr const char* BACKUP_BASE_PATH = "/switch/oc-save-keeper/backups";
-constexpr const char* CONFIG_BASE_PATH = "/switch/oc-save-keeper";
-constexpr const char* TEMP_BASE_PATH = "/switch/oc-save-keeper/temp";
-constexpr const char* ICON_BASE_PATH = "/switch/oc-save-keeper/icons";
-constexpr const char* USER_ICON_BASE_PATH = "/switch/oc-save-keeper/user-icons";
+constexpr const char* BACKUP_BASE_PATH = utils::paths::BACKUPS;
+constexpr const char* TEMP_BASE_PATH = utils::paths::TEMP;
+constexpr const char* ICON_BASE_PATH = utils::paths::CACHE_TITLE_ICONS;
+constexpr const char* USER_ICON_BASE_PATH = utils::paths::CACHE_USER_ICONS;
 constexpr const char* DEVICE_ID_PATH = "/switch/oc-save-keeper/device_id.txt";
 constexpr const char* DEVICE_PRIORITY_PATH = "/switch/oc-save-keeper/device_priority.txt";
 constexpr const char* META_ENTRY_NAME = ".dropkeep.meta";
@@ -139,11 +140,7 @@ SaveManager::~SaveManager() {
 }
 
 bool SaveManager::initialize() {
-    // Create directories
-    mkdir(CONFIG_BASE_PATH, 0777);
-    mkdir(BACKUP_BASE_PATH, 0777);
-    mkdir(ICON_BASE_PATH, 0777);
-    mkdir(USER_ICON_BASE_PATH, 0777);
+    utils::paths::ensureBaseDirectories();
 
     if (!loadDeviceConfig()) {
         LOG_ERROR("Failed to load device config");
@@ -168,23 +165,32 @@ bool SaveManager::initialize() {
 bool SaveManager::loadDeviceConfig() {
     // Persist a per-device identity so cloud backups can carry origin metadata
     // without relying on transient runtime state.
-    m_deviceId = readLineFromFile(DEVICE_ID_PATH);
+    m_deviceId = utils::SettingsStore::getString("device_id", "");
+    if (m_deviceId.empty()) {
+        m_deviceId = readLineFromFile(DEVICE_ID_PATH);
+    }
     if (looksBrokenDeviceToken(m_deviceId)) {
         char generated[32];
         std::snprintf(generated, sizeof(generated), "dev-%08llX-%08lX",
                       static_cast<unsigned long long>(time(nullptr)),
                       static_cast<unsigned long>(clock()));
         m_deviceId = generated;
-        if (!writeLineToFile(DEVICE_ID_PATH, m_deviceId)) {
+        if (!utils::SettingsStore::setString("device_id", m_deviceId)) {
             return false;
         }
     }
 
-    std::string priorityText = readLineFromFile(DEVICE_PRIORITY_PATH);
+    int priorityValue = utils::SettingsStore::getInt("device_priority", 0);
+    std::string priorityText = priorityValue > 0 ? std::to_string(priorityValue) : readLineFromFile(DEVICE_PRIORITY_PATH);
     m_deviceLabel = makeDeviceLabel(m_deviceId);
     if (!priorityText.empty()) {
         m_devicePriority = std::max(1, std::atoi(priorityText.c_str()));
-    } else if (!writeLineToFile(DEVICE_PRIORITY_PATH, std::to_string(m_devicePriority))) {
+    } else {
+        m_devicePriority = std::max(1, m_devicePriority);
+    }
+
+    if (!utils::SettingsStore::setString("device_id", m_deviceId) ||
+        !utils::SettingsStore::setInt("device_priority", m_devicePriority)) {
         return false;
     }
 

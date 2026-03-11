@@ -151,6 +151,10 @@ private:
     State m_state;
     bool m_shouldExit;
     int m_selectedIndex;
+    int m_pressedIndex;         // Track pressed game card
+    int m_pressedButtonIndex;    // Track pressed button
+    int m_pressedUserIndex;      // Track pressed user chip
+    int m_pressedVersionIndex;   // Track pressed version item
     
     // Game cards
     std::vector<GameCard> m_gameCards;
@@ -159,8 +163,11 @@ private:
     std::vector<VersionItem> m_versionItems;
     std::vector<UserChip> m_userChips;
     int m_selectedVersionIndex;
+    int m_versionScrollIndex;
     int m_selectedUserIndex;
+    int m_userPickerScrollIndex;
     int m_selectedButtonIndex;
+    bool m_confirmDeleteVersion;
     // Buttons
     std::vector<Button> m_buttons;
     SDL_Rect m_authTokenBox;
@@ -168,6 +175,7 @@ private:
     SDL_Rect m_refreshButton;
     SDL_Rect m_statusButton;
     SDL_Rect m_userButton;
+    SDL_Rect m_recentBackupRow;
     
     // Current game
     core::TitleInfo* m_selectedTitle;
@@ -258,6 +266,7 @@ private:
     void renderSyncBadge(int x, int y, bool synced);
     void renderIcon(SDL_Texture* texture, const SDL_Rect& rect, bool selected);
     std::string fitText(TTF_Font* font, const std::string& text, int maxWidth) const;
+    int renderWrappedText(const std::string& text, int x, int y, int maxWidth, TTF_Font* font, SDL_Color color, int lineGap = 6);
     
     SDL_Texture* loadIcon(const std::string& path);
     
@@ -277,6 +286,7 @@ private:
     void showCloudPicker();
     void downloadCloudItem(VersionItem* item);
     void restoreVersion(VersionItem* item);
+    void deleteVersion(VersionItem* item);
     void showUserPicker();
     void selectUser(size_t index);
     void syncAllGames();

@@ -4,6 +4,7 @@
  */
 #include "network/Dropbox.hpp"
 #include "network/DropboxUtil.hpp"
+#include "utils/Paths.hpp"
 #include <fstream>
 #include <cstring>
 #include <json-c/json.h>
@@ -16,8 +17,10 @@ static constexpr const char* DROPBOX_TOKEN_URL = "https://api.dropboxapi.com/oau
 static constexpr const char* DROPBOX_API_V2 = "https://api.dropboxapi.com/2";
 static constexpr const char* DROPBOX_CONTENT = "https://content.dropboxapi.com/2";
 static constexpr const char* DROPBOX_REDIRECT_URI = "https://example.com/complete";
-static constexpr const char* DROPBOX_AUTH_FILE = "/switch/oc-save-keeper/dropbox_auth.json";
-static constexpr const char* DROPBOX_LEGACY_TOKEN_FILE = "/switch/oc-save-keeper/dropbox_token.txt";
+static constexpr const char* DROPBOX_AUTH_FILE = utils::paths::DROPBOX_AUTH_JSON;
+static constexpr const char* DROPBOX_LEGACY_TOKEN_FILE = utils::paths::DROPBOX_LEGACY_TOKEN;
+static constexpr const char* DROPBOX_OLD_AUTH_FILE = "/switch/oc-save-keeper/dropbox_auth.json";
+static constexpr const char* DROPBOX_OLD_LEGACY_TOKEN_FILE = "/switch/oc-save-keeper/dropbox_token.txt";
 
 Dropbox::Dropbox() 
     : m_tokenExpiresAt(0), m_authenticated(false), m_curl(nullptr) {
@@ -159,7 +162,11 @@ void Dropbox::cancelPendingAuthorization() {
 // User creates a Dropbox app token on dropbox.com/developers ONCE
 // and pastes it into S.O.S - ONE time setup, works forever
 bool Dropbox::loadToken() {
+    utils::paths::ensureBaseDirectories();
     FILE* file = fopen(DROPBOX_AUTH_FILE, "r");
+    if (!file) {
+        file = fopen(DROPBOX_OLD_AUTH_FILE, "r");
+    }
     if (file) {
         std::string content;
         char buffer[512];
@@ -193,6 +200,9 @@ bool Dropbox::loadToken() {
 
     file = fopen(DROPBOX_LEGACY_TOKEN_FILE, "r");
     if (!file) {
+        file = fopen(DROPBOX_OLD_LEGACY_TOKEN_FILE, "r");
+    }
+    if (!file) {
         return false;
     }
 
@@ -211,6 +221,7 @@ bool Dropbox::loadToken() {
 }
 
 bool Dropbox::saveToken() {
+    utils::paths::ensureBaseDirectories();
     json_object* root = json_object_new_object();
     json_object_object_add(root, "access_token", json_object_new_string(m_accessToken.c_str()));
     json_object_object_add(root, "refresh_token", json_object_new_string(m_refreshToken.c_str()));
@@ -237,6 +248,8 @@ void Dropbox::logout() {
     m_authenticated = false;
     remove(DROPBOX_AUTH_FILE);
     remove(DROPBOX_LEGACY_TOKEN_FILE);
+    remove(DROPBOX_OLD_AUTH_FILE);
+    remove(DROPBOX_OLD_LEGACY_TOKEN_FILE);
 }
 
 // Upload file to Dropbox

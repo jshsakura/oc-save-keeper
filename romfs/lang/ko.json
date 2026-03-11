@@ -14,7 +14,7 @@
     "detail.upload": "업로드",
     "detail.download": "받기",
     "detail.backup": "로컬 백업",
-    "detail.history": "히스토리",
+    "detail.history": "버전 이력 목록",
     "detail.back": "뒤로",
 
     "detail.save_size": "세이브 크기",
@@ -25,6 +25,8 @@
     "detail.latest_device": "최근 백업 기기",
     "detail.latest_user": "최근 백업 사용자",
     "detail.latest_source": "최근 백업 출처",
+    "detail.current_user_backup": "현재 사용자 백업",
+    "detail.cloud_inside": "클라우드 안의 백업",
 
     "sync.uploading": "세이브를 클라우드에 업로드하는 중...",
     "sync.downloading": "클라우드 세이브를 확인하는 중...",
@@ -47,13 +49,13 @@
     "auth.step2_name": "- Name: OCSaveKeeper-Backup",
     "auth.step3": "3. [Generate access token] 클릭",
     "auth.step4": "4. 토큰 복사 후 아래에 입력:",
-    "auth.token_placeholder": "여기에 토큰 붙여넣기...",
+    "auth.token_placeholder": "여기에 인증 코드 또는 돌아온 URL을 붙여넣기...",
     "auth.open_keyboard": "키보드 열기",
     "auth.connect": "연결",
     "auth.cancel": "취소",
     "auth.tip": "1회 설정으로 계속 사용할 수 있습니다.",
 
-    "history.title": "버전 히스토리",
+    "history.title": "버전 이력 목록",
     "history.local": "로컬 백업",
     "history.cloud": "클라우드 백업",
     "history.synced": "동기화됨",

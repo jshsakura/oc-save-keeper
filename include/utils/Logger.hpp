@@ -9,6 +9,8 @@
 #include <ctime>
 #include <string>
 
+#include "utils/Paths.hpp"
+
 namespace utils {
 
 enum class LogLevel {
@@ -40,6 +42,7 @@ public:
         printf("\n");
         
         // Also write to file
+        utils::paths::ensureBaseDirectories();
         FILE* logFile = fopen("/switch/oc-save-keeper/logs/oc-save-keeper.log", "a");
         if (logFile) {
             fprintf(logFile, "[%s] [%s] ", timeStr, levelStr[static_cast<int>(level)]);

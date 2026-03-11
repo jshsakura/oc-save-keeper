@@ -13,6 +13,7 @@
 #include "network/Dropbox.hpp"
 #include "ui/MainUI.hpp"
 #include "utils/Logger.hpp"
+#include "utils/Paths.hpp"
 
 constexpr int SCREEN_WIDTH = 1280;
 constexpr int SCREEN_HEIGHT = 720;
@@ -79,9 +80,7 @@ bool initialize() {
         SDL_JoystickOpen(i);
     }
     
-    // Create directories
-    mkdir("/switch/oc-save-keeper", 0777);
-    mkdir("/switch/oc-save-keeper/backups", 0777);
+    utils::paths::ensureBaseDirectories();
     return true;
 }
 

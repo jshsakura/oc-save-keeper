@@ -2,6 +2,7 @@
 
 #include "core/SaveManager.hpp"
 #include "network/Dropbox.hpp"
+#include "utils/Paths.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -31,7 +32,7 @@ std::string fileNameFromPath(const std::string& path) {
 
 std::string makeTempArchivePath(uint64_t titleId) {
     char buffer[256];
-    std::snprintf(buffer, sizeof(buffer), "/switch/oc-save-keeper/temp/frontend_%016llX_%lld.zip",
+    std::snprintf(buffer, sizeof(buffer), "%s/frontend_%016llX_%lld.zip", utils::paths::TEMP,
                   static_cast<unsigned long long>(titleId),
                   static_cast<long long>(time(nullptr)));
     return buffer;
@@ -198,7 +199,7 @@ SaveActionResult SaveBackendAdapter::download(uint64_t titleId, const std::strin
         return {false, "Dropbox is not connected"};
     }
 
-    mkdir("/switch/oc-save-keeper/temp", 0777);
+    utils::paths::ensureBaseDirectories();
     const std::string tempArchive = makeTempArchivePath(titleId);
     if (!m_dropbox.downloadFile(revisionId, tempArchive)) {
         return {false, "Download failed"};

@@ -28,7 +28,7 @@ APP_TITLE   :=  OC Save Keeper
 APP_AUTHOR  :=  OpenCourse
 APP_VERSION :=  0.1.0
 ROMFS	    :=	romfs
-APP_ICON	:=	icon.jpg
+APP_ICON	:=	icon.png
 NROFLAGS    :=  --icon=$(TOPDIR)/$(APP_ICON) --nacp=$(TOPDIR)/$(TARGET).nacp --romfsdir=$(TOPDIR)/$(ROMFS)
 
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
