@@ -38,7 +38,8 @@ jobs:
           mkdir -p "${RELEASE_DIR}/docs"
 
           cp oc-save-keeper.nro "${RELEASE_DIR}/switch/oc-save-keeper/oc-save-keeper.nro"
-          cp README.md RELEASE_NOTES_v0.1.0-alpha.1.md TESTING_v0.1.0-alpha.1.md FONTS_NOTICE.md "${RELEASE_DIR}/docs/"
+          cp README.md RELEASE_NOTES_v0.1.0-alpha.1.md TESTING_v0.1.0-alpha.1.md "${RELEASE_DIR}/docs/"
+          if [ -f FONTS_NOTICE.md ]; then cp FONTS_NOTICE.md "${RELEASE_DIR}/docs/"; fi
 
           cd dist
           zip -r "oc-save-keeper-${VERSION}.zip" "oc-save-keeper-${VERSION}"
