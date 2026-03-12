@@ -19,8 +19,23 @@ TEST_CASE("Dropbox authorize URL includes required parameters") {
     REQUIRE(url.find("token_access_type=offline") != std::string::npos);
     REQUIRE(url.find("code_challenge_method=S256") != std::string::npos);
     REQUIRE(url.find("code_challenge=challenge123") != std::string::npos);
-    REQUIRE(url.find("redirect_uri=https://example.com/complete") != std::string::npos);
+    REQUIRE(url.find("redirect_uri=https%3A%2F%2Fexample.com%2Fcomplete") != std::string::npos);
     REQUIRE(url.find("state=csrf-token") != std::string::npos);
+}
+
+TEST_CASE("Dropbox authorize URL percent-encodes reserved characters") {
+    const std::string url = network::dropbox::buildAuthorizeUrl(
+        "https://www.dropbox.com/oauth2/authorize",
+        "client key",
+        "https://example.com/complete?from=switch",
+        "csrf token",
+        "challenge+/="
+    );
+
+    REQUIRE(url.find("client_id=client%20key") != std::string::npos);
+    REQUIRE(url.find("redirect_uri=https%3A%2F%2Fexample.com%2Fcomplete%3Ffrom%3Dswitch") != std::string::npos);
+    REQUIRE(url.find("state=csrf%20token") != std::string::npos);
+    REQUIRE(url.find("code_challenge=challenge%2B%2F%3D") != std::string::npos);
 }
 
 TEST_CASE("Dropbox time parser accepts valid RFC3339-like timestamps") {
@@ -129,13 +144,18 @@ TEST_CASE("Dropbox extractQueryParam finds values correctly") {
     REQUIRE_EQ(network::dropbox::extractQueryParam("code=ABC123&state=xyz", "code"), std::string("ABC123"));
     REQUIRE_EQ(network::dropbox::extractQueryParam("code=ABC123&state=xyz", "state"), std::string("xyz"));
     REQUIRE_EQ(network::dropbox::extractQueryParam("code=ABC123#", "code"), std::string("ABC123"));
+    REQUIRE_EQ(network::dropbox::extractQueryParam("https://example.com/complete?code=ABC%20123&state=xyz%20value", "code"), std::string("ABC 123"));
+    REQUIRE_EQ(network::dropbox::extractQueryParam("https://example.com/complete?code=ABC123&state=xyz", "state"), std::string("xyz"));
     REQUIRE_EQ(network::dropbox::extractQueryParam("foo=bar", "missing"), std::string(""));
     REQUIRE_EQ(network::dropbox::extractQueryParam("", "code"), std::string(""));
 }
 
 TEST_CASE("Dropbox extractAuthorizationCode prefers code param, falls back to raw input") {
     REQUIRE_EQ(network::dropbox::extractAuthorizationCode("code=XYZ789&state=abc"), std::string("XYZ789"));
+    REQUIRE_EQ(network::dropbox::extractAuthorizationCode("https://example.com/complete?code=XYZ%20789&state=abc"), std::string("XYZ 789"));
     REQUIRE_EQ(network::dropbox::extractAuthorizationCode("plain-code-value"), std::string("plain-code-value"));
+    REQUIRE_EQ(network::dropbox::extractAuthorizationCode(" plain-code-value "), std::string("plain-code-value"));
     REQUIRE_EQ(network::dropbox::extractAuthorizationCode(""), std::string(""));
     REQUIRE_EQ(network::dropbox::extractAuthorizationCode("state=abc&code=FIRST"), std::string("FIRST"));
+    REQUIRE_EQ(network::dropbox::extractAuthorizationCode("state=abc"), std::string(""));
 }

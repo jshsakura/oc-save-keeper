@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <ctime>
+#include <cctype>
 #include <random>
 #include <string>
 #include <vector>
@@ -11,6 +12,78 @@ namespace network::dropbox {
 
 inline bool isSuccessfulHttpStatus(long statusCode) {
     return statusCode >= 200 && statusCode < 300;
+}
+
+inline bool isHexDigit(char ch) {
+    return (ch >= '0' && ch <= '9') ||
+           (ch >= 'A' && ch <= 'F') ||
+           (ch >= 'a' && ch <= 'f');
+}
+
+inline unsigned char hexValue(char ch) {
+    if (ch >= '0' && ch <= '9') {
+        return static_cast<unsigned char>(ch - '0');
+    }
+    if (ch >= 'A' && ch <= 'F') {
+        return static_cast<unsigned char>(10 + (ch - 'A'));
+    }
+    return static_cast<unsigned char>(10 + (ch - 'a'));
+}
+
+inline std::string trimCopy(std::string value) {
+    std::size_t begin = 0;
+    while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin]))) {
+        ++begin;
+    }
+
+    std::size_t end = value.size();
+    while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+        --end;
+    }
+
+    return value.substr(begin, end - begin);
+}
+
+inline std::string percentEncode(const std::string& value) {
+    static const char* kHex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(value.size() * 3);
+    for (unsigned char ch : value) {
+        const bool isUnreserved =
+            (ch >= 'A' && ch <= 'Z') ||
+            (ch >= 'a' && ch <= 'z') ||
+            (ch >= '0' && ch <= '9') ||
+            ch == '-' || ch == '.' || ch == '_' || ch == '~';
+        if (isUnreserved) {
+            out.push_back(static_cast<char>(ch));
+            continue;
+        }
+
+        out.push_back('%');
+        out.push_back(kHex[(ch >> 4) & 0x0F]);
+        out.push_back(kHex[ch & 0x0F]);
+    }
+    return out;
+}
+
+inline std::string percentDecode(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (std::size_t i = 0; i < value.size(); ++i) {
+        const char ch = value[i];
+        if (ch == '%' && i + 2 < value.size() && isHexDigit(value[i + 1]) && isHexDigit(value[i + 2])) {
+            const unsigned char decoded = static_cast<unsigned char>((hexValue(value[i + 1]) << 4) | hexValue(value[i + 2]));
+            out.push_back(static_cast<char>(decoded));
+            i += 2;
+            continue;
+        }
+        if (ch == '+') {
+            out.push_back(' ');
+            continue;
+        }
+        out.push_back(ch);
+    }
+    return out;
 }
 
 inline std::string generateRandomHex(std::size_t bytes) {
@@ -241,38 +314,57 @@ inline std::string buildAuthorizeUrl(const std::string& baseUrl,
                                      const std::string& csrfToken,
                                      const std::string& codeChallenge) {
     return baseUrl +
-           "?client_id=" + clientId +
+           "?client_id=" + percentEncode(clientId) +
            "&response_type=code" +
            "&token_access_type=offline" +
            "&code_challenge_method=S256" +
-           "&code_challenge=" + codeChallenge +
-           "&redirect_uri=" + redirectUri +
-           "&state=" + csrfToken;
+           "&code_challenge=" + percentEncode(codeChallenge) +
+           "&redirect_uri=" + percentEncode(redirectUri) +
+           "&state=" + percentEncode(csrfToken);
 }
 
 inline std::string extractQueryParam(const std::string& input, const std::string& key) {
-    const std::string marker = key + "=";
-    const std::size_t begin = input.find(marker);
-    if (begin == std::string::npos) {
+    const std::string trimmed = trimCopy(input);
+    if (trimmed.empty()) {
         return "";
     }
-    const std::size_t valueBegin = begin + marker.size();
-    const std::size_t end = input.find_first_of("&#", valueBegin);
-    if (end == std::string::npos) {
-        return input.substr(valueBegin);
+
+    std::size_t queryStart = trimmed.find('?');
+    queryStart = (queryStart == std::string::npos) ? 0 : queryStart + 1;
+
+    for (std::size_t pos = queryStart; pos <= trimmed.size();) {
+        const std::size_t end = trimmed.find_first_of("&#", pos);
+        const std::string token = trimmed.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+        const std::size_t separator = token.find('=');
+        if (separator != std::string::npos) {
+            const std::string candidateKey = percentDecode(token.substr(0, separator));
+            if (candidateKey == key) {
+                return percentDecode(token.substr(separator + 1));
+            }
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+        pos = end + 1;
     }
-    return input.substr(valueBegin, end - valueBegin);
+
+    return "";
 }
 
 inline std::string extractAuthorizationCode(const std::string& input) {
-    if (input.empty()) {
+    const std::string trimmed = trimCopy(input);
+    if (trimmed.empty()) {
         return "";
     }
-    const std::string fromQuery = extractQueryParam(input, "code");
+    const std::string fromQuery = extractQueryParam(trimmed, "code");
     if (!fromQuery.empty()) {
         return fromQuery;
     }
-    return input;
+    if (trimmed.find('=') != std::string::npos || trimmed.find('&') != std::string::npos) {
+        return "";
+    }
+    return percentDecode(trimmed);
 }
 
 inline std::string escapeJsonString(const std::string& value) {

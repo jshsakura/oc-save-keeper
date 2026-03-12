@@ -988,7 +988,15 @@ void MainUI::handleButtonPress(const Button& btn) {
 }
 
 void MainUI::update() {
-    SDL_GetRendererOutputSize(m_renderer, &m_screenWidth, &m_screenHeight);
+    // Detect resolution changes (Handheld vs Docked)
+    int w = 1280, h = 720;
+    if (SDL_GetRendererOutputSize(m_renderer, &w, &h) == 0) {
+        if (w != m_screenWidth || h != m_screenHeight) {
+            m_screenWidth = w;
+            m_screenHeight = h;
+            updateGameCards(); // Recalculate grid based on new resolution
+        }
+    }
 
 #ifdef __SWITCH__
     const AppletFocusState focusState = appletGetFocusState();
@@ -1384,21 +1392,32 @@ void MainUI::renderVerticalGradient(const SDL_Rect& rect, SDL_Color top, SDL_Col
 
 void MainUI::renderAuraBackground() {
     // Force refresh renderer dimensions to catch Docked/Handheld changes
-    SDL_GetRendererOutputSize(m_renderer, &m_screenWidth, &m_screenHeight);
+    int w = 1280, h = 720;
+    if (SDL_GetRendererOutputSize(m_renderer, &w, &h) == 0) {
+        m_screenWidth = w;
+        m_screenHeight = h;
+    }
 
-    // Solid Base with 2px overscan for safety
-    SDL_Rect screenRect = {-2, -2, m_screenWidth + 4, m_screenHeight + 4};
+    // Solid Base - Use nullptr to fill the entire viewport regardless of screen size variables
     SDL_SetRenderDrawColor(m_renderer, m_colors.Background.r, m_colors.Background.g, m_colors.Background.b, 255);
-    SDL_RenderFillRect(m_renderer, &screenRect);
+    SDL_RenderFillRect(m_renderer, nullptr);
 
     // Full area gradient
+    SDL_Rect screenRect = {0, 0, m_screenWidth, m_screenHeight};
     renderVerticalGradient(screenRect, m_colors.Background, m_colors.Header);
 
-    // Dynamic accent light
+    // Dynamic accent light (Aura effect)
+    // Centered and larger to avoid "box in the corner" look
     SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
-    int lightSize = std::max(m_screenWidth, m_screenHeight) / 2;
-    SDL_Rect accentLight = {-lightSize / 2, -lightSize / 2, lightSize, lightSize};
-    SDL_SetRenderDrawColor(m_renderer, m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, 12);
+    int lightSize = std::max(m_screenWidth, m_screenHeight);
+    // Center it slightly off-center for a natural look
+    SDL_Rect accentLight = {
+        m_screenWidth / 4 - lightSize / 2,
+        m_screenHeight / 4 - lightSize / 2,
+        lightSize,
+        lightSize
+    };
+    SDL_SetRenderDrawColor(m_renderer, m_colors.Accent.r, m_colors.Accent.g, m_colors.Accent.b, 8); // Lower alpha for subtler effect
     SDL_RenderFillRect(m_renderer, &accentLight);
 }
 
@@ -2498,6 +2517,12 @@ void MainUI::syncAllGames() {
 
 void MainUI::connectDropbox() {
     const bool isKo = utils::Language::instance().currentLang() == "ko";
+    if (!m_dropbox.isOAuthConfigured()) {
+        m_syncStatus = isKo ? "Dropbox App Key가 빌드에 설정되지 않았습니다." : "DROPBOX_APP_KEY is not configured in this build.";
+        showToast(isKo ? "빌드 설정 누락" : "Missing build configuration", true);
+        return;
+    }
+
     if (!m_authSessionStarted) {
         m_authUrl = m_dropbox.getAuthorizeUrl();
         if (m_authUrl.empty()) {

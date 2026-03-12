@@ -2,6 +2,36 @@
 
 Safe save backup and cross-device sync for Nintendo Switch homebrew.
 
+Language: **English** | [한국어](README.ko.md)
+
+![Platform](https://img.shields.io/badge/platform-Nintendo%20Switch-E60012?style=for-the-badge&logo=nintendo-switch&logoColor=white)
+![Language](https://img.shields.io/badge/language-C%2B%2B20-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)
+![Build](https://img.shields.io/badge/build-devkitPro-1f7a8c?style=for-the-badge)
+![License](https://img.shields.io/badge/license-MIT-2ea043?style=for-the-badge)
+
+## What This Project Does
+
+`oc-save-keeper` is built around one simple goal: make save backup and restore safer across multiple devices and users.
+
+- 🗂️ **Local first**: create versioned local backups before any risky restore.
+- ☁️ **Cloud sync**: upload and download through Dropbox.
+- 🛡️ **Safer decisions**: compare metadata (device/user/title/revision) before restore.
+- 🌏 **Bilingual UI**: Korean (`ko`) + English fallback.
+
+## Credits
+
+- Original project reference: [JKSV](https://github.com/J-D-K/JKSV)
+- This project is inspired by the Nintendo Switch save-management ecosystem and adds backup metadata, device-aware sync decisions, and Dropbox-focused workflows.
+
+## Quick Navigation
+
+- 🚀 [Quick Start](#quick-start)
+- 📦 [Install](#install)
+- ☁️ [Dropbox Setup](#dropbox-setup)
+- 🔄 [How Sync Decisions Work](#how-sync-decisions-work)
+- 🧪 [Build](#build)
+- ⚙️ [Release Automation](#release-automation)
+
 `oc-save-keeper` is a save manager for Nintendo Switch homebrew that focuses on three things:
 
 - simple local backups
@@ -22,18 +52,36 @@ If you only want to test the app safely, stop after the first local backup and v
 
 ## Downloads
 
-- Repository: `https://github.com/jshsakura/oc-save-keeper`
-- Releases: `https://github.com/jshsakura/oc-save-keeper/releases`
+- Repository: https://github.com/jshsakura/oc-save-keeper
+- Releases: https://github.com/jshsakura/oc-save-keeper/releases
 
 Recommended for most users:
 
-- download the release `.zip`
-- extract it directly to the SD card
+- download the release `.zip` from Releases
+- extract it to the SD root so this exact path exists:
+
+```text
+/switch/oc-save-keeper/oc-save-keeper.nro
+```
 
 Advanced/manual option:
 
 - download the standalone `.nro`
-- place it inside `/switch/oc-save-keeper/`
+- place it at `/switch/oc-save-keeper/oc-save-keeper.nro`
+
+## Repository Layout
+
+Important project paths in this repository:
+
+```text
+.github/workflows/release.yml    # CI build/release pipeline
+source/                          # app source code
+include/                         # headers
+tests/                           # host unit tests
+romfs/lang/                      # runtime language JSON files
+RELEASE_NOTES_v0.1.0-alpha.1.md  # current release notes doc
+TESTING_v0.1.0-alpha.1.md        # current test checklist doc
+```
 
 ## Features
 
@@ -44,11 +92,18 @@ Advanced/manual option:
 - Korean UI for `ko`, English fallback for everything else
 - Nintendo Switch shared font rendering for Korean and English text
 
+### Feature Highlights
+
+- 📚 **Version history**: keep multiple recovery points per game.
+- 🧭 **Source clarity**: show which device and user created each backup.
+- ⚖️ **Conflict reasoning**: explain why local/cloud was preferred.
+- 🔐 **Safety by default**: block dangerous cross-user overwrite flows.
+
 ## Install
 
 Extract the release zip to the root of the SD card.
 
-The SD layout should look like this:
+After extraction, verify this exact runtime file path:
 
 ```text
 /switch/oc-save-keeper/oc-save-keeper.nro
@@ -63,7 +118,7 @@ Runtime data is stored here:
 /switch/oc-save-keeper/device_id.txt
 /switch/oc-save-keeper/device_label.txt
 /switch/oc-save-keeper/device_priority.txt
-/switch/oc-save-keeper/dropbox_token.txt
+/switch/oc-save-keeper/config/dropbox_auth.json
 ```
 
 ## Dropbox Setup
@@ -82,23 +137,30 @@ Create an app with:
 - Access: `App folder`
 - App name: something like `OCSaveKeeper-Backup`
 
-### 2. Generate an access token
+### 2. Build with your Dropbox app key
 
-In the Dropbox app settings:
+PKCE still needs the app key on the client. Build with:
 
-1. open the app page
-2. find the access token section
-3. click `Generate`
-4. copy the generated token
+```bash
+make DROPBOX_APP_KEY=your_dropbox_app_key
+```
 
-### 3. Enter the token on Switch
+Do not generate or paste a long-lived access token anymore.
 
-Launch `oc-save-keeper`, open the Dropbox setup screen, and paste the token.
+### 3. Connect on Switch
 
-The token is stored locally at:
+Launch `oc-save-keeper`, open the Dropbox setup screen, then:
+
+1. press `Get Link`
+2. open the Dropbox authorization link on your phone or PC
+3. approve the app
+4. copy the returned authorization code or the full redirected URL
+5. paste it into the Switch and press `Connect Code`
+
+The app stores the resulting OAuth session here:
 
 ```text
-/switch/oc-save-keeper/dropbox_token.txt
+/switch/oc-save-keeper/config/dropbox_auth.json
 ```
 
 ## How Sync Decisions Work
@@ -269,6 +331,7 @@ The workflow is located at:
 It is designed to:
 
 - build `oc-save-keeper.nro`
-- package the SD card layout into a zip
+- package `dist/oc-save-keeper-<ref>.zip`
 - upload artifacts on workflow runs
-- attach assets on tagged releases
+- publish a `latest` prerelease on every `main` push
+- attach assets on tagged releases (`v*`)

@@ -43,24 +43,21 @@ bool Dropbox::needsAuthentication() const {
     return !m_authenticated;
 }
 
-bool Dropbox::isAuthenticated() const {
-    return m_authenticated;
+bool Dropbox::isOAuthConfigured() const {
+    return std::strlen(CLIENT_ID) != 0;
 }
 
-bool Dropbox::setAccessToken(const std::string& token) {
-    if (token.empty()) {
-        return false;
-    }
-
-    m_accessToken = token;
-    m_refreshToken.clear();
-    m_tokenExpiresAt = 0;
-    m_authenticated = saveToken();
+bool Dropbox::isAuthenticated() const {
     return m_authenticated;
 }
 
 // Get the authorization URL - user just clicks this on their phone!
 std::string Dropbox::getAuthorizeUrl() {
+    if (!isOAuthConfigured()) {
+        LOG_ERROR("Dropbox: DROPBOX_APP_KEY is not configured");
+        return "";
+    }
+
     m_csrfToken = dropbox::generateRandomHex(16);
     m_codeVerifier = dropbox::generateCodeVerifier(64);
     const std::string codeChallenge = dropbox::buildCodeChallengeS256(m_codeVerifier);
@@ -82,6 +79,11 @@ bool Dropbox::checkAuthentication() {
 }
 
 bool Dropbox::exchangeAuthorizationCode(const std::string& input) {
+    if (!isOAuthConfigured()) {
+        LOG_ERROR("Dropbox: DROPBOX_APP_KEY is not configured");
+        return false;
+    }
+
     if (m_codeVerifier.empty() || m_csrfToken.empty()) {
         LOG_ERROR("Dropbox: PKCE session not initialized");
         return false;
@@ -158,9 +160,6 @@ void Dropbox::cancelPendingAuthorization() {
     m_csrfToken.clear();
 }
 
-// Simplified OAuth using "Generated Access Token" approach
-// User creates a Dropbox app token on dropbox.com/developers ONCE
-// and pastes it into S.O.S - ONE time setup, works forever
 bool Dropbox::loadToken() {
     utils::paths::ensureBaseDirectories();
     FILE* file = fopen(DROPBOX_AUTH_FILE, "r");
@@ -217,6 +216,11 @@ bool Dropbox::loadToken() {
     m_refreshToken.clear();
     m_tokenExpiresAt = 0;
     fclose(file);
+    if (!m_accessToken.empty()) {
+        saveToken();
+        remove(DROPBOX_LEGACY_TOKEN_FILE);
+        remove(DROPBOX_OLD_LEGACY_TOKEN_FILE);
+    }
     return !m_accessToken.empty();
 }
 
@@ -504,6 +508,11 @@ bool Dropbox::ensureAccessToken() {
 }
 
 bool Dropbox::refreshToken() {
+    if (!isOAuthConfigured()) {
+        LOG_ERROR("Dropbox: DROPBOX_APP_KEY is not configured");
+        return false;
+    }
+
     if (m_refreshToken.empty()) {
         return false;
     }
@@ -588,10 +597,11 @@ std::string Dropbox::performRequest(const std::string& url,
     if (headers) {
         curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers);
     }
-    
-    // SSL settings
-    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(m_curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(m_curl, CURLOPT_TIMEOUT, 60L);
     
     CURLcode res = curl_easy_perform(m_curl);
     long httpCode = 0;
@@ -622,7 +632,13 @@ size_t Dropbox::readCallback(void* ptr, size_t size, size_t nmemb, void* userp) 
 }
 
 std::string Dropbox::urlEncode(const std::string& str) {
+    if (!m_curl) {
+        return str;
+    }
     char* encoded = curl_easy_escape(m_curl, str.c_str(), str.length());
+    if (!encoded) {
+        return "";
+    }
     std::string result(encoded);
     curl_free(encoded);
     return result;

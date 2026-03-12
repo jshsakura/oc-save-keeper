@@ -41,12 +41,12 @@ public:
     
     // Authentication - SUPER SIMPLE!
     bool needsAuthentication() const;
+    bool isOAuthConfigured() const;
     std::string getAuthorizeUrl();                    // Get URL to show user
     bool checkAuthentication();                       // Check if user authorized (polling)
     bool isAuthenticated() const;
     bool exchangeAuthorizationCode(const std::string& input);
     void cancelPendingAuthorization();
-    bool setAccessToken(const std::string& token);
     void logout();
     
     // File operations
@@ -69,9 +69,12 @@ public:
     const std::string& getAccessToken() const { return m_accessToken; }
     
 private:
-    // App credentials (embedded - safe for dropbox.file scope)
-    // These are for "Drop-Keep" Dropbox app
-    static constexpr const char* CLIENT_ID = "YOUR_DROPBOX_APP_KEY";
+    // PKCE still needs the public app key at build time.
+#ifdef DROPBOX_APP_KEY
+    static constexpr const char* CLIENT_ID = DROPBOX_APP_KEY;
+#else
+    static constexpr const char* CLIENT_ID = "";
+#endif
     
     // Tokens
     std::string m_accessToken;

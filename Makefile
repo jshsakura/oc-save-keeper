@@ -7,7 +7,12 @@
 HOST_CXX ?= g++
 HOST_JSON_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
 HOST_JSON_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
-HOST_CXXFLAGS := -std=c++20 -Wall -Wextra -O0 -g -I$(CURDIR)/include -I$(CURDIR) $(HOST_JSON_CFLAGS)
+DROPBOX_APP_KEY ?=
+DROPBOX_APP_KEY_DEFINE :=
+ifneq ($(strip $(DROPBOX_APP_KEY)),)
+DROPBOX_APP_KEY_DEFINE := -DDROPBOX_APP_KEY=\"$(DROPBOX_APP_KEY)\"
+endif
+HOST_CXXFLAGS := -std=c++20 -Wall -Wextra -O0 -g -I$(CURDIR)/include -I$(CURDIR) $(HOST_JSON_CFLAGS) $(DROPBOX_APP_KEY_DEFINE)
 HOST_LDFLAGS := $(HOST_JSON_LIBS)
 TEST_BUILD := build-host
 TEST_BIN := $(TEST_BUILD)/unit-tests
@@ -32,7 +37,7 @@ APP_ICON	:=	icon.png
 NROFLAGS    :=  --icon=$(TOPDIR)/$(APP_ICON) --nacp=$(TOPDIR)/$(TARGET).nacp --romfsdir=$(TOPDIR)/$(ROMFS)
 
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS	:=	$(INCLUDE) -D__SWITCH__ `sdl2-config --cflags` `curl-config --cflags` -g -Wall -O2 -ffunction-sections -I$(PORTLIBS)/include/freetype2 $(ARCH)
+CFLAGS	:=	$(INCLUDE) -D__SWITCH__ `sdl2-config --cflags` `curl-config --cflags` -g -Wall -O2 -ffunction-sections -I$(PORTLIBS)/include/freetype2 $(ARCH) $(DROPBOX_APP_KEY_DEFINE)
 CXXFLAGS:= $(CFLAGS) -fno-rtti -fno-exceptions -std=c++20
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
