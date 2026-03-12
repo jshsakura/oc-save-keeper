@@ -1826,8 +1826,6 @@ void MainUI::renderUserPicker() {
                 renderedAvatar = true;
             }
         }
-            }
-        }
         if (!renderedAvatar) {
             renderFilledRoundedRect(avatarRect, 28, m_colors.Border);
         }
