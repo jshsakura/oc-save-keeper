@@ -26,11 +26,8 @@ jobs:
 
       - name: Build NRO in devkitPro container
         run: |
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/work" \
-            -w /work \
-            devkitpro/devkita64 \
-            make
+          test -n "$GITHUB_WORKSPACE"
+          docker run --rm -v "${GITHUB_WORKSPACE}:/work" -w /work devkitpro/devkita64 make
 
       - name: Package release bundle
         run: |
