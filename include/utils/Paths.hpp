@@ -16,6 +16,9 @@ inline constexpr const char* LOGS = "/switch/oc-save-keeper/logs";
 inline constexpr const char* SETTINGS_JSON = "/switch/oc-save-keeper/config/settings.json";
 inline constexpr const char* DROPBOX_AUTH_JSON = "/switch/oc-save-keeper/config/dropbox_auth.json";
 inline constexpr const char* DROPBOX_LEGACY_TOKEN = "/switch/oc-save-keeper/config/dropbox_token.txt";
+inline constexpr const char* DROPBOX_APP_KEY_TXT = "/switch/oc-save-keeper/config/dropbox_app_key.txt";
+inline constexpr const char* ROOT_ENV = "/switch/oc-save-keeper/.env";
+inline constexpr const char* CONFIG_ENV = "/switch/oc-save-keeper/config/.env";
 
 inline void ensureBaseDirectories() {
     mkdir(ROOT, 0777);

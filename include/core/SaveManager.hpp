@@ -127,8 +127,13 @@ public:
     
     // Path helpers
     std::string getBackupPath(TitleInfo* title) const;
+    std::string getCloudUserPath() const;
+    std::string getCloudDevicesPath() const;
+    std::string getCloudDevicePath(const std::string& deviceId = "") const;
+    std::string getCloudTitlePath(TitleInfo* title) const;
     std::string getCloudPath(TitleInfo* title) const;
     std::string getCloudMetadataPath(TitleInfo* title) const;
+    std::string getCloudRevisionDirectory(TitleInfo* title, const std::string& deviceId = "") const;
 
     // Sync metadata and archive helpers
     std::string getDeviceId();

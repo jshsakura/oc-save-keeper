@@ -30,6 +30,9 @@ public:
         return m_titleLabel;
     }
 
+    int firstVisibleIndex() const;
+    int visibleCount() const;
+
 private:
     void reload();
     void restoreSelected();

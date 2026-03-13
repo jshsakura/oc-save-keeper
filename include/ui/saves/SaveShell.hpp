@@ -6,6 +6,9 @@
 #include "ui/saves/Types.hpp"
 
 #include <memory>
+#include <deque>
+#include <map>
+#include <vector>
 #include <string>
 
 #ifdef __SWITCH__
@@ -46,16 +49,42 @@ public:
     }
 
 private:
+    enum class Overlay {
+        None,
+        UserPicker,
+        DropboxAuth,
+    };
+
     void pushRootScreen();
+    void rebuildRootScreen();
     void resetInput();
     void dispatchCurrent();
+    void updateOverlay();
+    void renderFooter(const std::string& leftHint, const std::string& rightHint = "");
     void renderSaveMenu(const SaveMenuScreen& screen);
     void renderRevisionMenu(const RevisionMenuScreen& screen);
     void renderSidebar(const Sidebar& sidebar);
+    void renderDropboxOverlay();
+    void renderUserPickerOverlay();
     void renderHeader(const std::string& title, const std::string& subtitle = "");
+    void renderStatusChip(const std::string& text, int x, int y, int w, SDL_Color fill, SDL_Color border);
     void renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color);
+    void renderTextCentered(const std::string& text, const SDL_Rect& rect, TTF_Font* font, SDL_Color color);
     std::string fitText(TTF_Font* font, const std::string& text, int maxWidth) const;
     SDL_Texture* loadIcon(const std::string& path);
+    void rememberCachedIcon(const std::string& path);
+    void trimIconCache();
+    void openUserPicker();
+    void openDropboxOverlay();
+    void closeOverlay();
+    void refreshCurrentScreen();
+    void activateOverlaySelection();
+    bool launchDropboxAuthorizeUrl(const std::string& url);
+    bool promptForAuthCode();
+    bool currentLanguageIsKorean() const;
+    bool textNeedsFallbackFont(const std::string& text) const;
+    TTF_Font* selectFont(TTF_Font* preferred, const std::string& text) const;
+    std::string tr(const char* key, const char* fallback) const;
     void setButtonDown(Button button);
 
     SDL_Renderer* m_renderer;
@@ -67,10 +96,26 @@ private:
     TTF_Font* m_fontLarge = nullptr;
     TTF_Font* m_fontMedium = nullptr;
     TTF_Font* m_fontSmall = nullptr;
+    TTF_Font* m_fontLargeFallback = nullptr;
+    TTF_Font* m_fontMediumFallback = nullptr;
+    TTF_Font* m_fontSmallFallback = nullptr;
+#ifdef __SWITCH__
+    bool m_plInitialized = false;
+#endif
 
     Controller m_controller{};
     TouchInfo m_touch{};
     bool m_shouldExit = false;
+    Overlay m_overlay = Overlay::None;
+    int m_overlayIndex = 0;
+    std::string m_statusMessage;
+    std::string m_authUrl;
+    std::string m_authInput;
+    bool m_hostTextInput = false;
+    static constexpr std::size_t MAX_ICON_CACHE_ITEMS = 24;
+    static constexpr int ICON_TEXTURE_SIZE = 96;
+    std::map<std::string, SDL_Texture*> m_iconCache;
+    std::deque<std::string> m_iconCacheOrder;
 };
 
 } // namespace ui::saves

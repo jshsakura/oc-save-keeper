@@ -7,6 +7,7 @@
 #include "utils/Paths.hpp"
 #include <fstream>
 #include <cstring>
+#include <cctype>
 #include <json-c/json.h>
 
 namespace network {
@@ -16,14 +17,58 @@ static constexpr const char* DROPBOX_AUTHORIZE_URL = "https://www.dropbox.com/oa
 static constexpr const char* DROPBOX_TOKEN_URL = "https://api.dropboxapi.com/oauth2/token";
 static constexpr const char* DROPBOX_API_V2 = "https://api.dropboxapi.com/2";
 static constexpr const char* DROPBOX_CONTENT = "https://content.dropboxapi.com/2";
-static constexpr const char* DROPBOX_REDIRECT_URI = "https://example.com/complete";
+static constexpr const char* DROPBOX_LIST_FOLDER = "https://api.dropboxapi.com/2/files/list_folder";
+static constexpr const char* DROPBOX_LIST_FOLDER_CONTINUE = "https://api.dropboxapi.com/2/files/list_folder/continue";
+static constexpr const char* DROPBOX_REDIRECT_URI = "https://localhost/oc-save-keeper/callback";
 static constexpr const char* DROPBOX_AUTH_FILE = utils::paths::DROPBOX_AUTH_JSON;
 static constexpr const char* DROPBOX_LEGACY_TOKEN_FILE = utils::paths::DROPBOX_LEGACY_TOKEN;
+static constexpr const char* DROPBOX_APP_KEY_FILE = utils::paths::DROPBOX_APP_KEY_TXT;
+static constexpr const char* DROPBOX_ROOT_ENV_FILE = utils::paths::ROOT_ENV;
+static constexpr const char* DROPBOX_CONFIG_ENV_FILE = utils::paths::CONFIG_ENV;
 static constexpr const char* DROPBOX_OLD_AUTH_FILE = "/switch/oc-save-keeper/dropbox_auth.json";
 static constexpr const char* DROPBOX_OLD_LEGACY_TOKEN_FILE = "/switch/oc-save-keeper/dropbox_token.txt";
 
+std::string trimCopy(std::string value) {
+    const auto isSpace = [](unsigned char ch) {
+        return std::isspace(ch) != 0;
+    };
+    while (!value.empty() && isSpace(static_cast<unsigned char>(value.front()))) {
+        value.erase(value.begin());
+    }
+    while (!value.empty() && isSpace(static_cast<unsigned char>(value.back()))) {
+        value.pop_back();
+    }
+    return value;
+}
+
+std::string loadAppKeyCandidate(const char* path) {
+    std::ifstream file(path);
+    if (!file) {
+        return "";
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        line = trimCopy(line);
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+        constexpr const char* key = "DROPBOX_APP_KEY=";
+        if (line.rfind(key, 0) == 0) {
+            std::string value = trimCopy(line.substr(std::strlen(key)));
+            if (!value.empty() && value.front() == '"' && value.back() == '"' && value.size() >= 2) {
+                value = value.substr(1, value.size() - 2);
+            }
+            return value;
+        }
+        return line;
+    }
+
+    return "";
+}
+
 Dropbox::Dropbox() 
-    : m_tokenExpiresAt(0), m_authenticated(false), m_curl(nullptr) {
+    : m_clientId(loadClientId()), m_tokenExpiresAt(0), m_authenticated(false), m_curl(nullptr) {
     
     m_curl = curl_easy_init();
     
@@ -44,7 +89,7 @@ bool Dropbox::needsAuthentication() const {
 }
 
 bool Dropbox::isOAuthConfigured() const {
-    return std::strlen(CLIENT_ID) != 0;
+    return !m_clientId.empty();
 }
 
 bool Dropbox::isAuthenticated() const {
@@ -64,7 +109,7 @@ std::string Dropbox::getAuthorizeUrl() {
 
     std::string url = dropbox::buildAuthorizeUrl(
         DROPBOX_AUTHORIZE_URL,
-        CLIENT_ID,
+        clientId(),
         DROPBOX_REDIRECT_URI,
         m_csrfToken,
         codeChallenge
@@ -105,8 +150,11 @@ bool Dropbox::exchangeAuthorizationCode(const std::string& input) {
         "grant_type=authorization_code"
         "&code=" + urlEncode(authCode) +
         "&code_verifier=" + urlEncode(m_codeVerifier) +
-        "&client_id=" + urlEncode(CLIENT_ID) +
-        "&redirect_uri=" + urlEncode(DROPBOX_REDIRECT_URI);
+        "&client_id=" + urlEncode(clientId());
+
+    if (std::strlen(DROPBOX_REDIRECT_URI) != 0) {
+        postData += "&redirect_uri=" + urlEncode(DROPBOX_REDIRECT_URI);
+    }
 
     std::string response = performRequest(
         DROPBOX_TOKEN_URL,
@@ -256,10 +304,34 @@ void Dropbox::logout() {
     remove(DROPBOX_OLD_LEGACY_TOKEN_FILE);
 }
 
+std::string Dropbox::clientId() const {
+    return m_clientId;
+}
+
+std::string Dropbox::loadClientId() const {
+    if (std::strlen(CLIENT_ID) != 0) {
+        return CLIENT_ID;
+    }
+
+    const char* candidates[] = {
+        DROPBOX_APP_KEY_FILE,
+        DROPBOX_ROOT_ENV_FILE,
+        DROPBOX_CONFIG_ENV_FILE,
+    };
+    for (const char* path : candidates) {
+        const std::string value = loadAppKeyCandidate(path);
+        if (!value.empty()) {
+            return value;
+        }
+    }
+    return "";
+}
+
 // Upload file to Dropbox
 bool Dropbox::uploadFile(const std::string& localPath, 
                          const std::string& dropboxPath,
                          std::function<void(size_t, size_t)> progress) {
+    (void)progress;
     
     if (!ensureAccessToken()) {
         LOG_ERROR("Dropbox: Not authenticated");
@@ -322,6 +394,7 @@ bool Dropbox::uploadFile(const std::string& localPath,
 bool Dropbox::downloadFile(const std::string& dropboxPath,
                            const std::string& localPath,
                            std::function<void(size_t, size_t)> progress) {
+    (void)progress;
     
     if (!ensureAccessToken()) {
         LOG_ERROR("Dropbox: Not authenticated");
@@ -370,7 +443,7 @@ bool Dropbox::downloadFile(const std::string& dropboxPath,
 }
 
 // List folder contents
-std::vector<DropboxFile> Dropbox::listFolder(const std::string& path) {
+std::vector<DropboxFile> Dropbox::listFolder(const std::string& path, bool recursive) {
     std::vector<DropboxFile> files;
     
     if (!ensureAccessToken()) {
@@ -378,71 +451,28 @@ std::vector<DropboxFile> Dropbox::listFolder(const std::string& path) {
         return files;
     }
     
-    // Build request
-    std::string postData = dropbox::buildListFolderRequest(path);
-    
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, ("Authorization: Bearer " + m_accessToken).c_str());
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    
-    std::string response = performRequest(std::string(DROPBOX_API_V2) + "/files/list_folder", postData, "", true);
-    curl_slist_free_all(headers);
-    
+    std::string response = performRequest(DROPBOX_LIST_FOLDER, dropbox::buildListFolderRequest(path, recursive), "", true);
     if (response.empty()) {
         return files;
     }
 
-    json_object* root = json_tokener_parse(response.c_str());
-    if (!root) {
-        LOG_ERROR("Dropbox: listFolder JSON parse failed");
-        return files;
+    std::string cursor;
+    bool hasMore = false;
+    if (!appendListFolderPage(response, files, &cursor, &hasMore)) {
+        return {};
     }
 
-    json_object* entriesObj = nullptr;
-    if (!json_object_object_get_ex(root, "entries", &entriesObj) ||
-        !json_object_is_type(entriesObj, json_type_array)) {
-        json_object_put(root);
-        return files;
+    while (hasMore && !cursor.empty()) {
+        const std::string continueRequest = std::string("{\"cursor\":\"") + cursor + "\"}";
+        response = performRequest(DROPBOX_LIST_FOLDER_CONTINUE, continueRequest, "", true);
+        if (response.empty()) {
+            break;
+        }
+        if (!appendListFolderPage(response, files, &cursor, &hasMore)) {
+            break;
+        }
     }
 
-    const int entryCount = json_object_array_length(entriesObj);
-    for (int i = 0; i < entryCount; ++i) {
-        json_object* entry = json_object_array_get_idx(entriesObj, i);
-        if (!entry) continue;
-
-        DropboxFile file{};
-        json_object* tagObj = nullptr;
-        json_object* pathObj = nullptr;
-        json_object* nameObj = nullptr;
-        json_object* revObj = nullptr;
-        json_object* modifiedObj = nullptr;
-        json_object* sizeObj = nullptr;
-
-        if (json_object_object_get_ex(entry, ".tag", &tagObj)) {
-            const char* tag = json_object_get_string(tagObj);
-            file.isFolder = tag && std::strcmp(tag, "folder") == 0;
-        }
-        if (json_object_object_get_ex(entry, "path_display", &pathObj)) {
-            file.path = json_object_get_string(pathObj);
-        }
-        if (json_object_object_get_ex(entry, "name", &nameObj)) {
-            file.name = json_object_get_string(nameObj);
-        }
-        if (json_object_object_get_ex(entry, "rev", &revObj)) {
-            file.rev = json_object_get_string(revObj);
-        }
-        if (json_object_object_get_ex(entry, "server_modified", &modifiedObj)) {
-            file.modifiedTime = dropbox::parseDropboxTime(json_object_get_string(modifiedObj));
-        }
-        if (json_object_object_get_ex(entry, "size", &sizeObj)) {
-            file.size = static_cast<size_t>(json_object_get_int64(sizeObj));
-        }
-
-        files.push_back(file);
-    }
-
-    json_object_put(root);
-    
     return files;
 }
 
@@ -566,6 +596,79 @@ bool Dropbox::refreshToken() {
         return false;
     }
     return saveToken();
+}
+
+bool Dropbox::appendListFolderPage(const std::string& response,
+                                   std::vector<DropboxFile>& files,
+                                   std::string* outCursor,
+                                   bool* outHasMore) {
+    json_object* root = json_tokener_parse(response.c_str());
+    if (!root) {
+        LOG_ERROR("Dropbox: listFolder JSON parse failed");
+        return false;
+    }
+
+    json_object* entriesObj = nullptr;
+    if (!json_object_object_get_ex(root, "entries", &entriesObj) ||
+        !json_object_is_type(entriesObj, json_type_array)) {
+        json_object_put(root);
+        return false;
+    }
+
+    json_object* cursorObj = nullptr;
+    json_object* hasMoreObj = nullptr;
+    if (outCursor) {
+        outCursor->clear();
+        if (json_object_object_get_ex(root, "cursor", &cursorObj)) {
+            *outCursor = json_object_get_string(cursorObj);
+        }
+    }
+    if (outHasMore) {
+        *outHasMore = json_object_object_get_ex(root, "has_more", &hasMoreObj) &&
+                      json_object_get_boolean(hasMoreObj);
+    }
+
+    const int entryCount = json_object_array_length(entriesObj);
+    files.reserve(files.size() + static_cast<std::size_t>(entryCount));
+    for (int i = 0; i < entryCount; ++i) {
+        json_object* entry = json_object_array_get_idx(entriesObj, i);
+        if (!entry) {
+            continue;
+        }
+
+        DropboxFile file{};
+        json_object* tagObj = nullptr;
+        json_object* pathObj = nullptr;
+        json_object* nameObj = nullptr;
+        json_object* revObj = nullptr;
+        json_object* modifiedObj = nullptr;
+        json_object* sizeObj = nullptr;
+
+        if (json_object_object_get_ex(entry, ".tag", &tagObj)) {
+            const char* tag = json_object_get_string(tagObj);
+            file.isFolder = tag && std::strcmp(tag, "folder") == 0;
+        }
+        if (json_object_object_get_ex(entry, "path_display", &pathObj)) {
+            file.path = json_object_get_string(pathObj);
+        }
+        if (json_object_object_get_ex(entry, "name", &nameObj)) {
+            file.name = json_object_get_string(nameObj);
+        }
+        if (json_object_object_get_ex(entry, "rev", &revObj)) {
+            file.rev = json_object_get_string(revObj);
+        }
+        if (json_object_object_get_ex(entry, "server_modified", &modifiedObj)) {
+            file.modifiedTime = dropbox::parseDropboxTime(json_object_get_string(modifiedObj));
+        }
+        if (json_object_object_get_ex(entry, "size", &sizeObj)) {
+            file.size = static_cast<size_t>(json_object_get_int64(sizeObj));
+        }
+
+        files.push_back(std::move(file));
+    }
+
+    json_object_put(root);
+    return true;
 }
 
 std::string Dropbox::performRequest(const std::string& url, 

@@ -8,7 +8,7 @@ TEST_CASE("Dropbox authorize URL includes required parameters") {
     const std::string url = network::dropbox::buildAuthorizeUrl(
         "https://www.dropbox.com/oauth2/authorize",
         "client-key",
-        "https://example.com/complete",
+        "",
         "csrf-token",
         "challenge123"
     );
@@ -19,7 +19,7 @@ TEST_CASE("Dropbox authorize URL includes required parameters") {
     REQUIRE(url.find("token_access_type=offline") != std::string::npos);
     REQUIRE(url.find("code_challenge_method=S256") != std::string::npos);
     REQUIRE(url.find("code_challenge=challenge123") != std::string::npos);
-    REQUIRE(url.find("redirect_uri=https%3A%2F%2Fexample.com%2Fcomplete") != std::string::npos);
+    REQUIRE(url.find("redirect_uri=") == std::string::npos);
     REQUIRE(url.find("state=csrf-token") != std::string::npos);
 }
 
@@ -36,6 +36,18 @@ TEST_CASE("Dropbox authorize URL percent-encodes reserved characters") {
     REQUIRE(url.find("redirect_uri=https%3A%2F%2Fexample.com%2Fcomplete%3Ffrom%3Dswitch") != std::string::npos);
     REQUIRE(url.find("state=csrf%20token") != std::string::npos);
     REQUIRE(url.find("code_challenge=challenge%2B%2F%3D") != std::string::npos);
+}
+
+TEST_CASE("Dropbox authorize URL includes redirect_uri only when provided") {
+    const std::string url = network::dropbox::buildAuthorizeUrl(
+        "https://www.dropbox.com/oauth2/authorize",
+        "client-key",
+        "https://example.com/complete",
+        "csrf-token",
+        "challenge123"
+    );
+
+    REQUIRE(url.find("redirect_uri=https%3A%2F%2Fexample.com%2Fcomplete") != std::string::npos);
 }
 
 TEST_CASE("Dropbox time parser accepts valid RFC3339-like timestamps") {
@@ -56,6 +68,8 @@ TEST_CASE("Dropbox list_folder request payload is stable") {
     REQUIRE_EQ(network::dropbox::buildListFolderRequest("/"), std::string("{\"path\":\"/\",\"recursive\":false,\"include_deleted\":false}"));
     REQUIRE_EQ(network::dropbox::buildListFolderRequest("/games/Quote\"Test"),
                std::string("{\"path\":\"/games/Quote\\\"Test\",\"recursive\":false,\"include_deleted\":false}"));
+    REQUIRE_EQ(network::dropbox::buildListFolderRequest("/apps/oc-save-keeper", true),
+               std::string("{\"path\":\"/apps/oc-save-keeper\",\"recursive\":true,\"include_deleted\":false}"));
 }
 
 TEST_CASE("Dropbox path helpers split folder and filename correctly") {

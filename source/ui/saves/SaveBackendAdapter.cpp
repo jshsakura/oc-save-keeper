@@ -13,21 +13,54 @@ namespace ui::saves {
 
 namespace {
 
-SaveActionResult notImplemented(const char* action) {
-    return {
-        false,
-        std::string(action) + " is not wired yet"
-    };
+const char* saveTypeLabel(core::SaveType type) {
+    switch (type) {
+        case core::SaveType::System:
+            return "System";
+        case core::SaveType::Device:
+            return "Device";
+        case core::SaveType::BCAT:
+            return "BCAT";
+        case core::SaveType::Cache:
+            return "Cache";
+        case core::SaveType::Temporary:
+            return "Temp";
+        case core::SaveType::Account:
+        default:
+            return "User";
+    }
 }
 
-std::string directoryFromPath(const std::string& path) {
-    const std::size_t slash = path.find_last_of('/');
-    return slash == std::string::npos ? std::string{} : path.substr(0, slash);
+std::string shortSizeLabel(int64_t size) {
+    if (size <= 0) {
+        return "0 B";
+    }
+
+    char buffer[32];
+    if (size < 1024) {
+        std::snprintf(buffer, sizeof(buffer), "%lld B", static_cast<long long>(size));
+        return buffer;
+    }
+
+    const double kb = static_cast<double>(size) / 1024.0;
+    if (kb < 1024.0) {
+        std::snprintf(buffer, sizeof(buffer), kb < 10.0 ? "%.1f KB" : "%.0f KB", kb);
+        return buffer;
+    }
+
+    const double mb = kb / 1024.0;
+    std::snprintf(buffer, sizeof(buffer), mb < 10.0 ? "%.1f MB" : "%.0f MB", mb);
+    return buffer;
 }
 
 std::string fileNameFromPath(const std::string& path) {
     const std::size_t slash = path.find_last_of('/');
     return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+bool endsWith(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 std::string makeTempArchivePath(uint64_t titleId) {
@@ -36,6 +69,42 @@ std::string makeTempArchivePath(uint64_t titleId) {
                   static_cast<unsigned long long>(titleId),
                   static_cast<long long>(time(nullptr)));
     return buffer;
+}
+
+std::string makeTempMetadataPath(uint64_t titleId, const std::string& suffix) {
+    char buffer[256];
+    std::snprintf(buffer, sizeof(buffer), "%s/frontend_%016llX_%s.meta", utils::paths::TEMP,
+                  static_cast<unsigned long long>(titleId),
+                  suffix.c_str());
+    return buffer;
+}
+
+std::vector<network::DropboxFile> listRemoteRevisionMetadata(network::Dropbox& dropbox,
+                                                             core::SaveManager& saveManager,
+                                                             core::TitleInfo* title) {
+    std::vector<network::DropboxFile> files;
+    if (!title || !dropbox.isAuthenticated()) {
+        return files;
+    }
+
+    const auto deviceFolders = dropbox.listFolder("/" + saveManager.getCloudDevicesPath(), false);
+    for (const auto& folder : deviceFolders) {
+        if (!folder.isFolder) {
+            continue;
+        }
+
+        const std::string revisionDir = "/" + saveManager.getCloudRevisionDirectory(title, fileNameFromPath(folder.path));
+        auto revisionFiles = dropbox.listFolder(revisionDir, false);
+        revisionFiles.erase(std::remove_if(revisionFiles.begin(), revisionFiles.end(), [](const network::DropboxFile& file) {
+            return file.isFolder || !endsWith(file.name, ".meta");
+        }), revisionFiles.end());
+        files.insert(files.end(), revisionFiles.begin(), revisionFiles.end());
+    }
+
+    std::sort(files.begin(), files.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.modifiedTime > rhs.modifiedTime;
+    });
+    return files;
 }
 
 } // namespace
@@ -53,7 +122,7 @@ std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
         entry.name = title->name;
         entry.author = title->publisher;
         entry.iconPath = title->iconPath;
-        entry.subtitle = title->savePath;
+        entry.subtitle = std::string(saveTypeLabel(title->saveType)) + "  " + shortSizeLabel(title->saveSize);
 
         const auto versions = m_saveManager.getBackupVersions(title);
         entry.hasLocalBackup = !versions.empty();
@@ -87,28 +156,29 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
             out.push_back(std::move(entry));
         }
     } else {
-        const std::string latestPath = "/" + m_saveManager.getCloudPath(title);
-        const std::string cloudDir = directoryFromPath(latestPath);
-        auto files = m_dropbox.listFolder(cloudDir);
-        std::sort(files.begin(), files.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.modifiedTime > rhs.modifiedTime;
-        });
-
+        const auto files = listRemoteRevisionMetadata(m_dropbox, m_saveManager, title);
         for (const auto& file : files) {
-            if (file.isFolder) {
+            const std::string tempMeta = makeTempMetadataPath(title->titleId, fileNameFromPath(file.path));
+            if (!m_dropbox.downloadFile(file.path, tempMeta)) {
                 continue;
             }
-            if (file.name.size() < 4 || file.name.substr(file.name.size() - 4) != ".zip") {
+
+            core::BackupMetadata incomingMeta;
+            const bool validMeta = m_saveManager.readMetadataFile(tempMeta, incomingMeta);
+            std::remove(tempMeta.c_str());
+            if (!validMeta) {
                 continue;
             }
 
             SaveRevisionEntry entry;
             entry.id = file.path;
-            entry.label = file.name;
-            entry.path = file.path;
-            entry.sourceLabel = "Dropbox";
-            entry.timestamp = file.modifiedTime;
-            entry.size = static_cast<int64_t>(file.size);
+            entry.label = incomingMeta.backupName.empty() ? file.name : incomingMeta.backupName;
+            entry.path = file.path.substr(0, file.path.size() - 5) + ".zip";
+            entry.deviceLabel = incomingMeta.deviceLabel;
+            entry.userLabel = incomingMeta.userName;
+            entry.sourceLabel = incomingMeta.source.empty() ? "Dropbox" : incomingMeta.source;
+            entry.timestamp = incomingMeta.createdAt != 0 ? incomingMeta.createdAt : file.modifiedTime;
+            entry.size = incomingMeta.size > 0 ? incomingMeta.size : static_cast<int64_t>(file.size);
             entry.source = SaveSource::Cloud;
             out.push_back(std::move(entry));
         }
@@ -173,11 +243,11 @@ SaveActionResult SaveBackendAdapter::upload(uint64_t titleId) {
     const std::string localMetaPath = versions.front().path + ".meta";
     const std::string latestArchivePath = "/" + m_saveManager.getCloudPath(title);
     const std::string latestMetaPath = "/" + m_saveManager.getCloudMetadataPath(title);
-    const std::string cloudDir = directoryFromPath(latestArchivePath);
+    const std::string revisionDir = "/" + m_saveManager.getCloudRevisionDirectory(title);
     const std::string archiveName = fileNameFromPath(archivePath);
     const std::string metaName = fileNameFromPath(localMetaPath);
-    const std::string revisionArchivePath = cloudDir.empty() ? ("/" + archiveName) : (cloudDir + "/" + archiveName);
-    const std::string revisionMetaPath = cloudDir.empty() ? ("/" + metaName) : (cloudDir + "/" + metaName);
+    const std::string revisionArchivePath = revisionDir + "/" + archiveName;
+    const std::string revisionMetaPath = revisionDir + "/" + metaName;
 
     const bool ok = m_dropbox.uploadFile(localMetaPath, revisionMetaPath) &&
                     m_dropbox.uploadFile(archivePath, revisionArchivePath) &&

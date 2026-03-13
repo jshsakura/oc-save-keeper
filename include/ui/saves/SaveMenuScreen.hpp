@@ -31,6 +31,9 @@ public:
         return m_sidebar;
     }
 
+    int firstVisibleIndex() const;
+    int visibleCount() const;
+
 private:
     void reload();
     void openActions();

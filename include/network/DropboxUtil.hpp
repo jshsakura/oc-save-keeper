@@ -313,14 +313,17 @@ inline std::string buildAuthorizeUrl(const std::string& baseUrl,
                                      const std::string& redirectUri,
                                      const std::string& csrfToken,
                                      const std::string& codeChallenge) {
-    return baseUrl +
-           "?client_id=" + percentEncode(clientId) +
-           "&response_type=code" +
-           "&token_access_type=offline" +
-           "&code_challenge_method=S256" +
-           "&code_challenge=" + percentEncode(codeChallenge) +
-           "&redirect_uri=" + percentEncode(redirectUri) +
-           "&state=" + percentEncode(csrfToken);
+    std::string url = baseUrl +
+                      "?client_id=" + percentEncode(clientId) +
+                      "&response_type=code" +
+                      "&token_access_type=offline" +
+                      "&code_challenge_method=S256" +
+                      "&code_challenge=" + percentEncode(codeChallenge) +
+                      "&state=" + percentEncode(csrfToken);
+    if (!redirectUri.empty()) {
+        url += "&redirect_uri=" + percentEncode(redirectUri);
+    }
+    return url;
 }
 
 inline std::string extractQueryParam(const std::string& input, const std::string& key) {
@@ -395,8 +398,10 @@ inline std::string escapeJsonString(const std::string& value) {
     return escaped;
 }
 
-inline std::string buildListFolderRequest(const std::string& path) {
-    return "{\"path\":\"" + escapeJsonString(path) + "\",\"recursive\":false,\"include_deleted\":false}";
+inline std::string buildListFolderRequest(const std::string& path, bool recursive = false) {
+    return "{\"path\":\"" + escapeJsonString(path) + "\",\"recursive\":" +
+           std::string(recursive ? "true" : "false") +
+           ",\"include_deleted\":false}";
 }
 
 inline std::string buildUploadArg(const std::string& path) {

@@ -1,6 +1,7 @@
 #include "ui/saves/Sidebar.hpp"
 
 #include "ui/saves/Runtime.hpp"
+#include "utils/Language.hpp"
 
 namespace ui::saves {
 
@@ -12,7 +13,7 @@ SidebarEntryCallback::SidebarEntryCallback(const std::string& title, Callback ca
     : SidebarEntryBase(title, info)
     , m_callback(std::move(callback))
     , m_popOnClick(popOnClick) {
-    setAction(Button::A, Action{"OK", [this]() {
+    setAction(Button::A, Action{utils::Language::instance().get("ui.confirm"), [this]() {
         activate();
     }});
 }
@@ -36,8 +37,6 @@ Sidebar::Sidebar(const std::string& title, Side side)
 }
 
 void Sidebar::update(const Controller& controller, const TouchInfo& touch) {
-    Widget::update(controller, touch);
-
     if (m_items.empty() || !m_list) {
         setPop();
         return;
@@ -49,6 +48,8 @@ void Sidebar::update(const Controller& controller, const TouchInfo& touch) {
             fireAction(Button::A);
         }
     });
+
+    Widget::update(controller, touch);
 
     if (m_items[m_index]->shouldPop()) {
         setPop();
@@ -86,7 +87,7 @@ void Sidebar::syncActions() {
     for (const auto& [button, action] : m_items[m_index]->actions()) {
         setAction(button, action);
     }
-    setAction(Button::B, Action{"Back", [this]() {
+    setAction(Button::B, Action{utils::Language::instance().get("detail.back"), [this]() {
         setPop();
     }});
 }

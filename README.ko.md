@@ -103,22 +103,30 @@ zip을 SD 카드 루트에 풀고, 아래 파일이 존재하는지 확인하세
 
 1. https://www.dropbox.com/developers/apps 에서 앱 생성
 2. `Dropbox API`, `App folder` 권한으로 설정
-3. 빌드 시 Dropbox App Key 주입
-4. Switch에서 링크 생성 후 코드 교환
+3. 프로젝트 루트 `.env`에 Dropbox App Key 입력
+4. Switch에서 로그인 화면을 열고 코드 교환
 
-빌드 예시:
+`.env` 예시:
 
 ```bash
-make DROPBOX_APP_KEY=your_dropbox_app_key
+DROPBOX_APP_KEY=your_dropbox_app_key
 ```
+
+그 다음 빌드:
+
+```bash
+make
+```
+
+GitHub Actions로 빌드할 때는 저장소 시크릿 `DROPBOX_APP_KEY`를 설정하면 됩니다.
 
 앱 내부 연결 순서:
 
-1. `링크 생성` 버튼 누르기
+1. `로그인 열기` 버튼 누르기
 2. 휴대폰 또는 PC에서 인증 링크 열기
 3. Dropbox 승인 완료
 4. 완료 화면의 인증 코드 또는 돌아온 전체 URL 복사
-5. Switch에 붙여넣고 `코드 연결` 누르기
+5. Switch에 붙여넣고 `Dropbox 연결` 누르기
 
 인증 정보 저장 경로:
 

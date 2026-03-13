@@ -4,9 +4,13 @@
 .SUFFIXES:
 .NOTPARALLEL: test switch-build all
 
+TOPDIR ?= $(CURDIR)
+
 HOST_CXX ?= g++
 HOST_JSON_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
 HOST_JSON_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
+-include $(TOPDIR)/.env
+export DROPBOX_APP_KEY
 DROPBOX_APP_KEY ?=
 DROPBOX_APP_KEY_DEFINE :=
 ifneq ($(strip $(DROPBOX_APP_KEY)),)
@@ -18,15 +22,13 @@ TEST_BUILD := build-host
 TEST_BIN := $(TEST_BUILD)/unit-tests
 TEST_SOURCES := $(wildcard $(CURDIR)/tests/*.cpp)
 TEST_HEADERS := $(shell if [ -d "$(TOPDIR)/include" ] && [ -d "$(TOPDIR)/tests" ]; then find $(TOPDIR)/include $(TOPDIR)/tests \( -name '*.hpp' -o -name '*.h' \); fi)
-
-TOPDIR ?= $(CURDIR)
 ifneq ($(strip $(DEVKITPRO)),)
 include $(DEVKITPRO)/libnx/switch_rules
 endif
 
 TARGET		:=	oc-save-keeper
 BUILD		:=	build
-SOURCES		:=	source source/core source/ui source/network source/utils source/fs source/zip source/ui/saves
+SOURCES		:=	source source/core source/network source/utils source/fs source/zip source/ui/saves
 DATA		:=	data
 INCLUDES	:=	include
 APP_TITLE   :=  OC Save Keeper
@@ -35,6 +37,7 @@ APP_VERSION :=  0.1.0
 ROMFS	    :=	romfs
 APP_ICON	:=	icon.png
 NROFLAGS    :=  --icon=$(TOPDIR)/$(APP_ICON) --nacp=$(TOPDIR)/$(TARGET).nacp --romfsdir=$(TOPDIR)/$(ROMFS)
+DOCKER_SWITCH_BUILD := docker run --rm -e DROPBOX_APP_KEY="$(DROPBOX_APP_KEY)" -v $(CURDIR):/work -w /work devkitpro/devkita64 make DROPBOX_APP_KEY="$(DROPBOX_APP_KEY)"
 
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS	:=	$(INCLUDE) -D__SWITCH__ `sdl2-config --cflags` `curl-config --cflags` -g -Wall -O2 -ffunction-sections -I$(PORTLIBS)/include/freetype2 $(ARCH) $(DROPBOX_APP_KEY_DEFINE)
@@ -72,12 +75,11 @@ all: $(BUILD)
 switch-build: $(BUILD)
 ifeq ($(strip $(DEVKITPRO)),)
 $(BUILD):
-	@echo "Please set DEVKITPRO in your environment"
-	@exit 1
+	@$(DOCKER_SWITCH_BUILD)
 else
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
-	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile DROPBOX_APP_KEY="$(DROPBOX_APP_KEY)"
 endif
 test: $(TEST_BIN)
 	@$(TEST_BIN)

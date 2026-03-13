@@ -9,10 +9,12 @@
 
 #include "core/SaveManager.hpp"
 #include "network/Dropbox.hpp"
+#include "utils/Language.hpp"
 #include "utils/Logger.hpp"
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 namespace ui::saves {
 
@@ -47,6 +49,61 @@ void drawFocus(SDL_Renderer* renderer, const SDL_Rect& rect) {
     strokeRect(renderer, inner, color(37, 99, 235));
 }
 
+std::string currentSelectionSubtitle(core::SaveManager& saveManager, network::Dropbox& dropbox, const utils::Language& lang) {
+    const auto* user = saveManager.getSelectedUser();
+    const std::string selected = user ? user->name : lang.get("ui.no_user");
+    const std::string mode = user && user->id == "device"
+        ? lang.get("ui.mode_device")
+        : lang.get("ui.mode_user");
+    const std::string cloud = dropbox.isAuthenticated()
+        ? lang.get("status.connected")
+        : lang.get("status.disconnected");
+    return mode + "  |  " + selected + "  |  Dropbox: " + cloud;
+}
+
+#ifndef __SWITCH__
+bool fileExists(const char* path) {
+    FILE* file = std::fopen(path, "rb");
+    if (!file) {
+        return false;
+    }
+    std::fclose(file);
+    return true;
+}
+
+const char* hostFontPath() {
+    static const char* const candidates[] = {
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    };
+
+    for (const char* path : candidates) {
+        if (fileExists(path)) {
+            return path;
+        }
+    }
+    return candidates[3];
+}
+#endif
+
+#ifdef __SWITCH__
+TTF_Font* openSharedFont(const PlFontData& font, int size) {
+    SDL_RWops* rw = SDL_RWFromConstMem(font.address, static_cast<int>(font.size));
+    if (!rw) {
+        LOG_ERROR("SDL_RWFromConstMem failed for SaveShell font: %s", SDL_GetError());
+        return nullptr;
+    }
+
+    TTF_Font* ttfFont = TTF_OpenFontRW(rw, 1, size);
+    if (!ttfFont) {
+        LOG_ERROR("TTF_OpenFontRW failed for SaveShell font: %s", TTF_GetError());
+    }
+    return ttfFont;
+}
+#endif
+
 } // namespace
 
 SaveShell::SaveShell(SDL_Renderer* renderer, network::Dropbox& dropbox, core::SaveManager& saveManager)
@@ -55,9 +112,22 @@ SaveShell::SaveShell(SDL_Renderer* renderer, network::Dropbox& dropbox, core::Sa
     , m_saveManager(saveManager) {}
 
 SaveShell::~SaveShell() {
+    for (auto& pair : m_iconCache) {
+        if (pair.second) {
+            SDL_DestroyTexture(pair.second);
+        }
+    }
     if (m_fontLarge) TTF_CloseFont(m_fontLarge);
     if (m_fontMedium) TTF_CloseFont(m_fontMedium);
     if (m_fontSmall) TTF_CloseFont(m_fontSmall);
+    if (m_fontLargeFallback) TTF_CloseFont(m_fontLargeFallback);
+    if (m_fontMediumFallback) TTF_CloseFont(m_fontMediumFallback);
+    if (m_fontSmallFallback) TTF_CloseFont(m_fontSmallFallback);
+#ifdef __SWITCH__
+    if (m_plInitialized) {
+        plExit();
+    }
+#endif
 }
 
 bool SaveShell::initialize() {
@@ -66,14 +136,55 @@ bool SaveShell::initialize() {
         return false;
     }
 
-    m_fontLarge = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 34);
-    m_fontMedium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24);
-    m_fontSmall = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18);
-    if (!m_fontLarge || !m_fontMedium || !m_fontSmall) {
-        LOG_ERROR("SaveShell font initialization failed");
+#ifdef __SWITCH__
+    if (R_FAILED(plInitialize(PlServiceType_User))) {
+        LOG_ERROR("SaveShell plInitialize failed");
+        return false;
+    }
+    m_plInitialized = true;
+
+    PlFontData standardFont;
+    if (R_FAILED(plGetSharedFontByType(&standardFont, PlSharedFontType_Standard))) {
+        LOG_ERROR("SaveShell plGetSharedFontByType failed");
+        plExit();
+        m_plInitialized = false;
         return false;
     }
 
+    PlFontData koreanFont{};
+    const bool hasKoreanFont = R_SUCCEEDED(plGetSharedFontByType(&koreanFont, PlSharedFontType_KO));
+
+    m_fontLarge = openSharedFont(standardFont, 34);
+    m_fontMedium = openSharedFont(standardFont, 24);
+    m_fontSmall = openSharedFont(standardFont, 18);
+    if (hasKoreanFont) {
+        m_fontLargeFallback = openSharedFont(koreanFont, 34);
+        m_fontMediumFallback = openSharedFont(koreanFont, 24);
+        m_fontSmallFallback = openSharedFont(koreanFont, 18);
+    }
+#else
+    const char* fontPath = hostFontPath();
+    m_fontLarge = TTF_OpenFont(fontPath, 34);
+    m_fontMedium = TTF_OpenFont(fontPath, 24);
+    m_fontSmall = TTF_OpenFont(fontPath, 18);
+    m_fontLargeFallback = TTF_OpenFont(fontPath, 34);
+    m_fontMediumFallback = TTF_OpenFont(fontPath, 24);
+    m_fontSmallFallback = TTF_OpenFont(fontPath, 18);
+#endif
+    if (!m_fontLarge || !m_fontMedium || !m_fontSmall) {
+        LOG_ERROR("SaveShell font initialization failed");
+#ifdef __SWITCH__
+        if (m_plInitialized) {
+            plExit();
+            m_plInitialized = false;
+        }
+#endif
+        return false;
+    }
+
+    utils::Language::instance().init();
+    // Match the old MainUI startup flow so the first screen has data.
+    m_saveManager.scanTitles();
     m_backend = std::make_shared<SaveBackendAdapter>(m_saveManager, m_dropbox);
     pushRootScreen();
     return true;
@@ -82,6 +193,12 @@ bool SaveShell::initialize() {
 void SaveShell::pushRootScreen() {
     m_rootScreen = std::make_shared<SaveMenuScreen>(m_backend);
     Runtime::instance().push(m_rootScreen);
+}
+
+void SaveShell::rebuildRootScreen() {
+    Runtime::instance().popToMenu();
+    Runtime::instance().pop();
+    pushRootScreen();
 }
 
 void SaveShell::handleEvent(const SDL_Event& event) {
@@ -101,17 +218,34 @@ void SaveShell::handleEvent(const SDL_Event& event) {
             }
             break;
         case SDL_KEYDOWN:
+            if (m_overlay == Overlay::DropboxAuth && m_hostTextInput) {
+                if (event.key.keysym.sym == SDLK_BACKSPACE && !m_authInput.empty()) {
+                    m_authInput.pop_back();
+                    break;
+                }
+                if (event.key.keysym.sym == SDLK_RETURN) {
+                    activateOverlaySelection();
+                    break;
+                }
+            }
             switch (event.key.keysym.sym) {
                 case SDLK_RETURN: setButtonDown(Button::A); break;
                 case SDLK_BACKSPACE:
                 case SDLK_ESCAPE: setButtonDown(Button::B); break;
                 case SDLK_x: setButtonDown(Button::X); break;
                 case SDLK_y: setButtonDown(Button::Y); break;
+                case SDLK_l: setButtonDown(Button::L); break;
+                case SDLK_r: setButtonDown(Button::R); break;
                 case SDLK_LEFT: setButtonDown(Button::Left); break;
                 case SDLK_RIGHT: setButtonDown(Button::Right); break;
                 case SDLK_UP: setButtonDown(Button::Up); break;
                 case SDLK_DOWN: setButtonDown(Button::Down); break;
                 default: break;
+            }
+            break;
+        case SDL_TEXTINPUT:
+            if (m_overlay == Overlay::DropboxAuth && m_hostTextInput) {
+                m_authInput += event.text.text;
             }
             break;
         case SDL_MOUSEBUTTONDOWN:
@@ -146,6 +280,23 @@ void SaveShell::setButtonDown(Button button) {
 }
 
 void SaveShell::update() {
+    if (m_overlay != Overlay::None) {
+        updateOverlay();
+        resetInput();
+        return;
+    }
+
+    if (m_controller.gotDown(Button::Y)) {
+        openDropboxOverlay();
+        resetInput();
+        return;
+    }
+    if (m_controller.gotDown(Button::L)) {
+        openUserPicker();
+        resetInput();
+        return;
+    }
+
     dispatchCurrent();
     resetInput();
 }
@@ -194,15 +345,19 @@ void SaveShell::render() {
     switch (current->kind()) {
         case ObjectKind::SaveMenuScreen:
             renderSaveMenu(*static_cast<SaveMenuScreen*>(current.get()));
-            return;
+            break;
         case ObjectKind::RevisionMenuScreen:
             renderRevisionMenu(*static_cast<RevisionMenuScreen*>(current.get()));
-            return;
+            break;
         default:
             break;
     }
 
-    renderHeader("Save Browser");
+    if (m_overlay == Overlay::UserPicker) {
+        renderUserPickerOverlay();
+    } else if (m_overlay == Overlay::DropboxAuth) {
+        renderDropboxOverlay();
+    }
 }
 
 void SaveShell::renderHeader(const std::string& title, const std::string& subtitle) {
@@ -215,29 +370,68 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     if (!subtitle.empty()) {
         renderText(subtitle, 46, 54, m_fontSmall, color(148, 163, 184));
     }
+    renderStatusChip(tr(m_dropbox.isAuthenticated() ? "status.connected" : "status.disconnected",
+                        m_dropbox.isAuthenticated() ? "Connected" : "Not connected"),
+                     1048,
+                     22,
+                     208,
+                     m_dropbox.isAuthenticated() ? color(20, 83, 45) : color(69, 26, 26),
+                     m_dropbox.isAuthenticated() ? color(74, 222, 128) : color(248, 113, 113));
     SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
     SDL_RenderDrawLine(m_renderer, 0, header.h - 1, 1280, header.h - 1);
 }
 
+void SaveShell::renderFooter(const std::string& leftHint, const std::string& rightHint) {
+    SDL_Rect footer{0, 676, 1280, 44};
+    fillRect(m_renderer, footer, color(15, 23, 42));
+    SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
+    SDL_RenderDrawLine(m_renderer, 0, footer.y, 1280, footer.y);
+    renderText(leftHint, 24, footer.y + 10, m_fontSmall, color(148, 163, 184));
+    if (!rightHint.empty()) {
+        renderText(rightHint, 880, footer.y + 10, m_fontSmall, color(100, 116, 139));
+    }
+}
+
+void SaveShell::renderStatusChip(const std::string& text, int x, int y, int w, SDL_Color fill, SDL_Color border) {
+    SDL_Rect chip{x, y, w, 30};
+    fillRect(m_renderer, chip, fill);
+    strokeRect(m_renderer, chip, border);
+    renderTextCentered(text, chip, m_fontSmall, color(241, 245, 249));
+}
+
 void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
-    renderHeader("Saves", "A Open   X Refresh   B Exit");
+    const auto& lang = utils::Language::instance();
+    renderHeader(tr("ui.save_browser", "Save Browser"), currentSelectionSubtitle(m_saveManager, m_dropbox, lang));
 
     const auto& entries = screen.entries();
     const int selected = screen.index();
+    const int firstVisible = screen.firstVisibleIndex();
+    const int lastVisible = std::min(static_cast<int>(entries.size()), firstVisible + std::max(1, screen.visibleCount()));
     const int cols = 4;
-    const int cardW = 272;
-    const int cardH = 148;
-    const int startX = 56;
-    const int startY = 122;
-    const int gap = 20;
+    const int frameX = 24;
+    const int frameY = 108;
+    const int frameH = 552;
+    const int frameW = 1280 - frameX * 2;
+    const int gap = 16;
+    const int innerPad = 16;
+    const int cardW = (frameW - innerPad * 2 - gap * (cols - 1)) / cols;
+    const int cardH = 164;
+    const int startX = frameX + innerPad;
+    const int startY = frameY + innerPad;
 
-    SDL_Rect contentFrame{40, 108, screen.sidebar() ? 792 : 1200, 580};
+    SDL_Rect contentFrame{frameX, frameY, frameW, frameH};
     drawPanel(m_renderer, contentFrame, color(9, 15, 26, 245), color(51, 65, 85));
 
-    for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+    renderText(lang.get("ui.section_titles"), frameX + 20, frameY + 12, m_fontSmall, color(100, 116, 139));
+    if (!m_statusMessage.empty()) {
+        renderText(fitText(m_fontSmall, m_statusMessage, 640), frameX + 240, frameY + 12, m_fontSmall, color(125, 211, 252));
+    }
+
+    for (int i = firstVisible; i < lastVisible; ++i) {
         const auto& entry = entries[i];
-        const int row = i / cols;
-        const int col = i % cols;
+        const int visibleIndex = i - firstVisible;
+        const int row = visibleIndex / cols;
+        const int col = visibleIndex % cols;
         SDL_Rect card{startX + col * (cardW + gap), startY + row * (cardH + gap), cardW, cardH};
         const bool isSelected = i == selected;
 
@@ -246,54 +440,68 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
             drawFocus(m_renderer, card);
         }
 
-        SDL_Rect iconRect{card.x + 14, card.y + 14, 112, 112};
+        const int iconSize = 96;
+        SDL_Rect iconRect{card.x + 14, card.y + (card.h - iconSize) / 2, iconSize, iconSize};
         SDL_Rect iconFrame{iconRect.x - 1, iconRect.y - 1, iconRect.w + 2, iconRect.h + 2};
         fillRect(m_renderer, iconFrame, color(8, 12, 22));
         if (SDL_Texture* icon = loadIcon(entry.iconPath)) {
             SDL_RenderCopy(m_renderer, icon, nullptr, &iconRect);
-            SDL_DestroyTexture(icon);
         } else {
             fillRect(m_renderer, iconRect, color(15, 23, 42));
             renderText("?", iconRect.x + 45, iconRect.y + 30, m_fontLarge, color(148, 163, 184));
         }
         strokeRect(m_renderer, iconFrame, color(51, 65, 85));
 
-        const int textX = card.x + 140;
-        renderText(fitText(m_fontMedium, entry.name, 118), textX, card.y + 16, m_fontMedium, color(241, 245, 249));
-        renderText(fitText(m_fontSmall, entry.author, 120), textX, card.y + 46, m_fontSmall, color(148, 163, 184));
-        renderText(fitText(m_fontSmall, entry.subtitle, 120), textX, card.y + 68, m_fontSmall, color(100, 116, 139));
+        const int textX = iconRect.x + iconRect.w + 16;
+        const int textW = card.x + card.w - textX - 14;
+        renderText(fitText(m_fontMedium, entry.name, textW), textX, card.y + 18, m_fontMedium, color(241, 245, 249));
+        renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 48, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 72, m_fontSmall, color(100, 116, 139));
 
-        SDL_Rect localChip{textX, card.y + 100, 102, 26};
-        SDL_Rect cloudChip{textX + 112, card.y + 100, 110, 26};
+        const int chipGap = 8;
+        const int chipW = std::max(68, (textW - chipGap) / 2);
+        SDL_Rect localChip{textX, card.y + 118, chipW, 24};
+        SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 118, chipW, 24};
         fillRect(m_renderer, localChip, entry.hasLocalBackup ? color(8, 47, 73) : color(39, 39, 42));
         fillRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(20, 83, 45) : color(39, 39, 42));
         strokeRect(m_renderer, localChip, entry.hasLocalBackup ? color(56, 189, 248) : color(82, 82, 91));
         strokeRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(74, 222, 128) : color(82, 82, 91));
-        renderText(entry.hasLocalBackup ? "LOCAL" : "EMPTY", localChip.x + 14, localChip.y + 5, m_fontSmall, color(241, 245, 249));
-        renderText(entry.hasCloudBackup ? "CLOUD" : "OFFLINE", cloudChip.x + 12, cloudChip.y + 5, m_fontSmall, color(241, 245, 249));
+        renderTextCentered(fitText(m_fontSmall, entry.hasLocalBackup ? tr("history.local", "Local") : tr("ui.empty", "Empty"), chipW - 10),
+                           localChip,
+                           m_fontSmall,
+                           color(241, 245, 249));
+        renderTextCentered(fitText(m_fontSmall, entry.hasCloudBackup ? tr("ui.cloud_ready", "Cloud") : tr("ui.cloud_need_connect", "Connect"), chipW - 10),
+                           cloudChip,
+                           m_fontSmall,
+                           color(241, 245, 249));
     }
 
     if (screen.sidebar()) {
         renderSidebar(*screen.sidebar());
     }
+
+    renderFooter("A: Open  X: Refresh  Y: Dropbox  L: Users  B: Exit");
 }
 
 void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
     renderHeader(screen.shortTitle(), screen.titleLabel());
     const auto& entries = screen.entries();
     const int selected = screen.index();
+    const int firstVisible = screen.firstVisibleIndex();
+    const int lastVisible = std::min(static_cast<int>(entries.size()), firstVisible + std::max(1, screen.visibleCount()));
 
-    SDL_Rect listRect{48, 116, 1184, 572};
+    SDL_Rect listRect{24, 108, 1232, 552};
     drawPanel(m_renderer, listRect, color(9, 15, 26, 245), color(51, 65, 85));
 
-    renderText("Revision", 76, 126, m_fontSmall, color(100, 116, 139));
-    renderText("Device", 450, 126, m_fontSmall, color(100, 116, 139));
-    renderText("Source", 760, 126, m_fontSmall, color(100, 116, 139));
-    renderText("Size", 1040, 126, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.revision", "Revision"), 52, 126, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.device", "Device"), 500, 126, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.source", "Source"), 862, 126, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.size", "Size"), 1130, 126, m_fontSmall, color(100, 116, 139));
 
-    for (int i = 0; i < static_cast<int>(entries.size()) && i < 8; ++i) {
+    for (int i = firstVisible; i < lastVisible; ++i) {
         const auto& entry = entries[i];
-        SDL_Rect row{64, 154 + i * 62, 1152, 50};
+        const int visibleIndex = i - firstVisible;
+        SDL_Rect row{40, 154 + visibleIndex * 62, 1200, 50};
         const bool isSelected = i == selected;
         fillRect(m_renderer, row, isSelected ? color(19, 42, 79) : color(17, 24, 39));
         strokeRect(m_renderer, row, color(51, 65, 85));
@@ -301,55 +509,64 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
             drawFocus(m_renderer, row);
         }
 
-        SDL_Rect sourceBadge{row.x + 702, row.y + 12, 108, 24};
+        SDL_Rect sourceBadge{row.x + 820, row.y + 12, 108, 24};
         fillRect(m_renderer, sourceBadge, entry.source == SaveSource::Cloud ? color(8, 47, 73) : color(20, 83, 45));
         strokeRect(m_renderer, sourceBadge, entry.source == SaveSource::Cloud ? color(56, 189, 248) : color(74, 222, 128));
 
         char sizeBuf[32];
         std::snprintf(sizeBuf, sizeof(sizeBuf), "%.1f MB", entry.size / (1024.0 * 1024.0));
 
-        renderText(fitText(m_fontMedium, entry.label, 320), row.x + 16, row.y + 12, m_fontMedium, color(241, 245, 249));
-        renderText(fitText(m_fontSmall, entry.deviceLabel.empty() ? "Unknown device" : entry.deviceLabel, 220), row.x + 386, row.y + 16, m_fontSmall, color(148, 163, 184));
-        renderText(fitText(m_fontSmall, entry.sourceLabel.empty() ? "Unknown source" : entry.sourceLabel, 82), sourceBadge.x + 10, sourceBadge.y + 4, m_fontSmall, color(241, 245, 249));
-        renderText(sizeBuf, row.x + 972, row.y + 16, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontMedium, entry.label, 440), row.x + 16, row.y + 12, m_fontMedium, color(241, 245, 249));
+        renderText(fitText(m_fontSmall, entry.deviceLabel.empty() ? tr("history.unknown_device", "Unknown device") : entry.deviceLabel, 300), row.x + 460, row.y + 16, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontSmall, entry.sourceLabel.empty() ? tr("history.unknown_source", "Unknown source") : entry.sourceLabel, 82), sourceBadge.x + 10, sourceBadge.y + 4, m_fontSmall, color(241, 245, 249));
+        renderText(sizeBuf, row.x + 1080, row.y + 16, m_fontSmall, color(148, 163, 184));
 
         SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
         SDL_RenderDrawLine(m_renderer, row.x, row.y + row.h + 11, row.x + row.w, row.y + row.h + 11);
     }
+
+    renderFooter("A: Restore/Download  X: Refresh  Y: Dropbox  L: Users  B: Back",
+                 m_statusMessage.empty() ? screen.titleLabel() : m_statusMessage);
 }
 
 void SaveShell::renderSidebar(const Sidebar& sidebar) {
-    SDL_Rect panel{844, 0, 436, 720};
+    SDL_Rect panel{904, 96, 352, 580};
     fillRect(m_renderer, panel, color(17, 24, 39, 250));
     SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
-    SDL_RenderDrawLine(m_renderer, panel.x, 0, panel.x, 720);
-    SDL_Rect topLine{panel.x + 24, 90, panel.w - 48, 1};
+    SDL_RenderDrawLine(m_renderer, panel.x, panel.y, panel.x, panel.y + panel.h);
+    SDL_Rect topLine{panel.x + 24, panel.y + 76, panel.w - 48, 1};
     fillRect(m_renderer, topLine, color(51, 65, 85));
-    renderText("Save Actions", panel.x + 24, 24, m_fontLarge, color(241, 245, 249));
-    renderText("A Confirm   B Close", panel.x + 24, 60, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.save_actions", "Save Actions"), panel.x + 24, panel.y + 18, m_fontSmall, color(56, 189, 248));
+    renderText(fitText(m_fontMedium, sidebar.title(), panel.w - 48), panel.x + 24, panel.y + 42, m_fontMedium, color(241, 245, 249));
+    renderText(tr("ui.actions_hint", "A Confirm   B Close"), panel.x + 24, panel.y + 90, m_fontSmall, color(100, 116, 139));
 
     const auto& items = sidebar.items();
     for (int i = 0; i < static_cast<int>(items.size()); ++i) {
-        SDL_Rect row{panel.x + 24, 116 + i * 64, panel.w - 48, 52};
+        SDL_Rect row{panel.x + 24, panel.y + 126 + i * 66, panel.w - 48, 54};
         const bool isSelected = i == sidebar.index();
         fillRect(m_renderer, row, isSelected ? color(19, 42, 79) : color(17, 24, 39));
         strokeRect(m_renderer, row, color(51, 65, 85));
         if (isSelected) {
             drawFocus(m_renderer, row);
         }
-        renderText(items[i]->title(), row.x + 14, row.y + 14, m_fontMedium, color(241, 245, 249));
+        renderText(items[i]->title(), row.x + 14, row.y + 15, m_fontMedium, color(241, 245, 249));
         if (!items[i]->info().empty()) {
-            renderText(fitText(m_fontSmall, items[i]->info(), 38), row.x + 180, row.y + 16, m_fontSmall, color(100, 116, 139));
+            renderText(fitText(m_fontSmall, items[i]->info(), 170), row.x + 188, row.y + 17, m_fontSmall, color(100, 116, 139));
         }
     }
 }
 
 void SaveShell::renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color colorValue) {
-    if (!font || text.empty()) {
+    if (text.empty()) {
         return;
     }
 
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), colorValue);
+    TTF_Font* actualFont = selectFont(font, text);
+    if (!actualFont) {
+        return;
+    }
+
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(actualFont, text.c_str(), colorValue);
     if (!surface) {
         return;
     }
@@ -362,13 +579,30 @@ void SaveShell::renderText(const std::string& text, int x, int y, TTF_Font* font
     SDL_FreeSurface(surface);
 }
 
+void SaveShell::renderTextCentered(const std::string& text, const SDL_Rect& rect, TTF_Font* font, SDL_Color colorValue) {
+    TTF_Font* actualFont = selectFont(font, text);
+    if (!actualFont) {
+        return;
+    }
+
+    int width = 0;
+    int height = 0;
+    TTF_SizeUTF8(actualFont, text.c_str(), &width, &height);
+    renderText(text,
+               rect.x + std::max(0, (rect.w - width) / 2),
+               rect.y + std::max(0, (rect.h - height) / 2),
+               actualFont,
+               colorValue);
+}
+
 std::string SaveShell::fitText(TTF_Font* font, const std::string& text, int maxWidth) const {
-    if (!font) {
+    TTF_Font* actualFont = selectFont(font, text);
+    if (!actualFont) {
         return text;
     }
     int width = 0;
     int height = 0;
-    TTF_SizeUTF8(font, text.c_str(), &width, &height);
+    TTF_SizeUTF8(actualFont, text.c_str(), &width, &height);
     if (width <= maxWidth) {
         return text;
     }
@@ -377,7 +611,7 @@ std::string SaveShell::fitText(TTF_Font* font, const std::string& text, int maxW
     while (!clipped.empty()) {
         clipped.pop_back();
         std::string trial = clipped + "...";
-        TTF_SizeUTF8(font, trial.c_str(), &width, &height);
+        TTF_SizeUTF8(actualFont, trial.c_str(), &width, &height);
         if (width <= maxWidth) {
             return trial;
         }
@@ -389,13 +623,411 @@ SDL_Texture* SaveShell::loadIcon(const std::string& path) {
     if (path.empty()) {
         return nullptr;
     }
+    auto it = m_iconCache.find(path);
+    if (it != m_iconCache.end()) {
+        rememberCachedIcon(path);
+        return it->second;
+    }
     SDL_Surface* surface = IMG_Load(path.c_str());
     if (!surface) {
         return nullptr;
     }
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(m_renderer, surface);
+
+    SDL_Surface* scaledSurface = SDL_CreateRGBSurfaceWithFormat(0,
+                                                                ICON_TEXTURE_SIZE,
+                                                                ICON_TEXTURE_SIZE,
+                                                                32,
+                                                                SDL_PIXELFORMAT_RGBA32);
+    if (!scaledSurface) {
+        SDL_FreeSurface(surface);
+        return nullptr;
+    }
+
+    SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);
+    SDL_FillRect(scaledSurface, nullptr, SDL_MapRGBA(scaledSurface->format, 0, 0, 0, 0));
+
+    SDL_Rect destRect{};
+    if (surface->w > 0 && surface->h > 0) {
+        if (surface->w >= surface->h) {
+            destRect.w = ICON_TEXTURE_SIZE;
+            destRect.h = std::max(1, (surface->h * ICON_TEXTURE_SIZE) / surface->w);
+            destRect.x = 0;
+            destRect.y = (ICON_TEXTURE_SIZE - destRect.h) / 2;
+        } else {
+            destRect.h = ICON_TEXTURE_SIZE;
+            destRect.w = std::max(1, (surface->w * ICON_TEXTURE_SIZE) / surface->h);
+            destRect.y = 0;
+            destRect.x = (ICON_TEXTURE_SIZE - destRect.w) / 2;
+        }
+    }
+
+    SDL_BlitScaled(surface, nullptr, scaledSurface, &destRect);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(m_renderer, scaledSurface);
+    SDL_FreeSurface(scaledSurface);
     SDL_FreeSurface(surface);
+    if (texture) {
+        m_iconCache[path] = texture;
+        rememberCachedIcon(path);
+        trimIconCache();
+    }
     return texture;
+}
+
+void SaveShell::rememberCachedIcon(const std::string& path) {
+    auto existing = std::find(m_iconCacheOrder.begin(), m_iconCacheOrder.end(), path);
+    if (existing != m_iconCacheOrder.end()) {
+        m_iconCacheOrder.erase(existing);
+    }
+    m_iconCacheOrder.push_back(path);
+}
+
+void SaveShell::trimIconCache() {
+    while (m_iconCacheOrder.size() > MAX_ICON_CACHE_ITEMS) {
+        const std::string oldest = m_iconCacheOrder.front();
+        m_iconCacheOrder.pop_front();
+
+        auto it = m_iconCache.find(oldest);
+        if (it == m_iconCache.end()) {
+            continue;
+        }
+        if (it->second) {
+            SDL_DestroyTexture(it->second);
+        }
+        m_iconCache.erase(it);
+    }
+}
+
+void SaveShell::openUserPicker() {
+    m_overlay = Overlay::UserPicker;
+    m_overlayIndex = 0;
+    const auto* selectedUser = m_saveManager.getSelectedUser();
+    const auto& users = m_saveManager.getUsers();
+    if (!selectedUser) {
+        return;
+    }
+    for (int i = 0; i < static_cast<int>(users.size()); ++i) {
+        if (users[i].id == selectedUser->id) {
+            m_overlayIndex = i;
+            break;
+        }
+    }
+}
+
+void SaveShell::openDropboxOverlay() {
+    m_overlay = Overlay::DropboxAuth;
+    m_overlayIndex = 0;
+    m_statusMessage = m_dropbox.isOAuthConfigured()
+        ? tr("auth.status_waiting_link", "Ready to create sign-in link")
+        : tr("auth.status_missing_config", "This build has no Dropbox app key");
+}
+
+void SaveShell::closeOverlay() {
+    if (m_hostTextInput) {
+        SDL_StopTextInput();
+        m_hostTextInput = false;
+    }
+    m_overlay = Overlay::None;
+    m_overlayIndex = 0;
+}
+
+void SaveShell::refreshCurrentScreen() {
+    auto current = Runtime::instance().current();
+    if (!current) {
+        rebuildRootScreen();
+        return;
+    }
+    if (current->kind() == ObjectKind::SaveMenuScreen) {
+        rebuildRootScreen();
+        return;
+    }
+    if (current->kind() == ObjectKind::RevisionMenuScreen) {
+        auto* screen = static_cast<RevisionMenuScreen*>(current.get());
+        Runtime::instance().pop();
+        Runtime::instance().push(std::make_shared<RevisionMenuScreen>(m_backend,
+                                                                      screen->entries().empty() ? 0 : screen->entries().front().source == SaveSource::Cloud ? 0 : 0,
+                                                                      SaveSource::Local,
+                                                                      screen->titleLabel()));
+    }
+}
+
+void SaveShell::updateOverlay() {
+    int itemCount = 0;
+    if (m_overlay == Overlay::UserPicker) {
+        itemCount = static_cast<int>(m_saveManager.getUsers().size());
+    } else if (m_overlay == Overlay::DropboxAuth) {
+        itemCount = 4;
+    }
+
+    if (m_controller.gotDown(Button::B)) {
+        closeOverlay();
+        return;
+    }
+    if (m_controller.gotDown(Button::Up) && itemCount > 0) {
+        m_overlayIndex = (m_overlayIndex - 1 + itemCount) % itemCount;
+    }
+    if (m_controller.gotDown(Button::Down) && itemCount > 0) {
+        m_overlayIndex = (m_overlayIndex + 1) % itemCount;
+    }
+    if (m_controller.gotDown(Button::A)) {
+        activateOverlaySelection();
+    }
+}
+
+void SaveShell::activateOverlaySelection() {
+    if (m_overlay == Overlay::UserPicker) {
+        const auto& users = m_saveManager.getUsers();
+        if (m_overlayIndex >= 0 && m_overlayIndex < static_cast<int>(users.size()) &&
+            m_saveManager.selectUser(static_cast<std::size_t>(m_overlayIndex))) {
+            rebuildRootScreen();
+            m_statusMessage = tr("ui.user_changed", "Selection changed");
+        }
+        closeOverlay();
+        return;
+    }
+
+    if (m_overlay != Overlay::DropboxAuth) {
+        return;
+    }
+
+    switch (m_overlayIndex) {
+        case 0: {
+            if (!m_dropbox.isOAuthConfigured()) {
+                m_statusMessage = tr("auth.missing_config_hint", "This build cannot start Dropbox OAuth.");
+                return;
+            }
+            m_authUrl = m_dropbox.getAuthorizeUrl();
+            if (m_authUrl.empty()) {
+                m_statusMessage = tr("auth.browser_failed", "Failed to create authorization link.");
+                return;
+            }
+            const bool opened = launchDropboxAuthorizeUrl(m_authUrl);
+            m_statusMessage = opened
+                ? tr("auth.browser_opened", "Opened Dropbox sign-in. Finish approval, then paste the code.")
+                : tr("auth.waiting_code_hint", "Copy the URL or open it on another device, then paste the code.");
+            return;
+        }
+        case 1:
+            if (promptForAuthCode()) {
+                m_statusMessage = tr("auth.status_ready_to_connect", "Authorization code ready.");
+            }
+            return;
+        case 2:
+            if (m_authInput.empty()) {
+                m_statusMessage = tr("auth.waiting_code_hint", "Enter the authorization code first.");
+                return;
+            }
+            if (m_dropbox.exchangeAuthorizationCode(m_authInput)) {
+                m_statusMessage = tr("status.connected", "Connected");
+                m_authInput.clear();
+                closeOverlay();
+                rebuildRootScreen();
+            } else {
+                m_statusMessage = tr("ui.auth_failed", "Dropbox authorization failed.");
+            }
+            return;
+        case 3:
+            m_dropbox.logout();
+            m_authInput.clear();
+            m_authUrl.clear();
+            m_statusMessage = tr("status.disconnected", "Not connected");
+            closeOverlay();
+            rebuildRootScreen();
+            return;
+        default:
+            return;
+    }
+}
+
+void SaveShell::renderDropboxOverlay() {
+    SDL_Rect shade{0, 0, 1280, 720};
+    fillRect(m_renderer, shade, color(2, 6, 14, 180));
+    SDL_Rect panel{180, 92, 920, 560};
+    drawPanel(m_renderer, panel, color(11, 18, 31, 250), color(51, 65, 85));
+    renderText(tr("auth.title", "Dropbox Setup"), panel.x + 28, panel.y + 22, m_fontLarge, color(241, 245, 249));
+    renderText(fitText(m_fontSmall, tr("auth.setup_time", "Open Dropbox sign-in and finish the connection here."), panel.w - 56),
+               panel.x + 28,
+               panel.y + 64,
+               m_fontSmall,
+               color(148, 163, 184));
+
+    SDL_Rect stateRect{panel.x + 28, panel.y + 104, panel.w - 56, 48};
+    fillRect(m_renderer, stateRect, color(15, 23, 42));
+    strokeRect(m_renderer, stateRect, color(51, 65, 85));
+    renderText(fitText(m_fontSmall, m_statusMessage, stateRect.w - 24),
+               stateRect.x + 12,
+               stateRect.y + 13,
+               m_fontSmall,
+               color(125, 211, 252));
+
+    int sectionY = stateRect.y + stateRect.h + 18;
+    if (!m_authUrl.empty()) {
+        renderText(tr("ui.url", "URL"), panel.x + 28, sectionY, m_fontSmall, color(100, 116, 139));
+        SDL_Rect urlRect{panel.x + 28, sectionY + 24, panel.w - 56, 56};
+        fillRect(m_renderer, urlRect, color(15, 23, 42));
+        strokeRect(m_renderer, urlRect, color(51, 65, 85));
+        renderText(fitText(m_fontSmall, m_authUrl, urlRect.w - 24), urlRect.x + 12, urlRect.y + 14, m_fontSmall, color(241, 245, 249));
+        sectionY = urlRect.y + urlRect.h + 18;
+    }
+
+    renderText(tr("auth.input_label", "Authorization code"), panel.x + 28, sectionY, m_fontSmall, color(100, 116, 139));
+    SDL_Rect inputRect{panel.x + 28, sectionY + 24, panel.w - 56, 50};
+    fillRect(m_renderer, inputRect, color(15, 23, 42));
+    strokeRect(m_renderer, inputRect, color(51, 65, 85));
+    renderText(fitText(m_fontSmall, m_authInput.empty() ? tr("auth.token_placeholder", "Paste the Dropbox authorization code here...") : m_authInput, inputRect.w - 24),
+               inputRect.x + 12,
+               inputRect.y + 14,
+               m_fontSmall,
+               m_authInput.empty() ? color(100, 116, 139) : color(241, 245, 249));
+
+    const char* actions[4] = {
+        "auth.get_link",
+        "auth.connect_code",
+        "auth.connect",
+        "ui.logout",
+    };
+    const char* fallbacks[4] = {
+        "Open Sign-In",
+        "Enter Code",
+        "Connect Dropbox",
+        "Logout",
+    };
+    const int actionsTop = inputRect.y + inputRect.h + 22;
+    const int actionRowH = 40;
+    const int actionGap = 8;
+    for (int i = 0; i < 4; ++i) {
+        SDL_Rect row{panel.x + 28, actionsTop + i * (actionRowH + actionGap), panel.w - 56, actionRowH};
+        const bool selected = i == m_overlayIndex;
+        fillRect(m_renderer, row, selected ? color(19, 42, 79) : color(17, 24, 39));
+        strokeRect(m_renderer, row, color(51, 65, 85));
+        if (selected) {
+            drawFocus(m_renderer, row);
+        }
+        renderText(tr(actions[i], fallbacks[i]), row.x + 14, row.y + 8, m_fontMedium, color(241, 245, 249));
+    }
+
+    renderFooter("A: Select  Up/Down: Move  B: Close",
+                 tr("ui.auth_footer", "Open login on Switch, then paste the callback URL or code."));
+}
+
+void SaveShell::renderUserPickerOverlay() {
+    SDL_Rect shade{0, 0, 1280, 720};
+    fillRect(m_renderer, shade, color(2, 6, 14, 180));
+    SDL_Rect panel{260, 128, 760, 464};
+    drawPanel(m_renderer, panel, color(11, 18, 31, 250), color(51, 65, 85));
+    renderText(tr("ui.pick_user", "Choose Save Target"), panel.x + 28, panel.y + 22, m_fontLarge, color(241, 245, 249));
+    renderText(tr("ui.pick_user_hint", "Switch between user saves and device saves here."), panel.x + 28, panel.y + 62, m_fontSmall, color(148, 163, 184));
+
+    const auto& users = m_saveManager.getUsers();
+    const auto* selectedUser = m_saveManager.getSelectedUser();
+    for (int i = 0; i < static_cast<int>(users.size()); ++i) {
+        const auto& user = users[i];
+        SDL_Rect row{panel.x + 28, panel.y + 110 + i * 64, panel.w - 56, 50};
+        const bool selected = i == m_overlayIndex;
+        fillRect(m_renderer, row, selected ? color(19, 42, 79) : color(17, 24, 39));
+        strokeRect(m_renderer, row, color(51, 65, 85));
+        if (selected) {
+            drawFocus(m_renderer, row);
+        }
+        renderText(user.name, row.x + 14, row.y + 12, m_fontMedium, color(241, 245, 249));
+        const bool isDevice = user.id == "device";
+        const std::string mode = isDevice ? tr("ui.mode_device", "Device saves") : tr("ui.mode_user", "User saves");
+        renderText(mode, row.x + 280, row.y + 15, m_fontSmall, color(148, 163, 184));
+        if (selectedUser && selectedUser->id == user.id) {
+            renderStatusChip(tr("ui.current", "Current"), row.x + row.w - 130, row.y + 10, 110, color(20, 83, 45), color(74, 222, 128));
+        }
+    }
+
+    renderFooter("A: Select  Up/Down: Move  B: Close",
+                 tr("ui.selection_footer", "The title list will rescan for the selected save type."));
+}
+
+bool SaveShell::launchDropboxAuthorizeUrl(const std::string& url) {
+#ifdef __SWITCH__
+    if (url.empty()) {
+        return false;
+    }
+    WebCommonConfig config{};
+    if (R_FAILED(webPageCreate(&config, url.c_str()))) {
+        return false;
+    }
+    webConfigSetCallbackUrl(&config, "https://localhost/oc-save-keeper/callback");
+    WebCommonReply reply{};
+    return R_SUCCEEDED(webConfigShow(&config, &reply));
+#else
+    (void)url;
+    return false;
+#endif
+}
+
+bool SaveShell::promptForAuthCode() {
+#ifdef __SWITCH__
+    SwkbdConfig keyboard{};
+    if (R_FAILED(swkbdCreate(&keyboard, 0))) {
+        return false;
+    }
+    swkbdConfigMakePresetDefault(&keyboard);
+    swkbdConfigSetGuideText(&keyboard, tr("auth.token_placeholder", "Paste the Dropbox authorization code here...").c_str());
+    swkbdConfigSetHeaderText(&keyboard, tr("auth.input_label", "Authorization code").c_str());
+    swkbdConfigSetStringLenMax(&keyboard, 1024);
+    char buffer[1025] = {0};
+    const Result rc = swkbdShow(&keyboard, buffer, sizeof(buffer));
+    swkbdClose(&keyboard);
+    if (R_FAILED(rc) || buffer[0] == '\0') {
+        return false;
+    }
+    m_authInput = buffer;
+    return true;
+#else
+    if (!m_hostTextInput) {
+        m_authInput.clear();
+        SDL_StartTextInput();
+        m_hostTextInput = true;
+    }
+    return true;
+#endif
+}
+
+bool SaveShell::currentLanguageIsKorean() const {
+    return utils::Language::instance().currentLang() == "ko";
+}
+
+bool SaveShell::textNeedsFallbackFont(const std::string& text) const {
+    if (!currentLanguageIsKorean()) {
+        return false;
+    }
+    for (unsigned char c : text) {
+        if (c & 0x80U) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TTF_Font* SaveShell::selectFont(TTF_Font* preferred, const std::string& text) const {
+    if (!preferred) {
+        return nullptr;
+    }
+    if (!textNeedsFallbackFont(text)) {
+        return preferred;
+    }
+    if (preferred == m_fontLarge && m_fontLargeFallback) {
+        return m_fontLargeFallback;
+    }
+    if (preferred == m_fontMedium && m_fontMediumFallback) {
+        return m_fontMediumFallback;
+    }
+    if (preferred == m_fontSmall && m_fontSmallFallback) {
+        return m_fontSmallFallback;
+    }
+    return preferred;
+}
+
+std::string SaveShell::tr(const char* key, const char* fallback) const {
+    const std::string value = utils::Language::instance().get(key);
+    if (value.size() >= 2 && value.front() == '[' && value.back() == ']') {
+        return fallback;
+    }
+    return value;
 }
 
 } // namespace ui::saves

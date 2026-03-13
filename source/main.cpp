@@ -11,7 +11,7 @@
 
 #include "core/SaveManager.hpp"
 #include "network/Dropbox.hpp"
-#include "ui/MainUI.hpp"
+#include "ui/saves/SaveShell.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Paths.hpp"
 
@@ -67,6 +67,16 @@ bool initialize() {
         LOG_ERROR("SDL_CreateRenderer failed: %s", SDL_GetError());
         return false;
     }
+
+    if (SDL_RenderSetLogicalSize(g_renderer, SCREEN_WIDTH, SCREEN_HEIGHT) < 0) {
+        LOG_ERROR("SDL_RenderSetLogicalSize failed: %s", SDL_GetError());
+        return false;
+    }
+
+    if (SDL_RenderSetIntegerScale(g_renderer, SDL_FALSE) < 0) {
+        LOG_ERROR("SDL_RenderSetIntegerScale failed: %s", SDL_GetError());
+        return false;
+    }
     
     int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
     if (!(IMG_Init(imgFlags) & imgFlags)) {
@@ -110,7 +120,7 @@ void run() {
         return;
     }
     
-    ui::MainUI mainUI(g_renderer, dropbox, saveManager);
+    ui::saves::SaveShell mainUI(g_renderer, dropbox, saveManager);
     if (!mainUI.initialize()) {
         LOG_ERROR("Failed to initialize UI");
         return;

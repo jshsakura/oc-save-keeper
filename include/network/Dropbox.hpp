@@ -62,7 +62,7 @@ public:
     bool createFolder(const std::string& path);
     
     // Listing
-    std::vector<DropboxFile> listFolder(const std::string& path = "");
+    std::vector<DropboxFile> listFolder(const std::string& path = "", bool recursive = false);
     bool fileExists(const std::string& dropboxPath);
     
     // Getters
@@ -75,8 +75,11 @@ private:
 #else
     static constexpr const char* CLIENT_ID = "";
 #endif
+    std::string clientId() const;
+    std::string loadClientId() const;
     
     // Tokens
+    std::string m_clientId;
     std::string m_accessToken;
     std::string m_refreshToken;
     std::time_t m_tokenExpiresAt;
@@ -88,6 +91,10 @@ private:
     CURL* m_curl;
     
     // Internal
+    bool appendListFolderPage(const std::string& response,
+                              std::vector<DropboxFile>& files,
+                              std::string* outCursor,
+                              bool* outHasMore);
     std::string performRequest(const std::string& url, 
                                const std::string& postData = "",
                                const std::string& authHeader = "",

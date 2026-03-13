@@ -13,7 +13,7 @@ void GridMenuBase::onLayoutChange(std::unique_ptr<List>& list, int layout) {
             list->setLayout(List::Layout::Home);
             break;
         case LayoutTypeGrid:
-            list = std::make_unique<List>(6, 12, Vec4{0, 0, 1280, 720}, Vec4{93, 186, 174, 174}, Vec2{10, 10});
+            list = std::make_unique<List>(4, 12, Vec4{0, 0, 1280, 720}, Vec4{93, 186, 174, 174}, Vec2{10, 10});
             list->setLayout(List::Layout::Grid);
             break;
         case LayoutTypeGridDetail:

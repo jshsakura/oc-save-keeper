@@ -137,25 +137,33 @@ Create an app with:
 - Access: `App folder`
 - App name: something like `OCSaveKeeper-Backup`
 
-### 2. Build with your Dropbox app key
+### 2. Put your Dropbox app key in `.env`
 
-PKCE still needs the app key on the client. Build with:
+Create a file named `.env` in the project root:
 
 ```bash
-make DROPBOX_APP_KEY=your_dropbox_app_key
+DROPBOX_APP_KEY=your_dropbox_app_key
 ```
 
-Do not generate or paste a long-lived access token anymore.
+Then build normally:
+
+```bash
+make
+```
+
+Command-line override still works if you want it, but `.env` is the default path now.
+
+For GitHub Actions builds, set repository secret `DROPBOX_APP_KEY`.
 
 ### 3. Connect on Switch
 
 Launch `oc-save-keeper`, open the Dropbox setup screen, then:
 
-1. press `Get Link`
+1. press `Open Sign-In`
 2. open the Dropbox authorization link on your phone or PC
 3. approve the app
 4. copy the returned authorization code or the full redirected URL
-5. paste it into the Switch and press `Connect Code`
+5. paste it into the Switch and press `Connect Dropbox`
 
 The app stores the resulting OAuth session here:
 

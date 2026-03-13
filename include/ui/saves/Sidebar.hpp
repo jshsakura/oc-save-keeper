@@ -62,6 +62,10 @@ public:
         return m_items;
     }
 
+    const std::string& title() const {
+        return m_title;
+    }
+
     int index() const {
         return m_index;
     }
