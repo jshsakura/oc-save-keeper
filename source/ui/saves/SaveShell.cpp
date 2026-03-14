@@ -773,6 +773,8 @@ void SaveShell::updateOverlay() {
             itemCount = 2; // Yes, No
         } else if (m_dropbox.isAuthenticated()) {
             itemCount = 1; // Logout
+        } else if (m_dropboxState == DropboxAuthState::Failed) {
+            itemCount = 1; // Retry
         } else {
             itemCount = 0;
         }
@@ -858,6 +860,13 @@ void SaveShell::activateOverlaySelection() {
         return;
     }
 
+    if (m_dropboxState == DropboxAuthState::Failed) {
+        if (m_overlayIndex == 0) { // Retry
+            openDropboxOverlay();
+        }
+        return;
+    }
+
     // If not authenticated, we might have some actions, but currently it's all automatic except 'Cancel' (which is B)
 }
 
@@ -894,6 +903,13 @@ void SaveShell::renderDropboxOverlay() {
         strokeRect(m_renderer, row, color(51, 65, 85));
         if (selected) drawFocus(m_renderer, row);
         renderTextCentered(tr("ui.logout", "Logout"), row, m_fontMedium, color(248, 113, 113));
+    } else if (m_dropboxState == DropboxAuthState::Failed) {
+        SDL_Rect row{panel.x + 100, panel.y + 200, panel.w - 200, 60};
+        const bool selected = m_overlayIndex == 0;
+        fillRect(m_renderer, row, selected ? color(19, 42, 79) : color(17, 24, 39));
+        strokeRect(m_renderer, row, color(51, 65, 85));
+        if (selected) drawFocus(m_renderer, row);
+        renderTextCentered(tr("ui.retry", "Retry"), row, m_fontMedium, color(241, 245, 249));
     } else {
         // Show QR code for login
         if (m_authQrCode.size > 0) {

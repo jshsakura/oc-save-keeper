@@ -102,6 +102,7 @@
     "ui.no_save_entries": "No save entries",
     "ui.no_revision_entries": "No revision entries",
     "ui.refresh": "Refresh",
+    "ui.retry": "Retry",
     "ui.revision": "Revision",
     "ui.device": "Device",
     "ui.source": "Source",

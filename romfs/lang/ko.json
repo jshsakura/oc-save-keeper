@@ -102,6 +102,7 @@
     "ui.no_save_entries": "표시할 세이브가 없습니다.",
     "ui.no_revision_entries": "표시할 이력이 없습니다.",
     "ui.refresh": "새로고침",
+    "ui.retry": "재시도",
     "ui.revision": "버전",
     "ui.device": "기기",
     "ui.source": "출처",
