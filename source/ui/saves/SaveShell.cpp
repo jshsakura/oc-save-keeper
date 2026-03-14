@@ -395,22 +395,22 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
     const int firstVisible = screen.firstVisibleIndex();
     const int lastVisible = std::min(static_cast<int>(entries.size()), firstVisible + std::max(1, screen.visibleCount()));
     const int cols = 4;
-    const int frameX = 24;
+    const int frameX = 12; // 여백 축소 (24 -> 12)
     const int frameY = 108;
     const int frameH = 552;
-    const int frameW = 1280 - frameX * 2;
-    const int gap = 10;
+    const int frameW = 1280 - frameX * 2; // 전체 너비 확장
+    const int gap = 12;
     const int innerPad = 12;
     const int cardW = (frameW - innerPad * 2 - gap * (cols - 1)) / cols;
-    const int cardH = 120;
+    const int cardH = 124; // 높이 약간 증가
     const int startX = frameX + innerPad;
     const int startY = frameY + innerPad;
 
     SDL_Rect contentFrame{frameX, frameY, frameW, frameH};
     drawPanel(m_renderer, contentFrame, color(9, 15, 26, 245), color(51, 65, 85));
 
-    renderText(lang.get("ui.section_titles"), frameX + 20, frameY + 12, m_fontSmall, color(100, 116, 139));
-    if (!m_statusMessage.empty()) {
+    renderText(lang.get("ui.section_titles"), frameX + 24, frameY + 12, m_fontSmall, color(100, 116, 139));
+    if (!m_statusMessage.empty() && m_overlay == Overlay::None) {
         renderText(fitText(m_fontSmall, m_statusMessage, 640), frameX + 240, frameY + 12, m_fontSmall, color(125, 211, 252));
     }
 
@@ -419,7 +419,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
         const int visibleIndex = i - firstVisible;
         const int row = visibleIndex / cols;
         const int col = visibleIndex % cols;
-        SDL_Rect card{startX + col * (cardW + gap), startY + row * (cardH + gap), cardW, cardH};
+        SDL_Rect card{startX + col * (cardW + gap), startY + row * (cardH + gap) + 24, cardW, cardH};
         const bool isSelected = i == selected;
 
         drawPanel(m_renderer, card, isSelected ? color(19, 42, 79) : color(17, 24, 39), color(51, 65, 85));
@@ -427,28 +427,28 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
             drawFocus(m_renderer, card);
         }
 
-        const int iconSize = 64;
-        SDL_Rect iconRect{card.x + 10, card.y + (card.h - iconSize) / 2, iconSize, iconSize};
+        const int iconSize = 80; // 아이콘 크기 증가 (64 -> 80)
+        SDL_Rect iconRect{card.x + 12, card.y + (card.h - iconSize) / 2, iconSize, iconSize};
         SDL_Rect iconFrame{iconRect.x - 1, iconRect.y - 1, iconRect.w + 2, iconRect.h + 2};
         fillRect(m_renderer, iconFrame, color(8, 12, 22));
         if (SDL_Texture* icon = loadIcon(entry.iconPath)) {
             SDL_RenderCopy(m_renderer, icon, nullptr, &iconRect);
         } else {
             fillRect(m_renderer, iconRect, color(15, 23, 42));
-            renderText("?", iconRect.x + 26, iconRect.y + 18, m_fontMedium, color(148, 163, 184));
+            renderText("?", iconRect.x + 32, iconRect.y + 24, m_fontMedium, color(148, 163, 184));
         }
         strokeRect(m_renderer, iconFrame, color(51, 65, 85));
 
-        const int textX = iconRect.x + iconRect.w + 12;
-        const int textW = card.x + card.w - textX - 10;
-        renderText(fitText(m_fontMedium, entry.name, textW), textX, card.y + 12, m_fontMedium, color(241, 245, 249));
-        renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 38, m_fontSmall, color(148, 163, 184));
-        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 58, m_fontSmall, color(100, 116, 139));
+        const int textX = iconRect.x + iconRect.w + 16;
+        const int textW = card.x + card.w - textX - 12;
+        renderText(fitText(m_fontMedium, entry.name, textW), textX, card.y + 14, m_fontMedium, color(241, 245, 249));
+        renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 44, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 66, m_fontSmall, color(100, 116, 139));
 
-        const int chipGap = 6;
+        const int chipGap = 8;
         const int chipW = std::max(60, (textW - chipGap) / 2);
-        SDL_Rect localChip{textX, card.y + 88, chipW, 20};
-        SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 88, chipW, 20};
+        SDL_Rect localChip{textX, card.y + 92, chipW, 22};
+        SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 92, chipW, 22};
         fillRect(m_renderer, localChip, entry.hasLocalBackup ? color(8, 47, 73) : color(39, 39, 42));
         fillRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(20, 83, 45) : color(39, 39, 42));
         strokeRect(m_renderer, localChip, entry.hasLocalBackup ? color(56, 189, 248) : color(82, 82, 91));
@@ -517,28 +517,30 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
 }
 
 void SaveShell::renderSidebar(const Sidebar& sidebar) {
-    SDL_Rect panel{904, 96, 352, 580};
+    const int sidebarW = 512;
+    SDL_Rect panel{1280 - sidebarW, 96, sidebarW, 580};
     fillRect(m_renderer, panel, color(17, 24, 39, 250));
     SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
     SDL_RenderDrawLine(m_renderer, panel.x, panel.y, panel.x, panel.y + panel.h);
-    SDL_Rect topLine{panel.x + 24, panel.y + 76, panel.w - 48, 1};
+    
+    SDL_Rect topLine{panel.x + 32, panel.y + 76, panel.w - 64, 1};
     fillRect(m_renderer, topLine, color(51, 65, 85));
-    renderText(tr("ui.save_actions", "Save Actions"), panel.x + 24, panel.y + 18, m_fontSmall, color(56, 189, 248));
-    renderText(fitText(m_fontMedium, sidebar.title(), panel.w - 48), panel.x + 24, panel.y + 42, m_fontMedium, color(241, 245, 249));
-    renderText(tr("ui.actions_hint", "A Confirm   B Close"), panel.x + 24, panel.y + 90, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.save_actions", "Save Actions"), panel.x + 32, panel.y + 18, m_fontSmall, color(56, 189, 248));
+    renderText(fitText(m_fontMedium, sidebar.title(), panel.w - 64), panel.x + 32, panel.y + 42, m_fontMedium, color(241, 245, 249));
+    renderText(tr("ui.actions_hint", "A Confirm   B Close"), panel.x + 32, panel.y + 90, m_fontSmall, color(100, 116, 139));
 
     const auto& items = sidebar.items();
     for (int i = 0; i < static_cast<int>(items.size()); ++i) {
-        SDL_Rect row{panel.x + 24, panel.y + 126 + i * 66, panel.w - 48, 54};
+        SDL_Rect row{panel.x + 32, panel.y + 126 + i * 72, panel.w - 64, 60};
         const bool isSelected = i == sidebar.index();
         fillRect(m_renderer, row, isSelected ? color(19, 42, 79) : color(17, 24, 39));
         strokeRect(m_renderer, row, color(51, 65, 85));
         if (isSelected) {
             drawFocus(m_renderer, row);
         }
-        renderText(items[i]->title(), row.x + 14, row.y + 15, m_fontMedium, color(241, 245, 249));
+        renderText(items[i]->title(), row.x + 20, row.y + 16, m_fontMedium, color(241, 245, 249));
         if (!items[i]->info().empty()) {
-            renderText(fitText(m_fontSmall, items[i]->info(), 170), row.x + 188, row.y + 17, m_fontSmall, color(100, 116, 139));
+            renderText(fitText(m_fontSmall, items[i]->info(), 240), row.x + row.w - 250, row.y + 18, m_fontSmall, color(100, 116, 139));
         }
     }
 }
@@ -712,17 +714,8 @@ void SaveShell::openDropboxOverlay() {
         m_dropboxState = DropboxAuthState::Idle;
         m_statusMessage = tr("auth.status_authenticated", "You are already connected to Dropbox.");
     } else {
-        m_dropboxState = DropboxAuthState::Starting;
-        m_statusMessage = tr("auth.status_starting_session", "Starting login session...");
-        if (m_dropbox.startBridgeSession(m_bridgeSession)) {
-            m_dropboxState = DropboxAuthState::WaitingForScan;
-            m_authUrl = m_bridgeSession.authorizeUrl;
-            updateAuthQrCode(m_authUrl);
-            m_statusMessage = tr("auth.status_waiting_scan", "Scan the QR code with your phone to login.");
-        } else {
-            m_dropboxState = DropboxAuthState::Failed;
-            m_statusMessage = tr("auth.status_bridge_failed", "Failed to start login session. Check your internet.");
-        }
+        m_dropboxState = DropboxAuthState::Idle;
+        m_statusMessage = tr("auth.status_ready", "Ready to start Dropbox connection.");
     }
 }
 
@@ -773,8 +766,8 @@ void SaveShell::updateOverlay() {
             itemCount = 2; // Yes, No
         } else if (m_dropbox.isAuthenticated()) {
             itemCount = 1; // Logout
-        } else if (m_dropboxState == DropboxAuthState::Failed) {
-            itemCount = 1; // Retry
+        } else if (m_dropboxState == DropboxAuthState::Failed || m_dropboxState == DropboxAuthState::Idle) {
+            itemCount = 1; // Start/Retry
         } else {
             itemCount = 0;
         }
@@ -860,9 +853,19 @@ void SaveShell::activateOverlaySelection() {
         return;
     }
 
-    if (m_dropboxState == DropboxAuthState::Failed) {
-        if (m_overlayIndex == 0) { // Retry
-            openDropboxOverlay();
+    if (m_dropboxState == DropboxAuthState::Failed || m_dropboxState == DropboxAuthState::Idle) {
+        if (m_overlayIndex == 0) { // Start/Retry
+            m_dropboxState = DropboxAuthState::Starting;
+            m_statusMessage = tr("auth.status_starting_session", "Starting login session...");
+            if (m_dropbox.startBridgeSession(m_bridgeSession)) {
+                m_dropboxState = DropboxAuthState::WaitingForScan;
+                m_authUrl = m_bridgeSession.authorizeUrl;
+                updateAuthQrCode(m_authUrl);
+                m_statusMessage = tr("auth.status_waiting_scan", "Scan the QR code with your phone to login.");
+            } else {
+                m_dropboxState = DropboxAuthState::Failed;
+                m_statusMessage = tr("auth.status_bridge_failed", "Failed to start login session. Check your internet.");
+            }
         }
         return;
     }
@@ -903,13 +906,15 @@ void SaveShell::renderDropboxOverlay() {
         strokeRect(m_renderer, row, color(51, 65, 85));
         if (selected) drawFocus(m_renderer, row);
         renderTextCentered(tr("ui.logout", "Logout"), row, m_fontMedium, color(248, 113, 113));
-    } else if (m_dropboxState == DropboxAuthState::Failed) {
+    } else if (m_dropboxState == DropboxAuthState::Failed || m_dropboxState == DropboxAuthState::Idle) {
         SDL_Rect row{panel.x + 100, panel.y + 200, panel.w - 200, 60};
         const bool selected = m_overlayIndex == 0;
         fillRect(m_renderer, row, selected ? color(19, 42, 79) : color(17, 24, 39));
         strokeRect(m_renderer, row, color(51, 65, 85));
         if (selected) drawFocus(m_renderer, row);
-        renderTextCentered(tr("ui.retry", "Retry"), row, m_fontMedium, color(241, 245, 249));
+        renderTextCentered(tr(m_dropboxState == DropboxAuthState::Idle ? "auth.start_login" : "ui.retry", 
+                              m_dropboxState == DropboxAuthState::Idle ? "Start Login" : "Retry"), 
+                           row, m_fontMedium, color(241, 245, 249));
     } else {
         // Show QR code for login
         if (m_authQrCode.size > 0) {
