@@ -7,6 +7,23 @@ on:
       - "main"
     tags:
       - "v*"
+    paths:
+      - 'source/**'
+      - 'include/**'
+      - 'romfs/**'
+      - 'Makefile'
+      - 'icon.png'
+      - 'GEMINI.md'
+      - '.github/workflows/release.yml'
+  pull_request:
+    branches:
+      - "main"
+    paths:
+      - 'source/**'
+      - 'include/**'
+      - 'romfs/**'
+      - 'Makefile'
+      - 'icon.png'
 
 permissions:
   contents: write
