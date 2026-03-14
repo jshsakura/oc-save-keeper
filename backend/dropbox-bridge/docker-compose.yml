@@ -1,18 +1,21 @@
 services:
   bridge:
+    image: jshsakura/oc-save-keeper-bridge:latest
     build:
       context: .
-    image: oc-save-keeper/dropbox-bridge:latest
-    env_file:
-      - path: .env
-        required: false
+    restart: unless-stopped
     ports:
       - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DROPBOX_APP_KEY=${DROPBOX_APP_KEY}
+      - POLL_TOKEN_SECRET=${POLL_TOKEN_SECRET}
+      - REDIRECT_BASE_URL=${REDIRECT_BASE_URL:-https://save.opencourse.kr}
     depends_on:
       - redis
-    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "no", "--save", ""]
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    # Redis는 내부망에서만 bridge와 통신하므로 ports를 노출하지 않아 보안을 강화합니다.
