@@ -374,8 +374,15 @@ void SaveShell::renderFooter(const std::string& leftHint, const std::string& rig
     SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
     SDL_RenderDrawLine(m_renderer, 0, footer.y, 1280, footer.y);
     renderText(leftHint, 24, footer.y + 10, m_fontSmall, color(148, 163, 184));
+    
     if (!rightHint.empty()) {
-        renderText(rightHint, 880, footer.y + 10, m_fontSmall, color(100, 116, 139));
+        const int maxW = 800; // 우측 텍스트 최대 너비
+        const std::string fitted = fitText(m_fontSmall, rightHint, maxW);
+        // 정확한 너비 계산 대신 대략적인 우측 정렬 시도 (TTF 너비 측정 함수 부재 시)
+        // 화면 우측에서 24px 떨어뜨리고, 예상 너비만큼 뺌
+        const int estimatedW = static_cast<int>(fitted.size() * 8); 
+        const int x = std::max(400, 1280 - 24 - estimatedW);
+        renderText(fitted, x, footer.y + 10, m_fontSmall, color(100, 116, 139));
     }
 }
 
