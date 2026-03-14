@@ -13,9 +13,16 @@ services:
       - REDIRECT_BASE_URL=${REDIRECT_BASE_URL:-https://save.opencourse.kr}
     depends_on:
       - redis
+    networks:
+      - bridge-net
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "no", "--save", ""]
-    # Redis는 내부망에서만 bridge와 통신하므로 ports를 노출하지 않아 보안을 강화합니다.
+    networks:
+      - bridge-net
+
+networks:
+  bridge-net:
+    driver: bridge
