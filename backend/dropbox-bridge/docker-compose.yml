@@ -14,15 +14,15 @@ services:
     depends_on:
       - redis
     networks:
-      - bridge-net
+      - oc-save-keeper-network
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "no", "--save", ""]
     networks:
-      - bridge-net
+      - oc-save-keeper-network
 
 networks:
-  bridge-net:
+  oc-save-keeper-network:
     driver: bridge
