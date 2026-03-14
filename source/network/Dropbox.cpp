@@ -20,6 +20,7 @@ static constexpr const char* DROPBOX_CONTENT = "https://content.dropboxapi.com/2
 static constexpr const char* DROPBOX_LIST_FOLDER = "https://api.dropboxapi.com/2/files/list_folder";
 static constexpr const char* DROPBOX_LIST_FOLDER_CONTINUE = "https://api.dropboxapi.com/2/files/list_folder/continue";
 static constexpr const char* DROPBOX_REDIRECT_URI = "https://localhost/oc-save-keeper/callback";
+static constexpr const char* DROPBOX_BRIDGE_BASE = "https://save.opencourse.kr";
 static constexpr const char* DROPBOX_AUTH_FILE = utils::paths::DROPBOX_AUTH_JSON;
 static constexpr const char* DROPBOX_LEGACY_TOKEN_FILE = utils::paths::DROPBOX_LEGACY_TOKEN;
 static constexpr const char* DROPBOX_APP_KEY_FILE = utils::paths::DROPBOX_APP_KEY_TXT;
@@ -121,6 +122,136 @@ std::string Dropbox::getAuthorizeUrl() {
 // Poll for authentication - check if user clicked the link and logged in
 bool Dropbox::checkAuthentication() {
     return ensureAccessToken();
+}
+
+bool Dropbox::startBridgeSession(DropboxBridgeSession& outSession) {
+    const std::string url = std::string(DROPBOX_BRIDGE_BASE) + "/v1/sessions/start";
+    const std::string postData = "{\"device_id\":\"switch\"}";
+    
+    std::string response = performRequest(url, postData, "Content-Type: application/json", false);
+    if (response.empty()) {
+        return false;
+    }
+
+    json_object* root = json_tokener_parse(response.c_str());
+    if (!root) return false;
+
+    json_object* sidObj = nullptr;
+    json_object* pollObj = nullptr;
+    json_object* authUrlObj = nullptr;
+    json_object* pollUrlObj = nullptr;
+
+    if (json_object_object_get_ex(root, "session_id", &sidObj))
+        outSession.sessionId = json_object_get_string(sidObj);
+    if (json_object_object_get_ex(root, "poll_token", &pollObj))
+        outSession.pollToken = json_object_get_string(pollObj);
+    if (json_object_object_get_ex(root, "authorize_url", &authUrlObj))
+        outSession.authorizeUrl = json_object_get_string(authUrlObj);
+    if (json_object_object_get_ex(root, "poll_url", &pollUrlObj))
+        outSession.pollUrl = json_object_get_string(pollUrlObj);
+
+    outSession.active = !outSession.sessionId.empty() && !outSession.pollToken.empty();
+    json_object_put(root);
+    return outSession.active;
+}
+
+std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
+    if (!session.active) return "expired";
+
+    const std::string url = session.pollUrl.empty() 
+        ? std::string(DROPBOX_BRIDGE_BASE) + "/v1/sessions/" + session.sessionId + "/status"
+        : session.pollUrl;
+    const std::string postData = "{\"poll_token\":\"" + session.pollToken + "\"}";
+
+    std::string response = performRequest(url, postData, "Content-Type: application/json", false);
+    if (response.empty()) return "failed";
+
+    json_object* root = json_tokener_parse(response.c_str());
+    if (!root) return "failed";
+
+    std::string status = "failed";
+    json_object* statusObj = nullptr;
+    if (json_object_object_get_ex(root, "status", &statusObj)) {
+        status = json_object_get_string(statusObj);
+    }
+
+    json_object_put(root);
+    return status;
+}
+
+bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
+    if (!session.active) return false;
+
+    const std::string url = std::string(DROPBOX_BRIDGE_BASE) + "/v1/sessions/" + session.sessionId + "/consume";
+    const std::string postData = "{\"poll_token\":\"" + session.pollToken + "\"}";
+
+    std::string response = performRequest(url, postData, "Content-Type: application/json", false);
+    if (response.empty()) return false;
+
+    json_object* root = json_tokener_parse(response.c_str());
+    if (!root) return false;
+
+    json_object *codeObj, *verifierObj, *stateObj, *redirectObj, *endpointObj;
+    bool ok = json_object_object_get_ex(root, "authorization_code", &codeObj) &&
+              json_object_object_get_ex(root, "code_verifier", &verifierObj) &&
+              json_object_object_get_ex(root, "state", &stateObj) &&
+              json_object_object_get_ex(root, "redirect_uri", &redirectObj) &&
+              json_object_object_get_ex(root, "token_endpoint", &endpointObj);
+
+    if (!ok) {
+        json_object_put(root);
+        return false;
+    }
+
+    // Now exchange the code for token
+    std::string authCode = json_object_get_string(codeObj);
+    std::string verifier = json_object_get_string(verifierObj);
+    std::string redirectUri = json_object_get_string(redirectObj);
+    std::string tokenEndpoint = json_object_get_string(endpointObj);
+
+    std::string tokenPostData =
+        "grant_type=authorization_code"
+        "&code=" + urlEncode(authCode) +
+        "&code_verifier=" + urlEncode(verifier) +
+        "&client_id=" + urlEncode(clientId()) +
+        "&redirect_uri=" + urlEncode(redirectUri);
+
+    std::string tokenResponse = performRequest(
+        tokenEndpoint,
+        tokenPostData,
+        "Content-Type: application/x-www-form-urlencoded",
+        false
+    );
+    
+    json_object_put(root); // Put Consume response
+
+    if (tokenResponse.empty()) return false;
+
+    json_object* tokenRoot = json_tokener_parse(tokenResponse.c_str());
+    if (!tokenRoot) return false;
+
+    json_object *accessTokenObj, *refreshTokenObj, *expiresInObj;
+    const bool hasAccess = json_object_object_get_ex(tokenRoot, "access_token", &accessTokenObj);
+    const bool hasRefresh = json_object_object_get_ex(tokenRoot, "refresh_token", &refreshTokenObj);
+
+    if (!hasAccess || !hasRefresh) {
+        json_object_put(tokenRoot);
+        return false;
+    }
+
+    m_accessToken = json_object_get_string(accessTokenObj);
+    m_refreshToken = json_object_get_string(refreshTokenObj);
+    if (json_object_object_get_ex(tokenRoot, "expires_in", &expiresInObj)) {
+        m_tokenExpiresAt = std::time(nullptr) + json_object_get_int64(expiresInObj);
+    } else {
+        m_tokenExpiresAt = 0;
+    }
+
+    json_object_put(tokenRoot);
+    m_authenticated = !m_accessToken.empty();
+    if (!m_authenticated) return false;
+    
+    return saveToken();
 }
 
 bool Dropbox::exchangeAuthorizationCode(const std::string& input) {

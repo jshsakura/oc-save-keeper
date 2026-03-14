@@ -28,6 +28,7 @@ Language: **English** | [한국어](README.ko.md)
 - 🚀 [Quick Start](#quick-start)
 - 📦 [Install](#install)
 - ☁️ [Dropbox Setup](#dropbox-setup)
+- 🌉 [Dropbox Bridge (Optional)](#dropbox-bridge-optional)
 - 🔄 [How Sync Decisions Work](#how-sync-decisions-work)
 - 🧪 [Build](#build)
 - ⚙️ [Release Automation](#release-automation)
@@ -160,15 +161,36 @@ For GitHub Actions builds, set repository secret `DROPBOX_APP_KEY`.
 Launch `oc-save-keeper`, open the Dropbox setup screen, then:
 
 1. press `Open Sign-In`
-2. open the Dropbox authorization link on your phone or PC
+2. scan the QR code (or copy the generated Dropbox authorization link) and open it on your phone or PC
 3. approve the app
 4. copy the returned authorization code or the full redirected URL
 5. paste it into the Switch and press `Connect Dropbox`
+
+The Switch build intentionally does not launch the Dropbox browser window directly anymore. This avoids web applet instability under Atmosphere and keeps the OAuth step on a device with a full browser.
 
 The app stores the resulting OAuth session here:
 
 ```text
 /switch/oc-save-keeper/config/dropbox_auth.json
+```
+
+## Dropbox Bridge (Optional)
+
+If you want callback-and-poll UX instead of manual code paste, use the Python bridge service under `backend/dropbox-bridge`.
+
+- Service docs: `backend/dropbox-bridge/README.md`
+- Architecture and load notes: `docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md`
+
+If your public domain is `save.opencourse.kr`, register this redirect URI in Dropbox App Console:
+
+```text
+https://save.opencourse.kr/oauth/dropbox/callback
+```
+
+Then set:
+
+```text
+REDIRECT_BASE_URL=https://save.opencourse.kr
 ```
 
 ## How Sync Decisions Work

@@ -218,16 +218,6 @@ void SaveShell::handleEvent(const SDL_Event& event) {
             }
             break;
         case SDL_KEYDOWN:
-            if (m_overlay == Overlay::DropboxAuth && m_hostTextInput) {
-                if (event.key.keysym.sym == SDLK_BACKSPACE && !m_authInput.empty()) {
-                    m_authInput.pop_back();
-                    break;
-                }
-                if (event.key.keysym.sym == SDLK_RETURN) {
-                    activateOverlaySelection();
-                    break;
-                }
-            }
             switch (event.key.keysym.sym) {
                 case SDLK_RETURN: setButtonDown(Button::A); break;
                 case SDLK_BACKSPACE:
@@ -244,9 +234,6 @@ void SaveShell::handleEvent(const SDL_Event& event) {
             }
             break;
         case SDL_TEXTINPUT:
-            if (m_overlay == Overlay::DropboxAuth && m_hostTextInput) {
-                m_authInput += event.text.text;
-            }
             break;
         case SDL_MOUSEBUTTONDOWN:
             m_touch.x = event.button.x;
@@ -412,10 +399,10 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
     const int frameY = 108;
     const int frameH = 552;
     const int frameW = 1280 - frameX * 2;
-    const int gap = 16;
-    const int innerPad = 16;
+    const int gap = 10;
+    const int innerPad = 12;
     const int cardW = (frameW - innerPad * 2 - gap * (cols - 1)) / cols;
-    const int cardH = 164;
+    const int cardH = 120;
     const int startX = frameX + innerPad;
     const int startY = frameY + innerPad;
 
@@ -440,37 +427,37 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
             drawFocus(m_renderer, card);
         }
 
-        const int iconSize = 96;
-        SDL_Rect iconRect{card.x + 14, card.y + (card.h - iconSize) / 2, iconSize, iconSize};
+        const int iconSize = 64;
+        SDL_Rect iconRect{card.x + 10, card.y + (card.h - iconSize) / 2, iconSize, iconSize};
         SDL_Rect iconFrame{iconRect.x - 1, iconRect.y - 1, iconRect.w + 2, iconRect.h + 2};
         fillRect(m_renderer, iconFrame, color(8, 12, 22));
         if (SDL_Texture* icon = loadIcon(entry.iconPath)) {
             SDL_RenderCopy(m_renderer, icon, nullptr, &iconRect);
         } else {
             fillRect(m_renderer, iconRect, color(15, 23, 42));
-            renderText("?", iconRect.x + 45, iconRect.y + 30, m_fontLarge, color(148, 163, 184));
+            renderText("?", iconRect.x + 26, iconRect.y + 18, m_fontMedium, color(148, 163, 184));
         }
         strokeRect(m_renderer, iconFrame, color(51, 65, 85));
 
-        const int textX = iconRect.x + iconRect.w + 16;
-        const int textW = card.x + card.w - textX - 14;
-        renderText(fitText(m_fontMedium, entry.name, textW), textX, card.y + 18, m_fontMedium, color(241, 245, 249));
-        renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 48, m_fontSmall, color(148, 163, 184));
-        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 72, m_fontSmall, color(100, 116, 139));
+        const int textX = iconRect.x + iconRect.w + 12;
+        const int textW = card.x + card.w - textX - 10;
+        renderText(fitText(m_fontMedium, entry.name, textW), textX, card.y + 12, m_fontMedium, color(241, 245, 249));
+        renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 38, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 58, m_fontSmall, color(100, 116, 139));
 
-        const int chipGap = 8;
-        const int chipW = std::max(68, (textW - chipGap) / 2);
-        SDL_Rect localChip{textX, card.y + 118, chipW, 24};
-        SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 118, chipW, 24};
+        const int chipGap = 6;
+        const int chipW = std::max(60, (textW - chipGap) / 2);
+        SDL_Rect localChip{textX, card.y + 88, chipW, 20};
+        SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 88, chipW, 20};
         fillRect(m_renderer, localChip, entry.hasLocalBackup ? color(8, 47, 73) : color(39, 39, 42));
         fillRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(20, 83, 45) : color(39, 39, 42));
         strokeRect(m_renderer, localChip, entry.hasLocalBackup ? color(56, 189, 248) : color(82, 82, 91));
         strokeRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(74, 222, 128) : color(82, 82, 91));
-        renderTextCentered(fitText(m_fontSmall, entry.hasLocalBackup ? tr("history.local", "Local") : tr("ui.empty", "Empty"), chipW - 10),
+        renderTextCentered(fitText(m_fontSmall, entry.hasLocalBackup ? tr("history.local", "Local") : tr("ui.empty", "Empty"), chipW - 8),
                            localChip,
                            m_fontSmall,
                            color(241, 245, 249));
-        renderTextCentered(fitText(m_fontSmall, entry.hasCloudBackup ? tr("ui.cloud_ready", "Cloud") : tr("ui.cloud_need_connect", "Connect"), chipW - 10),
+        renderTextCentered(fitText(m_fontSmall, entry.hasCloudBackup ? tr("ui.cloud_ready", "Cloud") : tr("ui.cloud_need_connect", "Connect"), chipW - 8),
                            cloudChip,
                            m_fontSmall,
                            color(241, 245, 249));
@@ -716,9 +703,27 @@ void SaveShell::openUserPicker() {
 void SaveShell::openDropboxOverlay() {
     m_overlay = Overlay::DropboxAuth;
     m_overlayIndex = 0;
-    m_statusMessage = m_dropbox.isOAuthConfigured()
-        ? tr("auth.status_waiting_link", "Ready to create sign-in link")
-        : tr("auth.status_missing_config", "This build has no Dropbox app key");
+    m_authUrl.clear();
+    m_authQrCode.size = 0;
+    m_authQrCode.modules.clear();
+    m_bridgeSession = {};
+
+    if (m_dropbox.isAuthenticated()) {
+        m_dropboxState = DropboxAuthState::Idle;
+        m_statusMessage = tr("auth.status_authenticated", "You are already connected to Dropbox.");
+    } else {
+        m_dropboxState = DropboxAuthState::Starting;
+        m_statusMessage = tr("auth.status_starting_session", "Starting login session...");
+        if (m_dropbox.startBridgeSession(m_bridgeSession)) {
+            m_dropboxState = DropboxAuthState::WaitingForScan;
+            m_authUrl = m_bridgeSession.authorizeUrl;
+            updateAuthQrCode(m_authUrl);
+            m_statusMessage = tr("auth.status_waiting_scan", "Scan the QR code with your phone to login.");
+        } else {
+            m_dropboxState = DropboxAuthState::Failed;
+            m_statusMessage = tr("auth.status_bridge_failed", "Failed to start login session. Check your internet.");
+        }
+    }
 }
 
 void SaveShell::closeOverlay() {
@@ -728,6 +733,15 @@ void SaveShell::closeOverlay() {
     }
     m_overlay = Overlay::None;
     m_overlayIndex = 0;
+}
+
+void SaveShell::updateAuthQrCode(const std::string& value) {
+    m_authQrCode.size = 0;
+    m_authQrCode.modules.clear();
+    if (value.empty()) {
+        return;
+    }
+    utils::generateQRCode(value, m_authQrCode);
 }
 
 void SaveShell::refreshCurrentScreen() {
@@ -755,7 +769,39 @@ void SaveShell::updateOverlay() {
     if (m_overlay == Overlay::UserPicker) {
         itemCount = static_cast<int>(m_saveManager.getUsers().size());
     } else if (m_overlay == Overlay::DropboxAuth) {
-        itemCount = 4;
+        if (m_dropboxState == DropboxAuthState::ConfirmLogout) {
+            itemCount = 2; // Yes, No
+        } else if (m_dropbox.isAuthenticated()) {
+            itemCount = 1; // Logout
+        } else {
+            itemCount = 0;
+        }
+
+        // Handle polling
+        if (m_dropboxState == DropboxAuthState::WaitingForScan) {
+            const u64 now = static_cast<u64>(std::time(nullptr));
+            if (now - m_lastPollTime >= 2) {
+                m_lastPollTime = now;
+                const std::string status = m_dropbox.pollBridgeSession(m_bridgeSession);
+                if (status == "approved") {
+                    m_dropboxState = DropboxAuthState::Approved;
+                    m_statusMessage = tr("auth.status_approved", "Authorized! Finishing connection...");
+                } else if (status == "failed" || status == "expired") {
+                    m_dropboxState = DropboxAuthState::Failed;
+                    m_statusMessage = tr("auth.status_failed", "Session expired or failed. Please try again.");
+                }
+            }
+        } else if (m_dropboxState == DropboxAuthState::Approved) {
+            m_dropboxState = DropboxAuthState::Connecting;
+            if (m_dropbox.consumeBridgeSession(m_bridgeSession)) {
+                m_dropboxState = DropboxAuthState::Success;
+                m_statusMessage = tr("auth.status_success", "Successfully connected to Dropbox!");
+                rebuildRootScreen();
+            } else {
+                m_dropboxState = DropboxAuthState::Failed;
+                m_statusMessage = tr("auth.status_consume_failed", "Failed to exchange tokens. Please try again.");
+            }
+        }
     }
 
     if (m_controller.gotDown(Button::B)) {
@@ -789,124 +835,108 @@ void SaveShell::activateOverlaySelection() {
         return;
     }
 
-    switch (m_overlayIndex) {
-        case 0: {
-            if (!m_dropbox.isOAuthConfigured()) {
-                m_statusMessage = tr("auth.missing_config_hint", "This build cannot start Dropbox OAuth.");
-                return;
-            }
-            m_authUrl = m_dropbox.getAuthorizeUrl();
-            if (m_authUrl.empty()) {
-                m_statusMessage = tr("auth.browser_failed", "Failed to create authorization link.");
-                return;
-            }
-            const bool opened = launchDropboxAuthorizeUrl(m_authUrl);
-            m_statusMessage = opened
-                ? tr("auth.browser_opened", "Opened Dropbox sign-in. Finish approval, then paste the code.")
-                : tr("auth.waiting_code_hint", "Copy the URL or open it on another device, then paste the code.");
-            return;
-        }
-        case 1:
-            if (promptForAuthCode()) {
-                m_statusMessage = tr("auth.status_ready_to_connect", "Authorization code ready.");
-            }
-            return;
-        case 2:
-            if (m_authInput.empty()) {
-                m_statusMessage = tr("auth.waiting_code_hint", "Enter the authorization code first.");
-                return;
-            }
-            if (m_dropbox.exchangeAuthorizationCode(m_authInput)) {
-                m_statusMessage = tr("status.connected", "Connected");
-                m_authInput.clear();
-                closeOverlay();
-                rebuildRootScreen();
-            } else {
-                m_statusMessage = tr("ui.auth_failed", "Dropbox authorization failed.");
-            }
-            return;
-        case 3:
+    if (m_dropboxState == DropboxAuthState::ConfirmLogout) {
+        if (m_overlayIndex == 0) { // Yes
             m_dropbox.logout();
-            m_authInput.clear();
-            m_authUrl.clear();
             m_statusMessage = tr("status.disconnected", "Not connected");
+            m_dropboxState = DropboxAuthState::Idle;
             closeOverlay();
             rebuildRootScreen();
-            return;
-        default:
-            return;
+        } else { // No
+            m_dropboxState = DropboxAuthState::Idle;
+            m_overlayIndex = 0;
+        }
+        return;
     }
+
+    if (m_dropbox.isAuthenticated()) {
+        if (m_overlayIndex == 0) { // Logout
+            m_dropboxState = DropboxAuthState::ConfirmLogout;
+            m_overlayIndex = 1; // Default to 'No'
+            m_statusMessage = tr("auth.confirm_logout", "Are you sure you want to disconnect from Dropbox?");
+        }
+        return;
+    }
+
+    // If not authenticated, we might have some actions, but currently it's all automatic except 'Cancel' (which is B)
 }
 
 void SaveShell::renderDropboxOverlay() {
     SDL_Rect shade{0, 0, 1280, 720};
     fillRect(m_renderer, shade, color(2, 6, 14, 180));
-    SDL_Rect panel{180, 92, 920, 560};
+    SDL_Rect panel{240, 110, 800, 500};
     drawPanel(m_renderer, panel, color(11, 18, 31, 250), color(51, 65, 85));
     renderText(tr("auth.title", "Dropbox Setup"), panel.x + 28, panel.y + 22, m_fontLarge, color(241, 245, 249));
-    renderText(fitText(m_fontSmall, tr("auth.setup_time", "Open Dropbox sign-in and finish the connection here."), panel.w - 56),
-               panel.x + 28,
-               panel.y + 64,
-               m_fontSmall,
-               color(148, 163, 184));
+    
+    SDL_Rect statusRect{panel.x + 28, panel.y + 70, panel.w - 56, 48};
+    fillRect(m_renderer, statusRect, color(15, 23, 42));
+    strokeRect(m_renderer, statusRect, color(51, 65, 85));
+    renderTextCentered(fitText(m_fontSmall, m_statusMessage, statusRect.w - 24),
+                       statusRect,
+                       m_fontSmall,
+                       color(125, 211, 252));
 
-    SDL_Rect stateRect{panel.x + 28, panel.y + 104, panel.w - 56, 48};
-    fillRect(m_renderer, stateRect, color(15, 23, 42));
-    strokeRect(m_renderer, stateRect, color(51, 65, 85));
-    renderText(fitText(m_fontSmall, m_statusMessage, stateRect.w - 24),
-               stateRect.x + 12,
-               stateRect.y + 13,
-               m_fontSmall,
-               color(125, 211, 252));
-
-    int sectionY = stateRect.y + stateRect.h + 18;
-    if (!m_authUrl.empty()) {
-        renderText(tr("ui.url", "URL"), panel.x + 28, sectionY, m_fontSmall, color(100, 116, 139));
-        SDL_Rect urlRect{panel.x + 28, sectionY + 24, panel.w - 56, 56};
-        fillRect(m_renderer, urlRect, color(15, 23, 42));
-        strokeRect(m_renderer, urlRect, color(51, 65, 85));
-        renderText(fitText(m_fontSmall, m_authUrl, urlRect.w - 24), urlRect.x + 12, urlRect.y + 14, m_fontSmall, color(241, 245, 249));
-        sectionY = urlRect.y + urlRect.h + 18;
-    }
-
-    renderText(tr("auth.input_label", "Authorization code"), panel.x + 28, sectionY, m_fontSmall, color(100, 116, 139));
-    SDL_Rect inputRect{panel.x + 28, sectionY + 24, panel.w - 56, 50};
-    fillRect(m_renderer, inputRect, color(15, 23, 42));
-    strokeRect(m_renderer, inputRect, color(51, 65, 85));
-    renderText(fitText(m_fontSmall, m_authInput.empty() ? tr("auth.token_placeholder", "Paste the Dropbox authorization code here...") : m_authInput, inputRect.w - 24),
-               inputRect.x + 12,
-               inputRect.y + 14,
-               m_fontSmall,
-               m_authInput.empty() ? color(100, 116, 139) : color(241, 245, 249));
-
-    const char* actions[4] = {
-        "auth.get_link",
-        "auth.connect_code",
-        "auth.connect",
-        "ui.logout",
-    };
-    const char* fallbacks[4] = {
-        "Open Sign-In",
-        "Enter Code",
-        "Connect Dropbox",
-        "Logout",
-    };
-    const int actionsTop = inputRect.y + inputRect.h + 22;
-    const int actionRowH = 40;
-    const int actionGap = 8;
-    for (int i = 0; i < 4; ++i) {
-        SDL_Rect row{panel.x + 28, actionsTop + i * (actionRowH + actionGap), panel.w - 56, actionRowH};
-        const bool selected = i == m_overlayIndex;
+    if (m_dropboxState == DropboxAuthState::ConfirmLogout) {
+        const char* options[2] = { "ui.yes", "ui.no" };
+        const char* fallbacks[2] = { "Yes, disconnect", "No, stay connected" };
+        for (int i = 0; i < 2; ++i) {
+            SDL_Rect row{panel.x + 100, panel.y + 200 + i * 80, panel.w - 200, 60};
+            const bool selected = i == m_overlayIndex;
+            fillRect(m_renderer, row, selected ? color(19, 42, 79) : color(17, 24, 39));
+            strokeRect(m_renderer, row, color(51, 65, 85));
+            if (selected) drawFocus(m_renderer, row);
+            renderTextCentered(tr(options[i], fallbacks[i]), row, m_fontMedium, color(241, 245, 249));
+        }
+    } else if (m_dropbox.isAuthenticated()) {
+        SDL_Rect row{panel.x + 100, panel.y + 200, panel.w - 200, 60};
+        const bool selected = m_overlayIndex == 0;
         fillRect(m_renderer, row, selected ? color(19, 42, 79) : color(17, 24, 39));
         strokeRect(m_renderer, row, color(51, 65, 85));
-        if (selected) {
-            drawFocus(m_renderer, row);
+        if (selected) drawFocus(m_renderer, row);
+        renderTextCentered(tr("ui.logout", "Logout"), row, m_fontMedium, color(248, 113, 113));
+    } else {
+        // Show QR code for login
+        if (m_authQrCode.size > 0) {
+            const int qrBox = 260;
+            const int qrX = panel.x + (panel.w - qrBox) / 2;
+            const int qrY = panel.y + 140;
+            
+            SDL_Rect qrFrame{qrX, qrY, qrBox, qrBox};
+            fillRect(m_renderer, qrFrame, color(15, 23, 42));
+            strokeRect(m_renderer, qrFrame, color(51, 65, 85));
+            
+            const int quietZone = 2;
+            const int matrixSize = m_authQrCode.size + quietZone * 2;
+            const int moduleSize = (qrBox - 20) / matrixSize;
+            const int drawSize = matrixSize * moduleSize;
+            const int offsetX = qrFrame.x + (qrBox - drawSize) / 2;
+            const int offsetY = qrFrame.y + (qrBox - drawSize) / 2;
+
+            SDL_Rect whiteBg{offsetX, offsetY, drawSize, drawSize};
+            fillRect(m_renderer, whiteBg, color(255, 255, 255));
+
+            for (int y = 0; y < m_authQrCode.size; ++y) {
+                for (int x = 0; x < m_authQrCode.size; ++x) {
+                    const std::size_t idx = static_cast<std::size_t>(y * m_authQrCode.size + x);
+                    if (idx < m_authQrCode.modules.size() && m_authQrCode.modules[idx]) {
+                        SDL_Rect pixel{
+                            offsetX + (x + quietZone) * moduleSize,
+                            offsetY + (y + quietZone) * moduleSize,
+                            moduleSize,
+                            moduleSize,
+                        };
+                        fillRect(m_renderer, pixel, color(17, 24, 39));
+                    }
+                }
+            }
+            renderTextCentered(tr("auth.qr_hint", "Scan to sign in"), 
+                               SDL_Rect{qrX, qrY + qrBox + 10, qrBox, 30}, 
+                               m_fontSmall, color(148, 163, 184));
         }
-        renderText(tr(actions[i], fallbacks[i]), row.x + 14, row.y + 8, m_fontMedium, color(241, 245, 249));
     }
 
-    renderFooter("A: Select  Up/Down: Move  B: Close",
-                 tr("ui.auth_footer", "Open login on Switch, then paste the callback URL or code."));
+    renderFooter("A: Select  B: Close",
+                  tr("ui.auth_footer_new", "Use your phone to scan and approve the connection."));
 }
 
 void SaveShell::renderUserPickerOverlay() {
@@ -939,52 +969,6 @@ void SaveShell::renderUserPickerOverlay() {
 
     renderFooter("A: Select  Up/Down: Move  B: Close",
                  tr("ui.selection_footer", "The title list will rescan for the selected save type."));
-}
-
-bool SaveShell::launchDropboxAuthorizeUrl(const std::string& url) {
-#ifdef __SWITCH__
-    if (url.empty()) {
-        return false;
-    }
-    WebCommonConfig config{};
-    if (R_FAILED(webPageCreate(&config, url.c_str()))) {
-        return false;
-    }
-    webConfigSetCallbackUrl(&config, "https://localhost/oc-save-keeper/callback");
-    WebCommonReply reply{};
-    return R_SUCCEEDED(webConfigShow(&config, &reply));
-#else
-    (void)url;
-    return false;
-#endif
-}
-
-bool SaveShell::promptForAuthCode() {
-#ifdef __SWITCH__
-    SwkbdConfig keyboard{};
-    if (R_FAILED(swkbdCreate(&keyboard, 0))) {
-        return false;
-    }
-    swkbdConfigMakePresetDefault(&keyboard);
-    swkbdConfigSetGuideText(&keyboard, tr("auth.token_placeholder", "Paste the Dropbox authorization code here...").c_str());
-    swkbdConfigSetHeaderText(&keyboard, tr("auth.input_label", "Authorization code").c_str());
-    swkbdConfigSetStringLenMax(&keyboard, 1024);
-    char buffer[1025] = {0};
-    const Result rc = swkbdShow(&keyboard, buffer, sizeof(buffer));
-    swkbdClose(&keyboard);
-    if (R_FAILED(rc) || buffer[0] == '\0') {
-        return false;
-    }
-    m_authInput = buffer;
-    return true;
-#else
-    if (!m_hostTextInput) {
-        m_authInput.clear();
-        SDL_StartTextInput();
-        m_hostTextInput = true;
-    }
-    return true;
-#endif
 }
 
 bool SaveShell::currentLanguageIsKorean() const {

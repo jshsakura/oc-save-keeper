@@ -4,6 +4,8 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include "ui/saves/Types.hpp"
+#include "utils/QRCode.hpp"
+#include "network/Dropbox.hpp"
 
 #include <memory>
 #include <deque>
@@ -55,6 +57,17 @@ private:
         DropboxAuth,
     };
 
+    enum class DropboxAuthState {
+        Idle,
+        Starting,
+        WaitingForScan,
+        Approved,
+        Connecting,
+        Success,
+        Failed,
+        ConfirmLogout,
+    };
+
     void pushRootScreen();
     void rebuildRootScreen();
     void resetInput();
@@ -79,8 +92,7 @@ private:
     void closeOverlay();
     void refreshCurrentScreen();
     void activateOverlaySelection();
-    bool launchDropboxAuthorizeUrl(const std::string& url);
-    bool promptForAuthCode();
+    void updateAuthQrCode(const std::string& value);
     bool currentLanguageIsKorean() const;
     bool textNeedsFallbackFont(const std::string& text) const;
     TTF_Font* selectFont(TTF_Font* preferred, const std::string& text) const;
@@ -107,10 +119,13 @@ private:
     TouchInfo m_touch{};
     bool m_shouldExit = false;
     Overlay m_overlay = Overlay::None;
+    DropboxAuthState m_dropboxState = DropboxAuthState::Idle;
     int m_overlayIndex = 0;
     std::string m_statusMessage;
     std::string m_authUrl;
-    std::string m_authInput;
+    utils::QRCodeMatrix m_authQrCode;
+    network::DropboxBridgeSession m_bridgeSession{};
+    u64 m_lastPollTime = 0;
     bool m_hostTextInput = false;
     static constexpr std::size_t MAX_ICON_CACHE_ITEMS = 24;
     static constexpr int ICON_TEXTURE_SIZE = 96;

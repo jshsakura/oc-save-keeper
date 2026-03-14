@@ -34,6 +34,15 @@ struct DropboxAuthState {
     std::string message;
 };
 
+// Bridge session state
+struct DropboxBridgeSession {
+    std::string sessionId;
+    std::string pollToken;
+    std::string authorizeUrl;
+    std::string pollUrl;
+    bool active = false;
+};
+
 class Dropbox {
 public:
     Dropbox();
@@ -46,6 +55,12 @@ public:
     bool checkAuthentication();                       // Check if user authorized (polling)
     bool isAuthenticated() const;
     bool exchangeAuthorizationCode(const std::string& input);
+    
+    // Bridge-based authentication (QR code flow)
+    bool startBridgeSession(DropboxBridgeSession& outSession);
+    std::string pollBridgeSession(const DropboxBridgeSession& session); // Returns status: "pending", "approved", etc.
+    bool consumeBridgeSession(const DropboxBridgeSession& session);
+    
     void cancelPendingAuthorization();
     void logout();
     
