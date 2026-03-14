@@ -8,7 +8,7 @@ from typing import Literal
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 
@@ -17,6 +17,7 @@ DROPBOX_AUTHORIZE_URL = "https://www.dropbox.com/oauth2/authorize"
 DROPBOX_TOKEN_URL = "https://api.dropboxapi.com/oauth2/token"
 STATE_TTL_SECONDS = int(os.getenv("STATE_TTL_SECONDS", "900"))
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "900"))
+RICKROLL_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ&start_radio=1"
 
 
 def get_env(name: str, default: str = "") -> str:
@@ -117,6 +118,18 @@ class HealthResponse(BaseModel):
 
 app = FastAPI(title="oc-save-keeper Dropbox Bridge", version="0.1.0")
 redis_client = Redis.from_url(REDIS_URL, decode_responses=True)
+
+
+@app.middleware("http")
+async def rickroll_unsecured_http(request: Request, call_next):
+    """
+    보안 가드: HTTPS가 아닌 생(plain) HTTP로 접근하면 릭롤 시전
+    """
+    # X-Forwarded-Proto 헤더를 확인하여 리버스 프록시(Nginx 등) 뒤에서도 판별 가능하게 함
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    if proto == "http":
+        return RedirectResponse(url=RICKROLL_URL)
+    return await call_next(request)
 
 
 @app.get("/healthz", response_model=HealthResponse)
