@@ -152,6 +152,8 @@ void run() {
         return;
     }
     
+    ui::saves::Runtime::instance().setRenderer(g_renderer);
+    
     // Main loop
     SDL_Event event;
     while (g_running && appletMainLoop()) {

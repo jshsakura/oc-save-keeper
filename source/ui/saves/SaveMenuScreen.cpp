@@ -138,6 +138,7 @@ void SaveMenuScreen::openActions() {
     auto uploadBtn = m_sidebar->add<SidebarEntryCallback>(lang.get("detail.upload"), [this, entry]() {
         const auto& lang = utils::Language::instance();
         Runtime::instance().notify(lang.get("sync.uploading"));
+        Runtime::instance().forceRender();
         m_isOperationInProgress = true;
         
         m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);

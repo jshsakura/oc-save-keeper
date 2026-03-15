@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+struct SDL_Renderer;
+
 namespace ui::saves {
 
 class Object;
@@ -32,9 +34,13 @@ public:
 
     std::vector<AccountProfileBase> getAccountList() const;
 
+    void setRenderer(SDL_Renderer* renderer) { m_renderer = renderer; }
+    void forceRender();
+
 private:
     Runtime();
 
+    SDL_Renderer* m_renderer = nullptr;
     Theme m_theme{};
     std::vector<std::shared_ptr<Object>> m_stack{};
     std::string m_lastNotification{};

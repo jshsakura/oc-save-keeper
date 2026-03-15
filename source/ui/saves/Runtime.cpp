@@ -3,6 +3,8 @@
 #include "ui/saves/Object.hpp"
 #include "utils/Logger.hpp"
 
+#include <SDL2/SDL.h>
+
 namespace ui::saves {
 
 Runtime& Runtime::instance() {
@@ -88,6 +90,19 @@ Theme& Runtime::theme() {
 
 std::vector<AccountProfileBase> Runtime::getAccountList() const {
     return {};
+}
+
+void Runtime::forceRender() {
+    if (!m_renderer) return;
+    
+    SDL_SetRenderDrawColor(m_renderer, 30, 30, 40, 255);
+    SDL_RenderClear(m_renderer);
+    
+    if (auto obj = current()) {
+        obj->draw();
+    }
+    
+    SDL_RenderPresent(m_renderer);
 }
 
 } // namespace ui::saves
