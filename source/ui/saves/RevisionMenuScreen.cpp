@@ -101,7 +101,7 @@ void RevisionMenuScreen::restoreSelected() {
     const auto& entry = m_entries[m_index];
     SaveActionResult result;
     if (m_source == SaveSource::Cloud) {
-        result = m_backend->download(m_titleId, entry.id);
+        result = m_backend->download(m_titleId, entry.path);
     } else {
         result = m_backend->restore(m_titleId, entry.id, m_source);
     }
