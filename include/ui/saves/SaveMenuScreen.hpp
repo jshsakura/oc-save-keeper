@@ -31,6 +31,9 @@ public:
         return m_sidebar;
     }
 
+    int firstVisibleIndex() const;
+    int visibleCount() const;
+
 private:
     void reload();
     void openActions();
@@ -42,6 +45,7 @@ private:
     std::vector<SaveTitleEntry> m_entries;
     int m_index = 0;
     int m_layout = LayoutTypeGrid;
+    bool m_isOperationInProgress = false;
 };
 
 } // namespace ui::saves

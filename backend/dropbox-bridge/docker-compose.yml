@@ -1,0 +1,28 @@
+services:
+  bridge:
+    image: jshsakura/oc-save-keeper-bridge:latest
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DROPBOX_APP_KEY=${DROPBOX_APP_KEY}
+      - POLL_TOKEN_SECRET=${POLL_TOKEN_SECRET}
+      - REDIRECT_BASE_URL=${REDIRECT_BASE_URL:-https://save.opencourse.kr}
+    depends_on:
+      - redis
+    networks:
+      - oc-save-keeper-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    networks:
+      - oc-save-keeper-network
+
+networks:
+  oc-save-keeper-network:
+    driver: bridge

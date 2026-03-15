@@ -34,19 +34,36 @@ struct DropboxAuthState {
     std::string message;
 };
 
+// Bridge session state
+struct DropboxBridgeSession {
+    std::string sessionId;
+    std::string pollToken;
+    std::string authorizeUrl;
+    std::string pollUrl;
+    bool active = false;
+};
+
 class Dropbox {
 public:
     Dropbox();
     ~Dropbox();
     
+    static bool isInternetConnected();
+    
     // Authentication - SUPER SIMPLE!
     bool needsAuthentication() const;
+    bool isOAuthConfigured() const;
     std::string getAuthorizeUrl();                    // Get URL to show user
     bool checkAuthentication();                       // Check if user authorized (polling)
     bool isAuthenticated() const;
     bool exchangeAuthorizationCode(const std::string& input);
+    
+    // Bridge-based authentication (QR code flow)
+    bool startBridgeSession(DropboxBridgeSession& outSession);
+    std::string pollBridgeSession(const DropboxBridgeSession& session); // Returns status: "pending", "approved", etc.
+    bool consumeBridgeSession(const DropboxBridgeSession& session);
+    
     void cancelPendingAuthorization();
-    bool setAccessToken(const std::string& token);
     void logout();
     
     // File operations
@@ -62,18 +79,24 @@ public:
     bool createFolder(const std::string& path);
     
     // Listing
-    std::vector<DropboxFile> listFolder(const std::string& path = "");
+    std::vector<DropboxFile> listFolder(const std::string& path = "", bool recursive = false);
     bool fileExists(const std::string& dropboxPath);
     
     // Getters
     const std::string& getAccessToken() const { return m_accessToken; }
     
 private:
-    // App credentials (embedded - safe for dropbox.file scope)
-    // These are for "Drop-Keep" Dropbox app
-    static constexpr const char* CLIENT_ID = "YOUR_DROPBOX_APP_KEY";
+    // PKCE still needs the public app key at build time.
+#ifdef DROPBOX_APP_KEY
+    static constexpr const char* CLIENT_ID = DROPBOX_APP_KEY;
+#else
+    static constexpr const char* CLIENT_ID = "";
+#endif
+    std::string clientId() const;
+    std::string loadClientId() const;
     
     // Tokens
+    std::string m_clientId;
     std::string m_accessToken;
     std::string m_refreshToken;
     std::time_t m_tokenExpiresAt;
@@ -85,6 +108,10 @@ private:
     CURL* m_curl;
     
     // Internal
+    bool appendListFolderPage(const std::string& response,
+                              std::vector<DropboxFile>& files,
+                              std::string* outCursor,
+                              bool* outHasMore);
     std::string performRequest(const std::string& url, 
                                const std::string& postData = "",
                                const std::string& authHeader = "",

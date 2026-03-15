@@ -21,6 +21,10 @@ public:
 
     void notify(const std::string& text);
     void pushError(const std::string& text);
+    
+    std::string consumeNotification();
+    bool hasNotification() const { return !m_lastNotification.empty(); }
+
     void playSound(SoundEffect effect);
 
     const Theme& theme() const;
@@ -33,6 +37,7 @@ private:
 
     Theme m_theme{};
     std::vector<std::shared_ptr<Object>> m_stack{};
+    std::string m_lastNotification{};
 };
 
 } // namespace ui::saves

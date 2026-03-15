@@ -1,6 +1,7 @@
 #include "ui/saves/RevisionMenuScreen.hpp"
 
 #include "ui/saves/Runtime.hpp"
+#include "utils/Language.hpp"
 
 namespace ui::saves {
 
@@ -10,22 +11,38 @@ RevisionMenuScreen::RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uin
     , m_titleId(titleId)
     , m_source(source)
     , m_titleLabel(std::move(titleLabel)) {
+    const auto& lang = utils::Language::instance();
     onLayoutChange(m_list, m_layout);
     reload();
 
-    setAction(Button::A, Action{source == SaveSource::Cloud ? "Download" : "Restore", [this]() {
+    setAction(Button::A, Action{source == SaveSource::Cloud ? lang.get("detail.download") : lang.get("history.restore"), [this]() {
         restoreSelected();
     }});
-    setAction(Button::B, Action{"Back", [this]() {
+    setAction(Button::B, Action{lang.get("detail.back"), [this]() {
         setPop();
     }});
-    setAction(Button::X, Action{"Refresh", [this]() {
+    setAction(Button::X, Action{lang.get("ui.refresh"), [this]() {
         reload();
     }});
 }
 
 const char* RevisionMenuScreen::shortTitle() const {
+    if (utils::Language::instance().currentLang() == "ko") {
+        return m_source == SaveSource::Cloud ? "클라우드" : "이력";
+    }
     return m_source == SaveSource::Cloud ? "Cloud" : "History";
+}
+
+int RevisionMenuScreen::firstVisibleIndex() const {
+    if (!m_list) {
+        return 0;
+    }
+    const int rowOffset = static_cast<int>(m_list->yoff() / m_list->maxY());
+    return std::max(0, rowOffset * m_list->row());
+}
+
+int RevisionMenuScreen::visibleCount() const {
+    return m_list ? m_list->page() : 0;
 }
 
 void RevisionMenuScreen::update(const Controller& controller, const TouchInfo& touch) {
@@ -73,8 +90,9 @@ void RevisionMenuScreen::reload() {
 }
 
 void RevisionMenuScreen::restoreSelected() {
+    const auto& lang = utils::Language::instance();
     if (m_entries.empty() || !m_backend) {
-        Runtime::instance().notify("No revision entries");
+        Runtime::instance().notify(lang.get("ui.no_revision_entries"));
         return;
     }
 

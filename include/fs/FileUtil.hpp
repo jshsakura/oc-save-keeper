@@ -132,8 +132,13 @@ inline bool copyDirectory(const std::string& source, const std::string& dest,
             continue;
         }
         
-        std::string srcPath = source + "/" + entry->d_name;
-        std::string dstPath = dest + "/" + entry->d_name;
+        std::string srcPath = source;
+        if (srcPath.back() != '/') srcPath += "/";
+        srcPath += entry->d_name;
+        
+        std::string dstPath = dest;
+        if (dstPath.back() != '/') dstPath += "/";
+        dstPath += entry->d_name;
         
         struct stat st;
         if (stat(srcPath.c_str(), &st) != 0) {
@@ -233,7 +238,10 @@ inline int64_t getDirectorySize(const std::string& path) {
             continue;
         }
         
-        std::string fullPath = path + "/" + entry->d_name;
+        std::string fullPath = path;
+        if (fullPath.back() != '/') fullPath += "/";
+        fullPath += entry->d_name;
+        
         struct stat st;
         
         if (stat(fullPath.c_str(), &st) == 0) {

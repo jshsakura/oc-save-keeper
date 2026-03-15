@@ -30,8 +30,8 @@ constexpr const char* BACKUP_BASE_PATH = utils::paths::BACKUPS;
 constexpr const char* TEMP_BASE_PATH = utils::paths::TEMP;
 constexpr const char* ICON_BASE_PATH = utils::paths::CACHE_TITLE_ICONS;
 constexpr const char* USER_ICON_BASE_PATH = utils::paths::CACHE_USER_ICONS;
-constexpr const char* DEVICE_ID_PATH = "/switch/oc-save-keeper/device_id.txt";
-constexpr const char* DEVICE_PRIORITY_PATH = "/switch/oc-save-keeper/device_priority.txt";
+constexpr const char* DEVICE_ID_PATH = utils::paths::DEVICE_ID;
+constexpr const char* DEVICE_PRIORITY_PATH = utils::paths::DEVICE_PRIORITY;
 constexpr const char* META_ENTRY_NAME = ".dropkeep.meta";
 constexpr int DEFAULT_MAX_VERSIONS = 5;
 
@@ -125,6 +125,15 @@ std::string makeDeviceLabel(const std::string& deviceId) {
     return "Device " + token;
 }
 
+struct TitleSaveRecord {
+    bool hasAccount = false;
+    bool hasDevice = false;
+    bool hasSystem = false;
+    int64_t accountSize = 0;
+    int64_t deviceSize = 0;
+    int64_t systemSize = 0;
+};
+
 } // namespace
 
 SaveManager::SaveManager()
@@ -199,34 +208,21 @@ bool SaveManager::loadDeviceConfig() {
 
 bool SaveManager::loadUsers() {
     m_users.clear();
-    
 #ifdef __SWITCH__
-    Result rc = accountInitialize(AccountServiceType_Application);
-    if (R_FAILED(rc)) {
-        LOG_WARNING("accountInitialize(Application) failed: 0x%x", rc);
-        rc = accountInitialize(AccountServiceType_System);
+    // Try System first as it's more reliable in Applet Mode for basic info
+    Result rc = accountInitialize(AccountServiceType_System);
+    if (R_FAILED(rc) && rc != 0x2c7c) {
+        rc = accountInitialize(AccountServiceType_Application);
     }
-    if (R_FAILED(rc)) {
-        LOG_WARNING("accountInitialize(System) failed: 0x%x", rc);
-        rc = accountInitialize(AccountServiceType_Administrator);
-    }
-    if (R_FAILED(rc)) {
-        LOG_ERROR("accountInitialize failed: 0x%x", rc);
-        UserInfo fallbackUser;
-        fallbackUser.id = "device-user";
-        fallbackUser.name = "Default User";
-        fallbackUser.iconPath = "";
-        m_users.push_back(fallbackUser);
-        return true;
-    }
-
+    
     AccountUid uids[ACC_USER_LIST_SIZE]{};
     s32 userCount = 0;
     
+    // Attempt to list all, but don't hard-fail if it returns 0xe401
     rc = accountListAllUsers(uids, ACC_USER_LIST_SIZE, &userCount);
+    
     if (R_FAILED(rc) || userCount <= 0) {
-        LOG_WARNING("accountListAllUsers failed or empty: 0x%x", rc);
-
+        // Essential Fallback: Get at least the current user
         AccountUid fallbackUid{};
         if (R_SUCCEEDED(accountGetPreselectedUser(&fallbackUid)) && accountUidIsValid(&fallbackUid)) {
             uids[0] = fallbackUid;
@@ -238,62 +234,39 @@ bool SaveManager::loadUsers() {
     }
     
     for (s32 i = 0; i < userCount; i++) {
-        if (!accountUidIsValid(&uids[i])) {
-            continue;
-        }
+        if (!accountUidIsValid(&uids[i])) continue;
 
         AccountProfile profile;
-        rc = accountGetProfile(&profile, uids[i]);
-        if (R_FAILED(rc)) {
-            UserInfo user;
-            user.uid = uids[i];
-            user.id = std::to_string(static_cast<unsigned long long>(uids[i].uid[0])) + "-" +
-                      std::to_string(static_cast<unsigned long long>(uids[i].uid[1]));
-            user.name = "User";
-            user.iconPath = "";
-            m_users.push_back(user);
-            continue;
-        }
-        
-        AccountUserData userData;
-        AccountProfileBase profileBase;
-        rc = accountProfileGet(&profile, &userData, &profileBase);
-        if (R_SUCCEEDED(rc)) {
-            UserInfo user;
-            user.uid = uids[i];
-            user.id = std::to_string(static_cast<unsigned long long>(uids[i].uid[0])) + "-" +
-                      std::to_string(static_cast<unsigned long long>(uids[i].uid[1]));
-            user.name = profileBase.nickname;
-            char userIconPath[256];
-            std::snprintf(userIconPath, sizeof(userIconPath), "%s/%s.jpg", USER_ICON_BASE_PATH, user.id.c_str());
-            u32 imageSize = 0;
-            if (R_SUCCEEDED(accountProfileGetImageSize(&profile, &imageSize)) && imageSize > 0) {
-                std::vector<unsigned char> image(imageSize);
-                if (R_SUCCEEDED(accountProfileLoadImage(&profile, image.data(), image.size(), &imageSize)) && imageSize > 0) {
-                    if (writeBinaryFile(userIconPath, image.data(), imageSize)) {
+        if (R_SUCCEEDED(accountGetProfile(&profile, uids[i]))) {
+            AccountUserData userData;
+            AccountProfileBase profileBase;
+            if (R_SUCCEEDED(accountProfileGet(&profile, &userData, &profileBase))) {
+                UserInfo user;
+                user.uid = uids[i];
+                char idStr[33];
+                std::snprintf(idStr, sizeof(idStr), "%016lX%016lX", uids[i].uid[1], uids[i].uid[0]);
+                user.id = idStr;
+                user.name = profileBase.nickname;
+                
+                // Icon handling
+                char userIconPath[256];
+                std::snprintf(userIconPath, sizeof(userIconPath), "%s/%s.jpg", USER_ICON_BASE_PATH, user.id.c_str());
+                u32 imageSize = 0;
+                if (R_SUCCEEDED(accountProfileGetImageSize(&profile, &imageSize)) && imageSize > 0) {
+                    std::vector<unsigned char> image(imageSize);
+                    if (R_SUCCEEDED(accountProfileLoadImage(&profile, image.data(), image.size(), &imageSize))) {
+                        writeBinaryFile(userIconPath, image.data(), imageSize);
                         user.iconPath = userIconPath;
                     }
                 }
+                m_users.push_back(user);
             }
-            m_users.push_back(user);
+            accountProfileClose(&profile);
         }
-        
-        accountProfileClose(&profile);
-    }
-    
-    accountExit();
-
-    if (m_users.empty()) {
-        UserInfo fallbackUser;
-        fallbackUser.id = "device-user";
-        fallbackUser.name = "Default User";
-        fallbackUser.iconPath = "";
-        m_users.push_back(fallbackUser);
     }
 #else
     // For development/testing, create a mock user
     UserInfo mockUser;
-    mockUser.uidPlaceholder = 1;
     mockUser.id = "mock-user-1";
     mockUser.name = "TestUser";
     m_users.push_back(mockUser);
@@ -307,11 +280,12 @@ void SaveManager::scanTitles() {
     
 #ifdef __SWITCH__
     std::set<uint64_t> titleIds;
-    std::map<uint64_t, std::pair<SaveType, int64_t>> titleSaveInfo;
+    std::map<uint64_t, TitleSaveRecord> titleSaveInfo;
+    const bool isDeviceUser = m_selectedUser && m_selectedUser->id == "device";
 
     FsSaveDataFilter filter{};
     FsSaveDataInfoReader reader;
-    Result rc = fsOpenSaveDataInfoReaderWithFilter(&reader, FsSaveDataSpaceId_All, &filter);
+    Result rc = fsOpenSaveDataInfoReaderWithFilter(&reader, FsSaveDataSpaceId_User, &filter);
     if (R_SUCCEEDED(rc)) {
         FsSaveDataInfo entries[256]{};
         while (true) {
@@ -327,13 +301,28 @@ void SaveManager::scanTitles() {
                     continue;
                 }
 
-                switch (entry.save_data_type) {
-                    case FsSaveDataType_Account:
-                        titleIds.insert(entry.application_id);
-                        titleSaveInfo[entry.application_id] = {convertSaveType(entry.save_data_type), entry.size};
-                        break;
-                    default:
-                        break;
+                // Scan all relevant save types
+                if (entry.save_data_type == FsSaveDataType_Account || 
+                    entry.save_data_type == FsSaveDataType_Device || 
+                    entry.save_data_type == FsSaveDataType_System) {
+                    titleIds.insert(entry.application_id);
+                    auto& record = titleSaveInfo[entry.application_id];
+                    switch (entry.save_data_type) {
+                        case FsSaveDataType_Account:
+                            record.hasAccount = true;
+                            record.accountSize = std::max(record.accountSize, static_cast<int64_t>(entry.size));
+                            break;
+                        case FsSaveDataType_Device:
+                            record.hasDevice = true;
+                            record.deviceSize = std::max(record.deviceSize, static_cast<int64_t>(entry.size));
+                            break;
+                        case FsSaveDataType_System:
+                            record.hasSystem = true;
+                            record.systemSize = std::max(record.systemSize, static_cast<int64_t>(entry.size));
+                            break;
+                        default:
+                            break;
+                    }
                 }
             }
         }
@@ -354,9 +343,24 @@ void SaveManager::scanTitles() {
             if (auto* title = getTitleById(titleId)) {
                 const auto it = titleSaveInfo.find(titleId);
                 if (it != titleSaveInfo.end()) {
-                    title->hasSave = true;
-                    title->saveType = it->second.first;
-                    title->saveSize = it->second.second;
+                    const auto& record = it->second;
+                    
+                    title->hasAccountSave = record.hasAccount;
+                    title->accountSize = record.accountSize;
+                    title->hasDeviceSave = record.hasDevice || record.hasSystem;
+                    title->deviceSize = record.hasDevice ? record.deviceSize : record.systemSize;
+
+                    // Set hasSave to true if either exists, default to Account for general UI
+                    title->hasSave = title->hasAccountSave || title->hasDeviceSave;
+                    if (title->hasAccountSave) {
+                        title->saveType = SaveType::Account;
+                        title->actualSaveType = SaveType::Account;
+                        title->saveSize = title->accountSize;
+                    } else if (title->hasDeviceSave) {
+                        title->saveType = record.hasDevice ? SaveType::Device : SaveType::System;
+                        title->actualSaveType = title->saveType;
+                        title->saveSize = title->deviceSize;
+                    }
                 }
             }
         }
@@ -442,7 +446,7 @@ bool SaveManager::scanTitle(uint64_t titleId) {
     filter.attr.application_id = titleId;
 
     FsSaveDataInfoReader reader;
-    rc = fsOpenSaveDataInfoReaderWithFilter(&reader, FsSaveDataSpaceId_All, &filter);
+    rc = fsOpenSaveDataInfoReaderWithFilter(&reader, FsSaveDataSpaceId_User, &filter);
     if (R_SUCCEEDED(rc)) {
         FsSaveDataInfo entries[16]{};
         s64 totalEntries = 0;
@@ -450,18 +454,29 @@ bool SaveManager::scanTitle(uint64_t titleId) {
         fsSaveDataInfoReaderClose(&reader);
 
         if (R_SUCCEEDED(rc)) {
+            const bool isDeviceUser = m_selectedUser && m_selectedUser->id == "device";
             for (s64 i = 0; i < totalEntries && i < 16; i++) {
-                if (entries[i].save_data_type != FsSaveDataType_Account) {
-                    continue;
+                const auto& entry = entries[i];
+                if (isDeviceUser) {
+                    // In device mode, only show system/device saves
+                    if (entry.save_data_type == FsSaveDataType_Device || entry.save_data_type == FsSaveDataType_System) {
+                        info.hasSave = true;
+                        info.saveType = convertSaveType(entry.save_data_type);
+                        info.saveSize = entry.size;
+                        break;
+                    }
+                } else {
+                    // In user mode, only show account saves
+                    if (entry.save_data_type == FsSaveDataType_Account) {
+                        info.hasSave = true;
+                        info.saveType = SaveType::Account;
+                        info.saveSize = entry.size;
+                        break;
+                    }
                 }
-
-                info.hasSave = true;
-                info.saveType = SaveType::Account;
-                info.saveSize = entries[i].size;
-                break;
             }
         }
-    } else if (m_selectedUser) {
+    } else if (m_selectedUser && m_selectedUser->id != "device") {
         // Fallback for older service paths.
         FsFileSystem tmpFs;
         rc = fsOpen_SaveData(&tmpFs, titleId, m_selectedUser->uid);
@@ -523,8 +538,8 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
         LOG_ERROR("Invalid title or no user selected");
         return false;
     }
-    if (!title->hasSave || title->saveType != SaveType::Account) {
-        LOG_ERROR("Backup is only supported for account save data");
+    if (!title->hasSave) {
+        LOG_ERROR("Backup is only supported for existing save data");
         return false;
     }
     
@@ -533,6 +548,7 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
     mkdir(backupDir.c_str(), 0777);
     
     std::string backupPath = backupDir + "/" + backupName;
+    LOG_INFO("Backup: Starting backup for %s (%016lX) to %s", title->name.c_str(), title->titleId, backupPath.c_str());
     mkdir(backupPath.c_str(), 0777);
     
 #ifdef __SWITCH__
@@ -540,18 +556,23 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
     int64_t journalSize = fs::getSaveJournalSize(title->titleId);
     
     // Use scoped mount for RAII safety
-    fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid);
+    bool isDevice = title->actualSaveType == SaveType::Device || title->actualSaveType == SaveType::System;
+    fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid, isDevice);
     if (!saveMount.isOpen()) {
-        LOG_ERROR("Failed to mount save for backup");
+        LOG_ERROR("Backup: Failed to mount save for %s", title->name.c_str());
+        rmdir(backupPath.c_str()); // Clean up empty folder
         return false;
     }
     
     // Copy from save to backup
     std::string savePath = saveMount.getMountPath();
+    LOG_INFO("Backup: Copying files from %s to %s", savePath.c_str(), backupPath.c_str());
     if (!fs::copyDirectory(savePath, backupPath, journalSize)) {
-        LOG_ERROR("Failed to copy save data");
+        LOG_ERROR("Backup: Failed to copy save data files");
+        fs::deleteDirectory(backupPath); // Clean up partial/empty folder
         return false;
     }
+    LOG_INFO("Backup: Copy completed successfully");
 #else
     // For development, just create a marker file
     FILE* f = fopen((backupPath + "/save.meta").c_str(), "w");
@@ -573,8 +594,8 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
         LOG_ERROR("Invalid title or no user selected");
         return false;
     }
-    if (!title->hasSave || title->saveType != SaveType::Account) {
-        LOG_ERROR("Restore is only supported for account save data");
+    if (!title->hasSave) {
+        LOG_ERROR("Restore is only supported for existing save data");
         return false;
     }
     
@@ -591,7 +612,8 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
     int64_t journalSize = fs::getSaveJournalSize(title->titleId);
     
     // Use scoped mount for RAII safety
-    fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid);
+    bool isDevice = title->actualSaveType == SaveType::Device || title->actualSaveType == SaveType::System;
+    fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid, isDevice);
     if (!saveMount.isOpen()) {
         LOG_ERROR("Failed to mount save for restore");
         return false;
@@ -658,15 +680,40 @@ std::string SaveManager::getBackupPath(TitleInfo* title) const {
     return path;
 }
 
+std::string SaveManager::getCloudUserPath() const {
+    const std::string userId = sanitizePathComponent(getSelectedUserId().empty() ? "default-user" : getSelectedUserId());
+    return "oc-save-keeper/users/" + userId;
+}
+
+std::string SaveManager::getCloudDevicesPath() const {
+    return getCloudUserPath() + "/devices";
+}
+
+std::string SaveManager::getCloudDevicePath(const std::string& deviceId) const {
+    const std::string selectedDevice = sanitizePathComponent(deviceId.empty() ? m_deviceId : deviceId);
+    return getCloudDevicesPath() + "/" + selectedDevice;
+}
+
+std::string SaveManager::getCloudTitlePath(TitleInfo* title) const {
+    char titleComponent[32];
+    std::snprintf(titleComponent, sizeof(titleComponent), "%016llX",
+                  static_cast<unsigned long long>(title ? title->titleId : 0));
+    return getCloudUserPath() + "/titles/" + titleComponent;
+}
+
 std::string SaveManager::getCloudPath(TitleInfo* title) const {
-    // Sanitize name for cloud path (remove special chars)
-    std::string safeName = sanitizePathComponent(title->name);
-    return safeName + "/latest.zip";
+    return getCloudTitlePath(title) + "/latest.zip";
 }
 
 std::string SaveManager::getCloudMetadataPath(TitleInfo* title) const {
-    std::string safeName = sanitizePathComponent(title->name);
-    return safeName + "/latest.meta";
+    return getCloudTitlePath(title) + "/latest.meta";
+}
+
+std::string SaveManager::getCloudRevisionDirectory(TitleInfo* title, const std::string& deviceId) const {
+    char titleComponent[32];
+    std::snprintf(titleComponent, sizeof(titleComponent), "%016llX",
+                  static_cast<unsigned long long>(title ? title->titleId : 0));
+    return getCloudDevicePath(deviceId) + "/titles/" + titleComponent + "/revisions";
 }
 
 std::vector<BackupVersion> SaveManager::getBackupVersions(TitleInfo* title) {

@@ -30,6 +30,9 @@ public:
         return m_titleLabel;
     }
 
+    int firstVisibleIndex() const;
+    int visibleCount() const;
+
 private:
     void reload();
     void restoreSelected();
@@ -41,7 +44,7 @@ private:
     SaveSource m_source = SaveSource::Local;
     std::string m_titleLabel;
     int m_index = 0;
-    int m_layout = LayoutTypeGridDetail;
+    int m_layout = LayoutTypeVertical;
 };
 
 } // namespace ui::saves

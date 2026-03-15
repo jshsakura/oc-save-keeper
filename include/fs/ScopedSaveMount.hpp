@@ -25,25 +25,39 @@ public:
      * @param uid User account ID
      * @param log Enable logging
      */
-    ScopedSaveMount(const std::string& mountName, uint64_t titleId, AccountUid uid, bool log = true)
+    ScopedSaveMount(const std::string& mountName, uint64_t titleId, AccountUid uid, bool isDevice = false)
         : m_mountName(mountName)
         , m_isOpen(false)
-        , m_log(log) {
+        , m_log(true) {
         
 #ifdef __SWITCH__
+        // Force unmount first to avoid 0xffffffff conflict
+        fsdevUnmountDevice(mountName.c_str());
+
+        LOG_INFO("FS: Mounting %s. Title: %016lX, UID: %016lX%016lX, DeviceMode: %d", 
+                 mountName.c_str(), titleId, uid.uid[1], uid.uid[0], isDevice);
+                 
         FsFileSystem saveFs;
-        Result rc = fsOpen_SaveData(&saveFs, titleId, uid);
+        Result rc;
+        
+        FsSaveDataAttribute attr = {0};
+        attr.application_id = titleId;
+        attr.uid = uid;
+        attr.save_data_type = isDevice ? FsSaveDataType_Device : FsSaveDataType_Account;
+        
+        rc = fsOpenSaveDataFileSystem(&saveFs, FsSaveDataSpaceId_User, &attr);
         
         if (R_SUCCEEDED(rc)) {
-            rc = fsdevMountDevice(mountName.c_str(), saveFs);
-            if (R_SUCCEEDED(rc)) {
+            int ret = fsdevMountDevice(mountName.c_str(), saveFs);
+            if (ret != -1) { // Success returns device ID (>= 0), failure returns -1
                 m_isOpen = true;
+                LOG_INFO("FS: Successfully mounted %s (dev id: %d)", mountName.c_str(), ret);
             } else {
                 fsFsClose(&saveFs);
-                LOG_ERROR("fsdevMountDevice failed: 0x%x", rc);
+                LOG_ERROR("FS: fsdevMountDevice failed: %d, errno: %d", ret, errno);
             }
         } else {
-            LOG_ERROR("fsOpen_SaveData failed: 0x%x", rc);
+            LOG_ERROR("FS: fsOpenSaveDataFileSystem failed: 0x%x", rc);
         }
 #else
         // For non-Switch builds, simulate success
@@ -95,10 +109,10 @@ public:
     bool isOpen() const { return m_isOpen; }
     
     /**
-     * Get mount point path (e.g., "save:/")
+     * Get mount point path (e.g., "save:")
      */
     std::string getMountPath() const {
-        return m_mountName + ":/";
+        return m_mountName + ":";
     }
     
     /**

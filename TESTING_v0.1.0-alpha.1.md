@@ -10,8 +10,8 @@
 ## Dropbox Setup
 
 1. Create a Dropbox app with `App folder` access.
-2. Generate an access token.
-3. Enter the token in oc-save-keeper.
+2. Put the Dropbox app key in `.env` before building.
+3. In oc-save-keeper, generate the sign-in link, open it on a phone or PC, then paste the returned URL or code.
 
 ## Suggested Test Pass
 

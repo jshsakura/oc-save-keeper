@@ -7,6 +7,23 @@ on:
       - "main"
     tags:
       - "v*"
+    paths:
+      - 'source/**'
+      - 'include/**'
+      - 'romfs/**'
+      - 'Makefile'
+      - 'icon.png'
+      - 'GEMINI.md'
+      - '.github/workflows/release.yml'
+  pull_request:
+    branches:
+      - "main"
+    paths:
+      - 'source/**'
+      - 'include/**'
+      - 'romfs/**'
+      - 'Makefile'
+      - 'icon.png'
 
 permissions:
   contents: write
@@ -14,6 +31,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
 
     steps:
       - name: Checkout
@@ -26,11 +45,13 @@ jobs:
 
       - name: Build NRO in devkitPro container
         run: |
+          test -n "$GITHUB_WORKSPACE"
           docker run --rm \
-            -v "$GITHUB_WORKSPACE:/work" \
+            -e DROPBOX_APP_KEY="${DROPBOX_APP_KEY}" \
+            -v "${GITHUB_WORKSPACE}:/work" \
             -w /work \
             devkitpro/devkita64 \
-            make
+            make DROPBOX_APP_KEY="${DROPBOX_APP_KEY}"
 
       - name: Package release bundle
         run: |
@@ -38,14 +59,15 @@ jobs:
           RELEASE_DIR="dist/oc-save-keeper-${VERSION}"
 
           mkdir -p "${RELEASE_DIR}/switch/oc-save-keeper"
+          mkdir -p "${RELEASE_DIR}/switch/oc-save-keeper/config"
           mkdir -p "${RELEASE_DIR}/docs"
 
           cp oc-save-keeper.nro "${RELEASE_DIR}/switch/oc-save-keeper/oc-save-keeper.nro"
-          for doc in README.md RELEASE_NOTES_v0.1.0-alpha.1.md TESTING_v0.1.0-alpha.1.md; do
-            if [ -f "${doc}" ]; then
-              cp "${doc}" "${RELEASE_DIR}/docs/"
-            fi
-          done
+          if [ -n "${DROPBOX_APP_KEY}" ]; then
+            printf '%s\n' "${DROPBOX_APP_KEY}" > "${RELEASE_DIR}/switch/oc-save-keeper/config/dropbox_app_key.txt"
+          fi
+          cp README.md RELEASE_NOTES_v0.1.0-alpha.1.md TESTING_v0.1.0-alpha.1.md "${RELEASE_DIR}/docs/"
+          if [ -f FONTS_NOTICE.md ]; then cp FONTS_NOTICE.md "${RELEASE_DIR}/docs/"; fi
 
           cd dist
           zip -r "oc-save-keeper-${VERSION}.zip" "oc-save-keeper-${VERSION}"
@@ -58,10 +80,23 @@ jobs:
             oc-save-keeper.nro
             dist/oc-save-keeper-${{ github.ref_name || 'dev' }}.zip
 
-      - name: Upload release assets
+      - name: Upload prerelease assets (main)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Continuous Build (main)
+          prerelease: true
+          make_latest: false
+          files: |
+            oc-save-keeper.nro
+            dist/oc-save-keeper-${{ github.ref_name }}.zip
+
+      - name: Upload release assets (tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          generate_release_notes: true
           files: |
             oc-save-keeper.nro
             dist/oc-save-keeper-${{ github.ref_name }}.zip

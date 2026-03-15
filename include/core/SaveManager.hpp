@@ -54,8 +54,13 @@ struct TitleInfo {
     std::string iconPath;
     std::string savePath;
     SaveType saveType = SaveType::Account;
+    SaveType actualSaveType = SaveType::Account; 
     int64_t saveSize = 0;
     bool hasSave = false;
+    bool hasAccountSave = false; // New
+    bool hasDeviceSave = false;  // New
+    int64_t accountSize = 0;     // New
+    int64_t deviceSize = 0;      // New
     bool isFavorite = false;
 };
 
@@ -127,8 +132,13 @@ public:
     
     // Path helpers
     std::string getBackupPath(TitleInfo* title) const;
+    std::string getCloudUserPath() const;
+    std::string getCloudDevicesPath() const;
+    std::string getCloudDevicePath(const std::string& deviceId = "") const;
+    std::string getCloudTitlePath(TitleInfo* title) const;
     std::string getCloudPath(TitleInfo* title) const;
     std::string getCloudMetadataPath(TitleInfo* title) const;
+    std::string getCloudRevisionDirectory(TitleInfo* title, const std::string& deviceId = "") const;
 
     // Sync metadata and archive helpers
     std::string getDeviceId();
