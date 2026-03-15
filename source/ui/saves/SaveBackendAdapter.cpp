@@ -93,19 +93,13 @@ std::vector<network::DropboxFile> listRemoteRevisionMetadata(network::Dropbox& d
         return files;
     }
 
-    const auto deviceFolders = dropbox.listFolder("/" + saveManager.getCloudDevicesPath(), false);
-    for (const auto& folder : deviceFolders) {
-        if (!folder.isFolder) {
-            continue;
-        }
-
-        const std::string revisionDir = "/" + saveManager.getCloudRevisionDirectory(title, fileNameFromPath(folder.path));
-        auto revisionFiles = dropbox.listFolder(revisionDir, false);
-        revisionFiles.erase(std::remove_if(revisionFiles.begin(), revisionFiles.end(), [](const network::DropboxFile& file) {
-            return file.isFolder || !endsWith(file.name, ".meta");
-        }), revisionFiles.end());
-        files.insert(files.end(), revisionFiles.begin(), revisionFiles.end());
-    }
+    // Use title-centric revision path: titles/{titleId}/revisions
+    const std::string revisionDir = "/" + saveManager.getCloudRevisionDirectory(title, "");
+    auto revisionFiles = dropbox.listFolder(revisionDir, false);
+    revisionFiles.erase(std::remove_if(revisionFiles.begin(), revisionFiles.end(), [](const network::DropboxFile& file) {
+        return file.isFolder || !endsWith(file.name, ".meta");
+    }), revisionFiles.end());
+    files.insert(files.end(), revisionFiles.begin(), revisionFiles.end());
 
     std::sort(files.begin(), files.end(), [](const auto& lhs, const auto& rhs) {
         return lhs.modifiedTime > rhs.modifiedTime;
@@ -124,8 +118,7 @@ std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
 
     // Efficiently fetch remote titles if not cached
     if (m_dropbox.isAuthenticated() && !g_remoteCacheValid) {
-        const std::string userId = m_saveManager.getDeviceId();
-        const std::string remotePath = "/users/" + userId + "/titles";
+        const std::string remotePath = "/titles";
         auto remoteFiles = m_dropbox.listFolder(remotePath);
 
         g_remoteTitleCache.clear();

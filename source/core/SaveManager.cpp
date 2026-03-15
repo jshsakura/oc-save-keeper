@@ -682,7 +682,7 @@ std::string SaveManager::getBackupPath(TitleInfo* title) const {
 
 std::string SaveManager::getCloudUserPath() const {
     const std::string userId = sanitizePathComponent(getSelectedUserId().empty() ? "default-user" : getSelectedUserId());
-    return "oc-save-keeper/users/" + userId;
+    return "users/" + userId;  // No "oc-save-keeper/" prefix - app folder is already oc-save-keeper
 }
 
 std::string SaveManager::getCloudDevicesPath() const {
@@ -698,7 +698,7 @@ std::string SaveManager::getCloudTitlePath(TitleInfo* title) const {
     char titleComponent[32];
     std::snprintf(titleComponent, sizeof(titleComponent), "%016llX",
                   static_cast<unsigned long long>(title ? title->titleId : 0));
-    return getCloudUserPath() + "/titles/" + titleComponent;
+    return std::string("titles/") + titleComponent;
 }
 
 std::string SaveManager::getCloudPath(TitleInfo* title) const {
@@ -713,7 +713,7 @@ std::string SaveManager::getCloudRevisionDirectory(TitleInfo* title, const std::
     char titleComponent[32];
     std::snprintf(titleComponent, sizeof(titleComponent), "%016llX",
                   static_cast<unsigned long long>(title ? title->titleId : 0));
-    return getCloudDevicePath(deviceId) + "/titles/" + titleComponent + "/revisions";
+    return std::string("titles/") + titleComponent + "/revisions";
 }
 
 std::vector<BackupVersion> SaveManager::getBackupVersions(TitleInfo* title) {
