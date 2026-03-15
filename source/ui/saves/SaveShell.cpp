@@ -509,10 +509,10 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
         const int chipW = std::max(80, (textW - chipGap) / 2);
         SDL_Rect localChip{textX, card.y + 104, chipW, 28};
         SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 104, chipW, 28};
-        fillRect(m_renderer, localChip, entry.hasLocalBackup ? color(8, 47, 73) : color(39, 39, 42));
-        fillRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(20, 83, 45) : color(39, 39, 42));
-        strokeRect(m_renderer, localChip, entry.hasLocalBackup ? color(56, 189, 248) : color(82, 82, 91));
-        strokeRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(74, 222, 128) : color(82, 82, 91));
+        fillRect(m_renderer, localChip, entry.hasLocalBackup ? color(20, 83, 45) : color(39, 39, 42));
+        fillRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(8, 47, 73) : color(39, 39, 42));
+        strokeRect(m_renderer, localChip, entry.hasLocalBackup ? color(74, 222, 128) : color(82, 82, 91));
+        strokeRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(56, 189, 248) : color(82, 82, 91));
         renderTextCentered(fitText(m_fontSmall, entry.hasLocalBackup ? tr("history.local", "Local") : tr("ui.empty", "Empty"), chipW - 8),
                            localChip,
                            m_fontSmall,

@@ -218,7 +218,7 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
             entry.userLabel = incomingMeta.userName;
             
             std::string src = incomingMeta.source.empty() ? "Dropbox" : incomingMeta.source;
-            entry.sourceLabel = (src == "Dropbox") ? lang.get("history.source_dropbox") : src;
+            entry.sourceLabel = (src == "Dropbox" || src == "cloud") ? lang.get("history.source_dropbox") : src;
             
             entry.timestamp = incomingMeta.createdAt != 0 ? incomingMeta.createdAt : file.modifiedTime;
             entry.size = incomingMeta.size > 0 ? incomingMeta.size : static_cast<int64_t>(file.size);

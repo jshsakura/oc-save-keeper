@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <ctime>
 #include <cstdio>
+#include <unistd.h>
 #include <cstdlib>
 #include <vector>
 #include <map>
@@ -567,7 +568,9 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
     // Copy from save to backup
     std::string savePath = saveMount.getMountPath();
     LOG_INFO("Backup: Copying files from %s to %s", savePath.c_str(), backupPath.c_str());
-    if (!fs::copyDirectory(savePath, backupPath, journalSize)) {
+    // Note: We don't need physical commit for backup (destination is SD), 
+    // but passing journalSize is good practice.
+    if (!fs::copyDirectoryWithProgress(savePath, backupPath, journalSize)) {
         LOG_ERROR("Backup: Failed to copy save data files");
         fs::deleteDirectory(backupPath); // Clean up partial/empty folder
         return false;
@@ -621,19 +624,21 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
     
     std::string savePath = saveMount.getMountPath();
     
-    // Clear existing save data first
-    fs::deleteDirectory(savePath);
-    mkdir(savePath.c_str(), 0777);
-    
-    // Copy from backup to save
-    if (!fs::copyDirectory(backupPath, savePath, journalSize)) {
+    // Clear existing save data first (JKSV Style: only contents, not the mount root)
+    if (!fs::clearDirectoryContents(savePath)) {
+        LOG_ERROR("Failed to clear existing save data contents safely");
+        return false;
+    }
+
+    // Copy from backup to save (JKSV Style Physical Commits)
+    if (!fs::copyDirectoryWithProgress(backupPath, savePath, journalSize, saveMount.getMountName())) {
         LOG_ERROR("Failed to restore save data");
         return false;
     }
-    
-    // CRITICAL: Commit the save data
+
+    // Final physical commit to ensure everything is flushed (JKSV Style)
     if (!saveMount.commit()) {
-        LOG_ERROR("Failed to commit save data");
+        LOG_ERROR("Failed to final commit save data");
         return false;
     }
 #else
@@ -989,7 +994,7 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
     const std::string importPath = getBackupPath(title) + "/" + importName;
 
     fs::deleteDirectory(importPath);
-    if (!fs::copyDirectory(tempDir, importPath, fs::DEFAULT_JOURNAL_SIZE)) {
+    if (!fs::copyDirectoryWithProgress(tempDir, importPath, fs::DEFAULT_JOURNAL_SIZE)) {
         fs::deleteDirectory(tempDir);
         if (outReason) *outReason = "Failed to stage imported backup";
         return false;
