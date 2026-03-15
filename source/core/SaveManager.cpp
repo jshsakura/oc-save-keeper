@@ -933,6 +933,20 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
         return false;
     }
 
+    // Validate ZIP file before extraction
+    struct stat st;
+    if (stat(archivePath.c_str(), &st) != 0) {
+        LOG_ERROR("ZIP file not found: %s", archivePath.c_str());
+        if (outReason) *outReason = "Archive file not found";
+        return false;
+    }
+    if (st.st_size == 0) {
+        LOG_ERROR("ZIP file is empty: %s", archivePath.c_str());
+        if (outReason) *outReason = "Archive file is empty";
+        return false;
+    }
+    LOG_DEBUG("ZIP file validated: %s (%ld bytes)", archivePath.c_str(), st.st_size);
+
     // Extraction stays on disk so Switch RAM usage is bounded by our fixed IO buffers.
     std::string tempDir = makeUniqueTempPath(title, "import");
     if (!zip::unzipToDirectory(archivePath, tempDir)) {

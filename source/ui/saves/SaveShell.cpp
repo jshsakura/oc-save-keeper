@@ -398,7 +398,7 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     }
 
     if (!subtitle.empty()) {
-        renderText(subtitle, 46, 54, m_fontSmall, color(148, 163, 184));
+        renderText(subtitle, 46, 74, m_fontSmall, color(148, 163, 184));
     }
 
     if (m_isAppletMode) {

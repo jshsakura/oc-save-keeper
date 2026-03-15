@@ -8,6 +8,7 @@
 #include <fstream>
 #include <cstring>
 #include <cctype>
+#include <sys/stat.h>
 #include <json-c/json.h>
 #ifdef __SWITCH__
 #include <switch.h>
@@ -594,6 +595,16 @@ bool Dropbox::downloadFile(const std::string& dropboxPath,
         LOG_ERROR("Dropbox: Download HTTP %ld for path %s", httpCode, dropboxPath.c_str());
         remove(localPath.c_str());
         return false;
+    }
+
+    // Log successful download with file size
+    struct stat st;
+    if (stat(localPath.c_str(), &st) == 0) {
+        LOG_DEBUG("Download complete: %s -> %s (HTTP %ld, %ld bytes)", 
+                  dropboxPath.c_str(), localPath.c_str(), httpCode, st.st_size);
+    } else {
+        LOG_DEBUG("Download complete: %s -> %s (HTTP %ld)", 
+                  dropboxPath.c_str(), localPath.c_str(), httpCode);
     }
     
     return true;

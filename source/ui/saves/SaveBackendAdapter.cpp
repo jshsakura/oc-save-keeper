@@ -2,6 +2,7 @@
 
 #include "core/SaveManager.hpp"
 #include "network/Dropbox.hpp"
+#include "ui/saves/Runtime.hpp"
 #include "utils/Language.hpp"
 #include "utils/Paths.hpp"
 
@@ -270,6 +271,8 @@ SaveActionResult SaveBackendAdapter::upload(uint64_t titleId) {
         return {false, "Dropbox is not connected"};
     }
 
+    Runtime::instance().notify("Creating local backup...");
+
     if (!m_saveManager.createVersionedBackup(title)) {
         return {false, "Local backup failed"};
     }
@@ -283,6 +286,8 @@ SaveActionResult SaveBackendAdapter::upload(uint64_t titleId) {
     if (archivePath.empty()) {
         return {false, "Archive export failed"};
     }
+
+    Runtime::instance().notify("Uploading to cloud...");
 
     const std::string localMetaPath = versions.front().path + ".meta";
     const std::string latestArchivePath = "/" + m_saveManager.getCloudPath(title);
