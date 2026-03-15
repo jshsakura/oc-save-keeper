@@ -58,7 +58,7 @@ std::string currentSelectionSubtitle(core::SaveManager& saveManager, network::Dr
     const std::string cloud = dropbox.isAuthenticated()
         ? lang.get("status.connected")
         : lang.get("status.disconnected");
-    return mode + "  |  " + selected + "  |  Dropbox: " + cloud;
+    return mode + "  |  " + selected + "  |  " + cloud;
 }
 
 #ifndef __SWITCH__
@@ -182,6 +182,10 @@ bool SaveShell::initialize() {
         return false;
     }
 
+#ifdef __SWITCH__
+    m_isAppletMode = (appletGetAppletType() != AppletType_Application);
+#endif
+
     utils::Language::instance().init();
     // Match the old MainUI startup flow so the first screen has data.
     m_saveManager.scanTitles();
@@ -273,10 +277,21 @@ void SaveShell::setButtonDown(Button button) {
     m_controller.down |= static_cast<u64>(button);
 }
 
+void SaveShell::setStatus(const std::string& message) {
+    m_statusMessage = message;
+    m_statusTime = static_cast<u64>(std::time(nullptr));
+}
+
 void SaveShell::update() {
+    u64 now = static_cast<u64>(std::time(nullptr));
     // Pull notifications from runtime
     if (Runtime::instance().hasNotification()) {
-        m_statusMessage = Runtime::instance().consumeNotification();
+        setStatus(Runtime::instance().consumeNotification());
+    }
+
+    // Auto-clear status after 3 seconds (only for non-essential info in main view)
+    if (!m_statusMessage.empty() && now - m_statusTime >= 3 && m_overlay == Overlay::None) {
+        m_statusMessage.clear();
     }
 
     if (m_overlay != Overlay::None) {
@@ -289,12 +304,17 @@ void SaveShell::update() {
         auto& lang = utils::Language::instance();
         const std::string newLang = (lang.currentLang() == "ko") ? "en" : "ko";
         lang.load(newLang);
-        m_statusMessage = tr("ui.language_changed", "Language changed");
+        setStatus(tr("ui.language_changed", "Language changed"));
         resetInput();
         return;
     }
     if (m_controller.gotDown(Button::L)) {
         openUserPicker();
+        resetInput();
+        return;
+    }
+    if (m_controller.gotDown(Button::R)) {
+        openDropboxOverlay();
         resetInput();
         return;
     }
@@ -368,10 +388,28 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     SDL_SetRenderDrawColor(m_renderer, 56, 189, 248, 255);
     SDL_Rect accent{24, 24, 8, 40};
     SDL_RenderFillRect(m_renderer, &accent);
-    renderText(title, 46, 18, m_fontLarge, color(241, 245, 249));
+    
+    // Main App Name
+    renderText(tr("app.name", "OC Save Keeper"), 46, 18, m_fontLarge, color(241, 245, 249));
+    
+    // Screen Title next to it - smaller font and moved right
+    if (!title.empty()) {
+        renderText(title, 315, 30, m_fontSmall, color(148, 163, 184));
+    }
+
     if (!subtitle.empty()) {
         renderText(subtitle, 46, 54, m_fontSmall, color(148, 163, 184));
     }
+
+    if (m_isAppletMode) {
+        renderStatusChip(tr("app.applet_warning_title", "Applet Mode"),
+                         1048 - 220, // To the left of the Dropbox chip
+                         22,
+                         208,
+                         color(185, 28, 28), // Brighter red background (Red-700)
+                         color(248, 113, 113));
+    }
+
     renderStatusChip(tr(m_dropbox.isAuthenticated() ? "status.connected" : "status.disconnected",
                         m_dropbox.isAuthenticated() ? "Connected" : "Not connected"),
                      1048,
@@ -424,7 +462,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
     const int gap = 16;
     const int innerPad = 20;
     const int cardW = (frameW - innerPad * 2 - gap * (cols - 1)) / cols;
-    const int cardH = 136;
+    const int cardH = 150; // Reduced from 160 to 150
     const int startX = frameX + innerPad;
     const int startY = frameY + innerPad;
 
@@ -449,28 +487,28 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
             drawFocus(m_renderer, card);
         }
 
-        const int iconSize = 80; // 아이콘 크기 증가 (64 -> 80)
-        SDL_Rect iconRect{card.x + 12, card.y + (card.h - iconSize) / 2, iconSize, iconSize};
+        const int iconSize = 90; // Reduced from 96 to match 150 height
+        SDL_Rect iconRect{card.x + 16, card.y + (card.h - iconSize) / 2, iconSize, iconSize};
         SDL_Rect iconFrame{iconRect.x - 1, iconRect.y - 1, iconRect.w + 2, iconRect.h + 2};
         fillRect(m_renderer, iconFrame, color(8, 12, 22));
         if (SDL_Texture* icon = loadIcon(entry.iconPath)) {
             SDL_RenderCopy(m_renderer, icon, nullptr, &iconRect);
         } else {
             fillRect(m_renderer, iconRect, color(15, 23, 42));
-            renderText("?", iconRect.x + 32, iconRect.y + 24, m_fontMedium, color(148, 163, 184));
+            renderText("?", iconRect.x + 38, iconRect.y + 28, m_fontMedium, color(148, 163, 184));
         }
         strokeRect(m_renderer, iconFrame, color(51, 65, 85));
 
-        const int textX = iconRect.x + iconRect.w + 16;
-        const int textW = card.x + card.w - textX - 12;
-        renderText(fitText(m_fontMedium, entry.name, textW), textX, card.y + 14, m_fontMedium, color(241, 245, 249));
-        renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 44, m_fontSmall, color(148, 163, 184));
-        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 66, m_fontSmall, color(148, 163, 184)); // Brightened from 100,116,139
+        const int textX = iconRect.x + iconRect.w + 20;
+        const int textW = card.x + card.w - textX - 16;
+        renderText(fitText(m_fontMedium, entry.name, textW), textX, card.y + 12, m_fontMedium, color(241, 245, 249));
+        renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 46, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 70, m_fontSmall, color(148, 163, 184));
 
-        const int chipGap = 8;
-        const int chipW = std::max(60, (textW - chipGap) / 2);
-        SDL_Rect localChip{textX, card.y + 92, chipW, 22};
-        SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 92, chipW, 22};
+        const int chipGap = 10;
+        const int chipW = std::max(80, (textW - chipGap) / 2);
+        SDL_Rect localChip{textX, card.y + 104, chipW, 28};
+        SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 104, chipW, 28};
         fillRect(m_renderer, localChip, entry.hasLocalBackup ? color(8, 47, 73) : color(39, 39, 42));
         fillRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(20, 83, 45) : color(39, 39, 42));
         strokeRect(m_renderer, localChip, entry.hasLocalBackup ? color(56, 189, 248) : color(82, 82, 91));
@@ -748,7 +786,7 @@ void SaveShell::openUserPicker() {
 
 void SaveShell::openDropboxOverlay() {
     if (!network::Dropbox::isInternetConnected()) {
-        m_statusMessage = tr("error.no_internet", "Internet connection required");
+        setStatus(tr("error.no_internet", "Internet connection required"));
         return;
     }
     
@@ -761,10 +799,10 @@ void SaveShell::openDropboxOverlay() {
 
     if (m_dropbox.isAuthenticated()) {
         m_dropboxState = DropboxAuthState::Idle;
-        m_statusMessage = tr("auth.status_authenticated", "You are already connected to Dropbox.");
+        setStatus(tr("auth.status_authenticated", "You are already connected to Dropbox."));
     } else {
         m_dropboxState = DropboxAuthState::Idle;
-        m_statusMessage = tr("auth.status_ready", "Ready to start Dropbox connection.");
+        setStatus(tr("auth.status_ready", "Ready to start Dropbox connection."));
     }
 }
 
@@ -811,7 +849,7 @@ void SaveShell::updateOverlay() {
     if (m_overlay == Overlay::UserPicker) {
         itemCount = static_cast<int>(m_saveManager.getUsers().size());
     } else if (m_overlay == Overlay::DropboxAuth) {
-        if (m_dropboxState == DropboxAuthState::ConfirmLogout) {
+        if (m_dropboxState == DropboxAuthState::ConfirmLogout || m_dropboxState == DropboxAuthState::ConfirmCancel) {
             itemCount = 2; // Yes, No
         } else if (m_dropbox.isAuthenticated()) {
             itemCount = 2; // Close, Logout
@@ -831,30 +869,41 @@ void SaveShell::updateOverlay() {
                 const std::string status = m_dropbox.pollBridgeSession(m_bridgeSession);
                 if (status == "approved") {
                     m_dropboxState = DropboxAuthState::Approved;
-                    m_statusMessage = tr("auth.status_approved", "Authorized! Finishing connection...");
+                    setStatus(tr("auth.status_approved", "Authorized! Finishing connection..."));
                 } else if (status == "expired") {
                     m_dropboxState = DropboxAuthState::Expired;
-                    m_statusMessage = tr("auth.status_expired", "Session expired. Please try again.");
+                    setStatus(tr("auth.status_expired", "Session expired. Please try again."));
                 } else if (status == "failed") {
                     m_dropboxState = DropboxAuthState::Failed;
-                    m_statusMessage = tr("auth.status_failed", "Session failed. Please try again.");
+                    setStatus(tr("auth.status_failed", "Session failed. Please try again."));
                 }
             }
         } else if (m_dropboxState == DropboxAuthState::Approved) {
             m_dropboxState = DropboxAuthState::Connecting;
             if (m_dropbox.consumeBridgeSession(m_bridgeSession)) {
                 m_dropboxState = DropboxAuthState::Success;
-                m_statusMessage = tr("auth.status_success", "Successfully connected to Dropbox!");
+                setStatus(tr("auth.status_success", "Successfully connected to Dropbox!"));
                 rebuildRootScreen();
             } else {
                 m_dropboxState = DropboxAuthState::Failed;
-                m_statusMessage = tr("auth.status_consume_failed", "Failed to exchange tokens. Please try again.");
+                setStatus(tr("auth.status_consume_failed", "Failed to exchange tokens. Please try again."));
             }
         }
     }
 
     if (m_controller.gotDown(Button::B)) {
-        closeOverlay();
+        if (m_overlay == Overlay::DropboxAuth && m_dropboxState == DropboxAuthState::WaitingForScan) {
+            m_dropboxState = DropboxAuthState::ConfirmCancel;
+            m_overlayIndex = 1; // Default to 'No'
+            setStatus(tr("auth.confirm_cancel", "Auth in progress. Are you sure you want to cancel?"));
+        } else if (m_overlay == Overlay::DropboxAuth && m_dropboxState == DropboxAuthState::ConfirmCancel) {
+            // Cancel the cancellation (go back to QR)
+            m_dropboxState = DropboxAuthState::WaitingForScan;
+            setStatus(tr("auth.status_waiting_scan", "Scan the QR code with your phone to login."));
+            m_overlayIndex = 0;
+        } else {
+            closeOverlay();
+        }
         return;
     }
     if (m_controller.gotDown(Button::Up) && itemCount > 0) {
@@ -872,19 +921,12 @@ void SaveShell::updateOverlay() {
         const int ty = m_touch.y;
 
         if (m_overlay == Overlay::DropboxAuth) {
-            SDL_Rect panel{128, 100, 1024, 440};
-            if (m_dropboxState == DropboxAuthState::ConfirmLogout) {
+            SDL_Rect panel{128, 140, 1024, 475};
+            if (m_dropboxState == DropboxAuthState::ConfirmLogout || 
+                m_dropboxState == DropboxAuthState::ConfirmCancel ||
+                m_dropbox.isAuthenticated()) {
                 for (int i = 0; i < 2; ++i) {
-                    SDL_Rect row{panel.x + 80, panel.y + 215 + i * 80, panel.w - 160, 60};
-                    if (tx >= row.x && tx <= row.x + row.w && ty >= row.y && ty <= row.y + row.h) {
-                        m_overlayIndex = i;
-                        activateOverlaySelection();
-                        break;
-                    }
-                }
-            } else if (m_dropbox.isAuthenticated()) {
-                for (int i = 0; i < 2; ++i) {
-                    SDL_Rect row{panel.x + 80, panel.y + 215 + i * 80, panel.w - 160, 60};
+                    SDL_Rect row{panel.x + 80, panel.y + 220 + i * 80, panel.w - 160, 60};
                     if (tx >= row.x && tx <= row.x + row.w && ty >= row.y && ty <= row.y + row.h) {
                         m_overlayIndex = i;
                         activateOverlaySelection();
@@ -893,15 +935,14 @@ void SaveShell::updateOverlay() {
                 }
             } else if (m_dropboxState == DropboxAuthState::Failed || 
                        m_dropboxState == DropboxAuthState::Idle || m_dropboxState == DropboxAuthState::Expired) {
-                const int qrBox = 240;
-                const int qrX = panel.x + 24;
-                const int textX = qrX + qrBox + 32;
-                const int textY = panel.y + 115;
-                const int textW = panel.w - (qrBox + 88);
-                const int btnW = (textW - 16) / 2;
+                const int qrBox = 300;
+                const int qrX = panel.x + 32;
+                const int textX = qrX + qrBox + 40;
+                const int textY = panel.y + 150;
+                const int textW = panel.w - (qrBox + 104);
                 
-                SDL_Rect startBtn{textX, textY + 110, btnW, 56};
-                SDL_Rect closeBtn{textX + btnW + 16, textY + 110, btnW, 56};
+                SDL_Rect startBtn{textX, textY + 115, textW, 56};
+                SDL_Rect closeBtn{textX, textY + 185, textW, 56};
                 
                 if (tx >= startBtn.x && tx <= startBtn.x + startBtn.w && ty >= startBtn.y && ty <= startBtn.y + startBtn.h) {
                     m_overlayIndex = 0;
@@ -911,13 +952,13 @@ void SaveShell::updateOverlay() {
                     activateOverlaySelection();
                 }
             } else if (m_dropboxState == DropboxAuthState::WaitingForScan) {
-                const int qrBox = 240;
-                const int qrX = panel.x + 24;
-                const int textX = qrX + qrBox + 32;
-                const int textY = panel.y + 115;
-                const int textW = panel.w - (qrBox + 88);
+                const int qrBox = 300;
+                const int qrX = panel.x + 32;
+                const int textX = qrX + qrBox + 40;
+                const int textY = panel.y + 150;
+                const int textW = panel.w - (qrBox + 104);
                 
-                SDL_Rect closeBtn{textX, textY + 260, textW, 48};
+                SDL_Rect closeBtn{textX, textY + 265, textW, 48};
                 if (tx >= closeBtn.x && tx <= closeBtn.x + closeBtn.w && ty >= closeBtn.y && ty <= closeBtn.y + closeBtn.h) {
                     m_overlayIndex = 0;
                     activateOverlaySelection();
@@ -934,7 +975,10 @@ void SaveShell::updateOverlay() {
                     break;
                 }
             }
-        } else if (m_overlay == Overlay::None) {
+        }
+
+        // Always check status chip in the top right, regardless of overlay (unless in Auth itself)
+        if (m_overlay != Overlay::DropboxAuth) {
             SDL_Rect statusChip{1048, 22, 208, 30};
             if (tx >= statusChip.x && tx <= statusChip.x + statusChip.w && 
                 ty >= statusChip.y && ty <= statusChip.y + statusChip.h) {
@@ -950,7 +994,7 @@ void SaveShell::activateOverlaySelection() {
         if (m_overlayIndex >= 0 && m_overlayIndex < static_cast<int>(users.size()) &&
             m_saveManager.selectUser(static_cast<std::size_t>(m_overlayIndex))) {
             rebuildRootScreen();
-            m_statusMessage = tr("ui.user_changed", "Selection changed");
+            setStatus(tr("ui.user_changed", "Selection changed"));
         }
         closeOverlay();
         return;
@@ -960,10 +1004,21 @@ void SaveShell::activateOverlaySelection() {
         return;
     }
 
+    if (m_dropboxState == DropboxAuthState::ConfirmCancel) {
+        if (m_overlayIndex == 0) { // Yes, cancel
+            closeOverlay();
+        } else { // No, go back to QR
+            m_dropboxState = DropboxAuthState::WaitingForScan;
+            setStatus(tr("auth.status_waiting_scan", "Scan the QR code with your phone to login."));
+            m_overlayIndex = 0;
+        }
+        return;
+    }
+
     if (m_dropboxState == DropboxAuthState::ConfirmLogout) {
         if (m_overlayIndex == 0) { // Yes
             m_dropbox.logout();
-            m_statusMessage = tr("status.disconnected", "Not connected");
+            setStatus(tr("status.disconnected", "Not connected"));
             m_dropboxState = DropboxAuthState::Idle;
             closeOverlay();
             rebuildRootScreen();
@@ -980,7 +1035,7 @@ void SaveShell::activateOverlaySelection() {
         } else if (m_overlayIndex == 1) { // Logout
             m_dropboxState = DropboxAuthState::ConfirmLogout;
             m_overlayIndex = 1; // Default to 'No'
-            m_statusMessage = tr("auth.confirm_logout", "Are you sure you want to disconnect from Dropbox?");
+            setStatus(tr("auth.confirm_logout", "Are you sure you want to disconnect from Dropbox?"));
         }
         return;
     }
@@ -988,16 +1043,16 @@ void SaveShell::activateOverlaySelection() {
     if (m_dropboxState == DropboxAuthState::Failed || m_dropboxState == DropboxAuthState::Idle || m_dropboxState == DropboxAuthState::Expired) {
         if (m_overlayIndex == 0) { // Start/Retry
             m_dropboxState = DropboxAuthState::Starting;
-            m_statusMessage = tr("auth.status_starting_session", "Starting login session...");
+            setStatus(tr("auth.status_starting_session", "Starting login session..."));
             if (m_dropbox.startBridgeSession(m_bridgeSession)) {
                 m_dropboxState = DropboxAuthState::WaitingForScan;
                 m_authUrl = m_bridgeSession.authorizeUrl;
                 updateAuthQrCode(m_authUrl);
-                m_statusMessage = tr("auth.status_waiting_scan", "Scan the QR code with your phone to login.");
+                setStatus(tr("auth.status_waiting_scan", "Scan the QR code with your phone to login."));
                 m_overlayIndex = 0;
             } else {
                 m_dropboxState = DropboxAuthState::Failed;
-                m_statusMessage = tr("auth.status_bridge_failed", "Failed to start session. Check your internet or bridge server.");
+                setStatus(tr("auth.status_bridge_failed", "Failed to start session. Check your internet or bridge server."));
                 LOG_ERROR("Dropbox: Bridge session start failed. Check your internet.");
             }
         } else { // Cancel
@@ -1007,10 +1062,10 @@ void SaveShell::activateOverlaySelection() {
     }
     
     if (m_dropboxState == DropboxAuthState::WaitingForScan) {
-        if (m_overlayIndex == 0) {
-            m_dropboxState = DropboxAuthState::Idle;
-            m_statusMessage = tr("auth.status_ready", "Ready to start Dropbox connection.");
-            m_overlayIndex = 0;
+        if (m_overlayIndex == 0) { // Close button pressed
+            m_dropboxState = DropboxAuthState::ConfirmCancel;
+            m_overlayIndex = 1; // Default to 'No'
+            setStatus(tr("auth.confirm_cancel", "Auth in progress. Are you sure you want to cancel?"));
         }
         return;
     }
@@ -1021,11 +1076,11 @@ void SaveShell::activateOverlaySelection() {
 void SaveShell::renderDropboxOverlay() {
     SDL_Rect shade{0, 0, 1280, 720};
     fillRect(m_renderer, shade, color(2, 6, 14, 180));
-    SDL_Rect panel{128, 100, 1024, 440};
+    SDL_Rect panel{128, 140, 1024, 475}; // Increased height from 460 to 475
     drawPanel(m_renderer, panel, color(11, 18, 31, 250), color(51, 65, 85));
-    renderText(tr("auth.title", "Dropbox Setup"), panel.x + 20, panel.y + 31, m_fontLarge, color(241, 245, 249));
+    renderText(tr("auth.title", "Dropbox Setup"), panel.x + 24, panel.y + 31, m_fontLarge, color(241, 245, 249));
     
-    SDL_Rect statusRect{panel.x + 20, panel.y + 75, panel.w - 40, 44};
+    SDL_Rect statusRect{panel.x + 24, panel.y + 80, panel.w - 48, 44};
     fillRect(m_renderer, statusRect, color(15, 23, 42));
     strokeRect(m_renderer, statusRect, color(51, 65, 85));
     renderTextCentered(fitText(m_fontSmall, m_statusMessage, statusRect.w - 16),
@@ -1033,11 +1088,11 @@ void SaveShell::renderDropboxOverlay() {
                        m_fontSmall,
                        color(125, 211, 252));
 
-    if (m_dropboxState == DropboxAuthState::ConfirmLogout) {
+    if (m_dropboxState == DropboxAuthState::ConfirmLogout || m_dropboxState == DropboxAuthState::ConfirmCancel) {
         const char* options[2] = { "ui.yes", "ui.no" };
-        const char* fallbacks[2] = { "Yes, disconnect", "No, stay connected" };
+        const char* fallbacks[2] = { "Yes", "No" };
         for (int i = 0; i < 2; ++i) {
-            SDL_Rect row{panel.x + 80, panel.y + 215 + i * 80, panel.w - 160, 60};
+            SDL_Rect row{panel.x + 80, panel.y + 220 + i * 80, panel.w - 160, 60};
             const bool selected = i == m_overlayIndex;
             fillRect(m_renderer, row, selected ? color(19, 42, 79) : color(17, 24, 39));
             strokeRect(m_renderer, row, color(51, 65, 85));
@@ -1048,7 +1103,7 @@ void SaveShell::renderDropboxOverlay() {
         const char* options[2] = { "detail.back", "ui.logout" };
         const char* fallbacks[2] = { "Close", "Logout" };
         for (int i = 0; i < 2; ++i) {
-            SDL_Rect row{panel.x + 80, panel.y + 215 + i * 80, panel.w - 160, 60};
+            SDL_Rect row{panel.x + 80, panel.y + 220 + i * 80, panel.w - 160, 60};
             const bool selected = i == m_overlayIndex;
             fillRect(m_renderer, row, selected ? color(19, 42, 79) : color(17, 24, 39));
             strokeRect(m_renderer, row, color(51, 65, 85));
@@ -1058,25 +1113,27 @@ void SaveShell::renderDropboxOverlay() {
             renderTextCentered(tr(options[i], fallbacks[i]), row, m_fontMedium, textColor);
         }
     } else {
-        // Side-by-side layout: QR on the left, Instructions/Button on the right
-        const int qrBox = 240;
-        const int qrX = panel.x + 24;
-        const int qrY = panel.y + 115;
-        const int textX = qrX + qrBox + 32;
-        const int textY = qrY;
-        const int textW = panel.w - (qrBox + 88);
+        // Layout: QR on the left, Instructions/Vertical buttons on the right
+        const int qrBox = 300;
+        const int qrX = panel.x + 32;
+        const int qrY = panel.y + 150; // Moved down further from top (was 135)
+        const int textX = qrX + qrBox + 40;
+        const int textY = panel.y + 150; // Moved down
+        const int textW = panel.w - (qrBox + 104);
 
         // --- LEFT SIDE: QR or Dummy ---
         if (m_dropboxState == DropboxAuthState::WaitingForScan && m_authQrCode.size > 0) {
+            // Always draw the consistent 300x300 background area
+            SDL_Rect qrArea{qrX, qrY, qrBox, qrBox};
+            fillRect(m_renderer, qrArea, color(255, 255, 255));
+            strokeRect(m_renderer, qrArea, color(30, 41, 59));
+
             const int quietZone = 2;
             const int matrixSize = m_authQrCode.size + quietZone * 2;
             const int moduleSize = qrBox / matrixSize;
             const int drawSize = matrixSize * moduleSize;
             const int offsetX = qrX + (qrBox - drawSize) / 2;
             const int offsetY = qrY + (qrBox - drawSize) / 2;
-
-            SDL_Rect whiteBg{offsetX, offsetY, drawSize, drawSize};
-            fillRect(m_renderer, whiteBg, color(255, 255, 255));
 
             for (int y = 0; y < m_authQrCode.size; ++y) {
                 for (int x = 0; x < m_authQrCode.size; ++x) {
@@ -1096,8 +1153,8 @@ void SaveShell::renderDropboxOverlay() {
             SDL_Rect qrFrame{qrX, qrY, qrBox, qrBox};
             fillRect(m_renderer, qrFrame, color(15, 23, 42));
             strokeRect(m_renderer, qrFrame, color(30, 41, 59));
-            if (SDL_Texture* icon = loadIcon("romfs:/icon.png")) {
-                SDL_Rect iconRect{qrX + (qrBox - 120) / 2, qrY + (qrBox - 120) / 2, 120, 120};
+            if (SDL_Texture* icon = loadIcon("romfs:/gfx/icon.png")) {
+                SDL_Rect iconRect{qrX, qrY, qrBox, qrBox};
                 SDL_RenderCopy(m_renderer, icon, nullptr, &iconRect);
             }
         }
@@ -1105,12 +1162,12 @@ void SaveShell::renderDropboxOverlay() {
         // --- RIGHT SIDE: Actions and Instructions ---
         if (m_dropboxState == DropboxAuthState::Idle || m_dropboxState == DropboxAuthState::Failed || m_dropboxState == DropboxAuthState::Expired) {
             renderText(tr("auth.steps_title", "How It Works"), textX, textY, m_fontMedium, color(56, 189, 248));
-            renderText(tr("auth.waiting_link_hint", "Start by generating the sign-in link."), textX, textY + 40, m_fontSmall, color(241, 245, 249));
-            renderText(tr("auth.waiting_link_hint2", "Press the button below to begin."), textX, textY + 65, m_fontSmall, color(148, 163, 184));
+            renderText(tr("auth.waiting_link_hint", "Start by generating the sign-in link."), textX, textY + 45, m_fontSmall, color(241, 245, 249));
+            renderText(tr("auth.waiting_link_hint2", "Press the button below to begin."), textX, textY + 70, m_fontSmall, color(148, 163, 184));
             
-            const int btnW = (textW - 16) / 2;
-            SDL_Rect startBtn{textX, textY + 110, btnW, 56};
-            SDL_Rect closeBtn{textX + btnW + 16, textY + 110, btnW, 56};
+            // Stacked vertical buttons
+            SDL_Rect startBtn{textX, textY + 115, textW, 56};
+            SDL_Rect closeBtn{textX, textY + 185, textW, 56};
             
             const bool startSelected = m_overlayIndex == 0;
             const bool closeSelected = m_overlayIndex == 1;
@@ -1127,20 +1184,20 @@ void SaveShell::renderDropboxOverlay() {
             if (closeSelected) drawFocus(m_renderer, closeBtn);
             renderTextCentered(tr("ui.cancel", "Cancel"), closeBtn, m_fontMedium, color(248, 113, 113));
             
-            renderText(tr("ui.auth_footer_new", "Use your phone to scan and approve the connection."), textX, textY + 185, m_fontSmall, color(100, 116, 139));
+            renderText(tr("ui.auth_footer_new", "Use your phone to scan and approve the connection."), textX, textY + 265, m_fontSmall, color(100, 116, 139));
         } else if (m_dropboxState == DropboxAuthState::WaitingForScan) {
             renderText(tr("auth.steps_title", "How It Works"), textX, textY, m_fontMedium, color(56, 189, 248));
-            renderText(tr("auth.status_waiting_scan", "Scan the QR code with your phone to login."), textX, textY + 40, m_fontSmall, color(241, 245, 249));
-            renderText(tr("auth.step2_short", "Open the link on your phone or PC,"), textX, textY + 75, m_fontSmall, color(148, 163, 184));
-            renderText(tr("auth.step2_cont", "then finish sign-in and approval there."), textX, textY + 98, m_fontSmall, color(148, 163, 184));
-            renderText(tr("auth.step4_short", "Once approved, connection completes"), textX, textY + 135, m_fontSmall, color(148, 163, 184));
-            renderText(tr("auth.step4_cont", "automatically on this device."), textX, textY + 158, m_fontSmall, color(148, 163, 184));
+            renderText(tr("auth.status_waiting_scan", "Scan the QR code with your phone to login."), textX, textY + 45, m_fontSmall, color(241, 245, 249));
+            renderText(tr("auth.step2_short", "Open the link on your phone or PC,"), textX, textY + 80, m_fontSmall, color(148, 163, 184));
+            renderText(tr("auth.step2_cont", "then finish sign-in and approval there."), textX, textY + 103, m_fontSmall, color(148, 163, 184));
+            renderText(tr("auth.step4_short", "Once approved, connection completes"), textX, textY + 140, m_fontSmall, color(148, 163, 184));
+            renderText(tr("auth.step4_cont", "automatically on this device."), textX, textY + 163, m_fontSmall, color(148, 163, 184));
             
-            SDL_Rect tipBox{textX, textY + 195, textW, 50};
+            SDL_Rect tipBox{textX, textY + 205, textW, 50};
             fillRect(m_renderer, tipBox, color(15, 23, 42));
             renderText(tr("auth.tip", "One-time PKCE setup, then the saved refresh token is reused."), tipBox.x + 12, tipBox.y + 14, m_fontSmall, color(125, 211, 252));
             
-            SDL_Rect closeBtn{textX, textY + 260, textW, 48};
+            SDL_Rect closeBtn{textX, textY + 265, textW, 48}; // Moved up closer to tip box
             const bool closeSelected = m_overlayIndex == 0;
             fillRect(m_renderer, closeBtn, closeSelected ? color(19, 42, 79) : color(17, 24, 39));
             strokeRect(m_renderer, closeBtn, color(51, 65, 85));
