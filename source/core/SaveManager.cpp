@@ -969,7 +969,7 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
     remove(getBackupMetadataPath(tempDir).c_str());
 
     SyncDecision decision = hasIncomingMeta
-        ? (skipConflictCheck ? SyncDecision{true, "Metadata precheck accepted incoming backup"}
+        ? (skipConflictCheck ? SyncDecision{true, "Restore success"}
                              : evaluateIncomingMetadata(title, incomingMeta))
         : SyncDecision{true, "Incoming backup has no metadata; applying as recovery import"};
 
