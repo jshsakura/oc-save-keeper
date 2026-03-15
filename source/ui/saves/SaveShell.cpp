@@ -394,7 +394,7 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     
     // Screen Title next to it - smaller font and moved right
     if (!title.empty()) {
-        renderText(title, 450, 30, m_fontSmall, color(148, 163, 184));
+        renderText(title, 550, 30, m_fontSmall, color(148, 163, 184));
     }
 
     if (!subtitle.empty()) {
@@ -433,7 +433,8 @@ void SaveShell::renderFooter(const std::string& leftHint, const std::string& rig
         const std::string fitted = fitText(m_fontSmall, rightHint, maxW);
         // 정확한 너비 계산 대신 대략적인 우측 정렬 시도 (TTF 너비 측정 함수 부재 시)
         // 화면 우측에서 24px 떨어뜨리고, 예상 너비만큼 뺌
-        const int estimatedW = static_cast<int>(fitted.size() * 12);  // Korean chars are wider
+        // More conservative estimate for Korean characters (they can be ~14-16px wide in TTF)
+        const int estimatedW = static_cast<int>(fitted.size() * 14);
         const int x = std::max(24, 1280 - 24 - estimatedW);
         renderText(fitted, x, footer.y + 10, m_fontSmall, color(100, 116, 139));
     }
