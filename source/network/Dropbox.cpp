@@ -9,6 +9,9 @@
 #include <cstring>
 #include <cctype>
 #include <json-c/json.h>
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 namespace network {
 
@@ -26,8 +29,8 @@ static constexpr const char* DROPBOX_LEGACY_TOKEN_FILE = utils::paths::DROPBOX_L
 static constexpr const char* DROPBOX_APP_KEY_FILE = utils::paths::DROPBOX_APP_KEY_TXT;
 static constexpr const char* DROPBOX_ROOT_ENV_FILE = utils::paths::ROOT_ENV;
 static constexpr const char* DROPBOX_CONFIG_ENV_FILE = utils::paths::CONFIG_ENV;
-static constexpr const char* DROPBOX_OLD_AUTH_FILE = "/switch/oc-save-keeper/dropbox_auth.json";
-static constexpr const char* DROPBOX_OLD_LEGACY_TOKEN_FILE = "/switch/oc-save-keeper/dropbox_token.txt";
+static constexpr const char* DROPBOX_OLD_AUTH_FILE = "/oc-save-keeper/dropbox_auth.json";
+static constexpr const char* DROPBOX_OLD_LEGACY_TOKEN_FILE = "/oc-save-keeper/dropbox_token.txt";
 
 std::string trimCopy(std::string value) {
     const auto isSpace = [](unsigned char ch) {
@@ -83,6 +86,23 @@ Dropbox::~Dropbox() {
     if (m_curl) {
         curl_easy_cleanup(m_curl);
     }
+}
+
+bool Dropbox::isInternetConnected() {
+#ifdef __SWITCH__
+    Result rc = nifmInitialize(NifmServiceType_User);
+    if (R_SUCCEEDED(rc)) {
+        NifmInternetConnectionType type;
+        u32 wifiStrength;
+        NifmInternetConnectionStatus status;
+        rc = nifmGetInternetConnectionStatus(&type, &wifiStrength, &status);
+        nifmExit();
+        return R_SUCCEEDED(rc) && status == NifmInternetConnectionStatus_Connected;
+    }
+    return false;
+#else
+    return true;
+#endif
 }
 
 bool Dropbox::needsAuthentication() const {
@@ -199,6 +219,7 @@ bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
               json_object_object_get_ex(root, "token_endpoint", &endpointObj);
 
     if (!ok) {
+        LOG_ERROR("Dropbox: Bridge consume response missing fields");
         json_object_put(root);
         return false;
     }
@@ -208,6 +229,8 @@ bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
     std::string verifier = json_object_get_string(verifierObj);
     std::string redirectUri = json_object_get_string(redirectObj);
     std::string tokenEndpoint = json_object_get_string(endpointObj);
+
+    LOG_INFO("Dropbox: Exchanging code with redirect_uri: %s", redirectUri.c_str());
 
     std::string tokenPostData =
         "grant_type=authorization_code"
@@ -464,6 +487,8 @@ bool Dropbox::uploadFile(const std::string& localPath,
                          std::function<void(size_t, size_t)> progress) {
     (void)progress;
     
+    LOG_INFO("Dropbox: uploadFile called: %s -> %s", localPath.c_str(), dropboxPath.c_str());
+    
     if (!ensureAccessToken()) {
         LOG_ERROR("Dropbox: Not authenticated");
         return false;
@@ -518,6 +543,7 @@ bool Dropbox::uploadFile(const std::string& localPath,
         return false;
     }
     
+    LOG_INFO("Dropbox: Upload succeeded: %s -> %s", localPath.c_str(), dropboxPath.c_str());
     return true;
 }
 
@@ -831,10 +857,13 @@ std::string Dropbox::performRequest(const std::string& url,
     if (headers) {
         curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers);
     }
-    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(m_curl, CURLOPT_USERAGENT, "oc-save-keeper/1.0");
+    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(m_curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(m_curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(m_curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 30L);
     curl_easy_setopt(m_curl, CURLOPT_TIMEOUT, 60L);
     
     CURLcode res = curl_easy_perform(m_curl);
@@ -844,12 +873,15 @@ std::string Dropbox::performRequest(const std::string& url,
     if (headers) curl_slist_free_all(headers);
     
     if (res != CURLE_OK) {
-        LOG_ERROR("Dropbox: Request failed: %s", curl_easy_strerror(res));
+        LOG_ERROR("Dropbox: Request failed: %s (url: %s)", curl_easy_strerror(res), url.c_str());
         return "";
     }
 
     if (!dropbox::isSuccessfulHttpStatus(httpCode)) {
-        LOG_ERROR("Dropbox: Request HTTP %ld failed for URL: %s", httpCode, url.c_str());
+        if (response.find("insufficient_scope") != std::string::npos || response.find("not_permitted") != std::string::npos) {
+            LOG_ERROR("Dropbox: PERMISSION ERROR. Please enable 'files.metadata.read' scope in Dropbox App Console.");
+        }
+        LOG_ERROR("Dropbox: Request HTTP %ld failed for URL: %s response: %s", httpCode, url.c_str(), response.c_str());
         return "";
     }
     

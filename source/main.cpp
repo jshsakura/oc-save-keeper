@@ -11,7 +11,9 @@
 
 #include "core/SaveManager.hpp"
 #include "network/Dropbox.hpp"
+#include "ui/saves/Runtime.hpp"
 #include "ui/saves/SaveShell.hpp"
+#include "utils/Language.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Paths.hpp"
 
@@ -29,7 +31,18 @@ namespace dropkeep {
 
 bool initialize() {
 #ifdef __SWITCH__
+    Result rc = socketInitializeDefault();
+    if (R_FAILED(rc)) {
+        LOG_ERROR("socketInitializeDefault failed: 0x%x", rc);
+        return false;
+    }
     padInitializeDefault(&g_pad);
+    
+    rc = romfsInit();
+    if (R_FAILED(rc)) {
+        LOG_ERROR("romfsInit failed: 0x%x", rc);
+        return false;
+    }
 #endif
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0) {
@@ -91,10 +104,24 @@ bool initialize() {
     }
     
     utils::paths::ensureBaseDirectories();
+    utils::Language::instance().init();
+
+#ifdef __SWITCH__
+    if (appletGetAppletType() != AppletType_Application) {
+        LOG_WARNING("Running in Applet Mode. Some features might be restricted.");
+        ui::saves::Runtime::instance().notify(utils::Language::instance().get("app.applet_warning_title"));
+    }
+#endif
+
     return true;
 }
 
 void cleanup() {
+#ifdef __SWITCH__
+    accountExit();
+    romfsExit();
+    socketExit();
+#endif
     curl_global_cleanup();
     IMG_Quit();
     

@@ -11,6 +11,7 @@ enum LayoutType {
     LayoutTypeList,
     LayoutTypeGrid,
     LayoutTypeGridDetail,
+    LayoutTypeVertical,
 };
 
 class GridMenuBase : public MenuBase {

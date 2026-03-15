@@ -19,10 +19,10 @@ SidebarEntryCallback::SidebarEntryCallback(const std::string& title, Callback ca
 }
 
 void SidebarEntryCallback::activate() {
-    if (m_callback) {
+    if (m_enabled && m_callback) {
         m_callback();
     }
-    if (m_popOnClick) {
+    if (m_enabled && m_popOnClick) {
         setPop();
     }
 }

@@ -45,6 +45,7 @@ private:
     std::vector<SaveTitleEntry> m_entries;
     int m_index = 0;
     int m_layout = LayoutTypeGrid;
+    bool m_isOperationInProgress = false;
 };
 
 } // namespace ui::saves

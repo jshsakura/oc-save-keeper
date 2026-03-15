@@ -59,10 +59,18 @@ void Runtime::pop() {
 
 void Runtime::notify(const std::string& text) {
     LOG_INFO("ui runtime notify: %s", text.c_str());
+    m_lastNotification = text;
 }
 
 void Runtime::pushError(const std::string& text) {
     LOG_ERROR("ui runtime error: %s", text.c_str());
+    m_lastNotification = "Error: " + text;
+}
+
+std::string Runtime::consumeNotification() {
+    std::string text = std::move(m_lastNotification);
+    m_lastNotification.clear();
+    return text;
 }
 
 void Runtime::playSound(SoundEffect effect) {

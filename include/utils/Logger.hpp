@@ -43,7 +43,7 @@ public:
         
         // Also write to file
         utils::paths::ensureBaseDirectories();
-        FILE* logFile = fopen("/switch/oc-save-keeper/logs/oc-save-keeper.log", "a");
+        FILE* logFile = fopen(utils::paths::LOG_FILE, "a");
         if (logFile) {
             fprintf(logFile, "[%s] [%s] ", timeStr, levelStr[static_cast<int>(level)]);
             vfprintf(logFile, format, fileArgs);

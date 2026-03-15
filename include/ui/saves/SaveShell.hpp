@@ -65,6 +65,7 @@ private:
         Connecting,
         Success,
         Failed,
+        Expired,
         ConfirmLogout,
     };
 

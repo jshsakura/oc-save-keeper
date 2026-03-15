@@ -48,6 +48,8 @@ public:
     Dropbox();
     ~Dropbox();
     
+    static bool isInternetConnected();
+    
     // Authentication - SUPER SIMPLE!
     bool needsAuthentication() const;
     bool isOAuthConfigured() const;

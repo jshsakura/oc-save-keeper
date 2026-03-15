@@ -25,6 +25,10 @@ public:
     SaveActionResult download(uint64_t titleId, const std::string& revisionId) override;
     SaveActionResult refresh(uint64_t titleId) override;
 
+    void setTargetType(uint64_t titleId, bool isDevice, bool isSystem) override;
+
+    bool isCloudAuthenticated() const override;
+
 private:
     core::SaveManager& m_saveManager;
     network::Dropbox& m_dropbox;

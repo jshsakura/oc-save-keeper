@@ -54,8 +54,13 @@ struct TitleInfo {
     std::string iconPath;
     std::string savePath;
     SaveType saveType = SaveType::Account;
+    SaveType actualSaveType = SaveType::Account; 
     int64_t saveSize = 0;
     bool hasSave = false;
+    bool hasAccountSave = false; // New
+    bool hasDeviceSave = false;  // New
+    int64_t accountSize = 0;     // New
+    int64_t deviceSize = 0;      // New
     bool isFavorite = false;
 };
 
