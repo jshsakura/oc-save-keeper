@@ -326,7 +326,7 @@ SaveActionResult SaveBackendAdapter::download(uint64_t titleId, const std::strin
     }
 
     std::string reason;
-    const bool ok = m_saveManager.importBackupArchive(title, tempArchive, &reason);
+    const bool ok = m_saveManager.importBackupArchive(title, tempArchive, &reason, true);  // skipConflictCheck - user explicitly chose cloud restore
     std::remove(tempArchive.c_str());
 
     if (ok) g_remoteCacheValid = false;
