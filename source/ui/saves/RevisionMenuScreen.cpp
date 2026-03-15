@@ -87,6 +87,8 @@ void RevisionMenuScreen::reload() {
     } else if (m_index >= static_cast<int>(m_entries.size())) {
         m_index = static_cast<int>(m_entries.size()) - 1;
     }
+
+    Runtime::instance().notify(utils::Language::instance().get("ui.refresh_completed"));
 }
 
 void RevisionMenuScreen::restoreSelected() {

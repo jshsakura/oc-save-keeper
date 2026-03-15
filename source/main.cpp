@@ -109,7 +109,6 @@ bool initialize() {
 #ifdef __SWITCH__
     if (appletGetAppletType() != AppletType_Application) {
         LOG_WARNING("Running in Applet Mode. Some features might be restricted.");
-        ui::saves::Runtime::instance().notify(utils::Language::instance().get("app.applet_warning_title"));
     }
 #endif
 

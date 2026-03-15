@@ -22,14 +22,14 @@ void List::onUpdate(const Controller& controller, const TouchInfo& touch, int in
         scrollUp(nextIndex, m_row, count);
     } else if (controller.gotDown(Button::Right)) {
         if (m_row > 1) {
-            nextIndex = std::min(index + 1, std::max(0, count - 1));
+            scrollDown(nextIndex, 1, count);
         } else {
             // Page jump for single column lists
             scrollDown(nextIndex, m_page, count);
         }
     } else if (controller.gotDown(Button::Left)) {
         if (m_row > 1) {
-            nextIndex = std::max(0, index - 1);
+            scrollUp(nextIndex, 1, count);
         } else {
             // Page jump for single column lists
             scrollUp(nextIndex, m_page, count);
