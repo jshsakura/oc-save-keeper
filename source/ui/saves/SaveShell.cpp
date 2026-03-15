@@ -394,7 +394,7 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     
     // Screen Title next to it - smaller font and moved right
     if (!title.empty()) {
-        renderText(title, 550, 30, m_fontSmall, color(148, 163, 184));
+        renderText(title, 380, 30, m_fontSmall, color(148, 163, 184));
     }
 
     if (!subtitle.empty()) {
