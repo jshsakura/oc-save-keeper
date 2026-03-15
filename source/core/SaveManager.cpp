@@ -95,6 +95,12 @@ bool looksBrokenDeviceToken(const std::string& value) {
     return value.empty() || value.find("FFFFFFFFFFFFFFFF") != std::string::npos;
 }
 
+bool isAlwaysDeviceSave(uint64_t titleId) {
+    // 0x010070400032A000: Animal Crossing: New Horizons (ACNH)
+    // Add other special IDs here if needed.
+    return (titleId == 0x010070400032A000ULL);
+}
+
 SaveType convertSaveType(u8 type) {
     switch (type) {
         case FsSaveDataType_System:
@@ -557,7 +563,9 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
     int64_t journalSize = fs::getSaveJournalSize(title->titleId);
     
     // Use scoped mount for RAII safety
-    bool isDevice = title->actualSaveType == SaveType::Device || title->actualSaveType == SaveType::System;
+    bool isDevice = title->actualSaveType == SaveType::Device || 
+                    title->actualSaveType == SaveType::System ||
+                    isAlwaysDeviceSave(title->titleId);
     fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid, isDevice);
     if (!saveMount.isOpen()) {
         LOG_ERROR("Backup: Failed to mount save for %s", title->name.c_str());
@@ -609,13 +617,20 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
         return false;
     }
     closedir(dir);
-    
-#ifdef __SWITCH__
+
+    #ifdef __SWITCH__
+    // ULTIMATE SAFETY: Create a rollback point of the current live save 
+    // before we wipe it for restoration. This ensures no data is lost 
+    // if the power goes out or the restoration fails.
+    LOG_INFO("Restore: Creating safety rollback backup...");
+    createVersionedBackup(title, DEFAULT_MAX_VERSIONS);
+
     // Get journal size for proper commits
-    int64_t journalSize = fs::getSaveJournalSize(title->titleId);
-    
+    int64_t journalSize = fs::getSaveJournalSize(title->titleId);    
     // Use scoped mount for RAII safety
-    bool isDevice = title->actualSaveType == SaveType::Device || title->actualSaveType == SaveType::System;
+    bool isDevice = title->actualSaveType == SaveType::Device || 
+                    title->actualSaveType == SaveType::System ||
+                    isAlwaysDeviceSave(title->titleId);
     fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid, isDevice);
     if (!saveMount.isOpen()) {
         LOG_ERROR("Failed to mount save for restore");

@@ -2,6 +2,7 @@
  * oc-save-keeper - Dropbox Save Sync for Nintendo Switch
  * File utilities implementation
  * 100% Aligned with JKSV's physical commitment strategy
+ * Ultimate safety edition: Iteration-safe deletion and eager commits
  */
 
 #include "fs/FileUtil.hpp"
@@ -9,6 +10,7 @@
 #include <array>
 #include <cstring>
 #include <unistd.h>
+#include <vector>
 
 namespace fs {
 
@@ -80,24 +82,19 @@ bool copyFileWithProgress(const std::string& source, const std::string& dest,
         
         if (readSize > 0) {
             // Check journal size before writing (JKSV Style)
-            // If the next write will exceed journal, we must commit.
             if (journalSize > 0 && journalCount + (int64_t)readSize >= journalSize) {
-                // 1. Close the file to ensure all libc buffers are flushed
                 fclose(dstFile);
-                
-                // 2. Perform physical commit on the NAND filesystem via fsdev
                 LOG_INFO("FS: Journal threshold reached, committing %s", mountName.c_str());
                 physicalCommit(mountName);
                 
-                // 3. Re-open the file in append mode or seek to current position
                 dstFile = fopen(dest.c_str(), "rb+");
                 if (!dstFile) {
                     LOG_ERROR("FS: Failed to re-open dest %s after commit", dest.c_str());
                     success = false;
                     break;
                 }
-                if (fseek(dstFile, totalCopied, SEEK_SET) != 0) {
-                    LOG_ERROR("FS: CRITICAL - Failed to seek to position %zu after commit in %s", totalCopied, dest.c_str());
+                if (fseek(dstFile, (long)totalCopied, SEEK_SET) != 0) {
+                    LOG_ERROR("FS: CRITICAL - Failed to seek to position %zu in %s after commit!", totalCopied, dest.c_str());
                     success = false;
                     break;
                 }
@@ -123,7 +120,6 @@ bool copyFileWithProgress(const std::string& source, const std::string& dest,
     fclose(srcFile);
     if (dstFile) fclose(dstFile);
     
-    // Final commit after file is finished (JKSV Style)
     if (success) {
         physicalCommit(mountName);
     }
@@ -138,6 +134,11 @@ bool copyDirectoryWithProgress(const std::string& source, const std::string& des
     if (!ensureDirectoryExists(dest)) {
         LOG_ERROR("FS: Failed to create directory %s", dest.c_str());
         return false;
+    }
+    
+    // Eager commit after directory creation to avoid journal pressure
+    if (!mountName.empty()) {
+        physicalCommit(mountName);
     }
     
     DIR* dir = opendir(source.c_str());
@@ -172,7 +173,6 @@ bool copyDirectoryWithProgress(const std::string& source, const std::string& des
     
     closedir(dir);
     
-    // Directory level commit
     if (success) {
         physicalCommit(mountName);
     }
@@ -180,18 +180,32 @@ bool copyDirectoryWithProgress(const std::string& source, const std::string& des
     return success;
 }
 
-bool clearDirectoryContents(const std::string& path) {
+/**
+ * Helper to collect all entry names in a directory.
+ * Prevents issues with readdir while modifying the directory structure.
+ */
+static std::vector<std::string> getDirectoryEntries(const std::string& path) {
+    std::vector<std::string> entries;
     DIR* dir = opendir(path.c_str());
-    if (!dir) return false;
+    if (!dir) return entries;
 
-    bool success = true;
     struct dirent* entry;
     while ((entry = readdir(dir)) != nullptr) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
+        entries.push_back(entry->d_name);
+    }
+    closedir(dir);
+    return entries;
+}
 
-        std::string fullPath = path + "/" + entry->d_name;
+bool clearDirectoryContents(const std::string& path) {
+    std::vector<std::string> entries = getDirectoryEntries(path);
+    bool success = true;
+
+    for (const auto& name : entries) {
+        std::string fullPath = path + "/" + name;
         struct stat st;
         if (stat(fullPath.c_str(), &st) == 0) {
             if (S_ISDIR(st.st_mode)) {
@@ -201,31 +215,11 @@ bool clearDirectoryContents(const std::string& path) {
             }
         }
     }
-    closedir(dir);
     return success;
 }
 
 bool deleteDirectory(const std::string& path) {
-    DIR* dir = opendir(path.c_str());
-    if (!dir) return false;
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-
-        std::string fullPath = path + "/" + entry->d_name;
-        struct stat st;
-        if (stat(fullPath.c_str(), &st) == 0) {
-            if (S_ISDIR(st.st_mode)) {
-                deleteDirectory(fullPath);
-            } else {
-                unlink(fullPath.c_str());
-            }
-        }
-    }
-    closedir(dir);
+    if (!clearDirectoryContents(path)) return false;
     return rmdir(path.c_str()) == 0;
 }
 
