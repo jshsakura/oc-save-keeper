@@ -93,13 +93,15 @@ void RevisionMenuScreen::reload() {
 
 void RevisionMenuScreen::restoreSelected() {
     const auto& lang = utils::Language::instance();
-    if (m_entries.empty() || !m_backend) {
+    
+    if (m_entries.empty()) {
         Runtime::instance().notify(lang.get("ui.no_revision_entries"));
         return;
     }
 
     const auto& entry = m_entries[m_index];
     SaveActionResult result;
+    
     if (m_source == SaveSource::Cloud) {
         result = m_backend->download(m_titleId, entry.path);
     } else {
@@ -107,9 +109,9 @@ void RevisionMenuScreen::restoreSelected() {
     }
 
     if (result.ok) {
-        Runtime::instance().notify(result.message);
+        Runtime::instance().notify(lang.get("sync.restore_success"));
     } else {
-        Runtime::instance().pushError(result.message);
+        Runtime::instance().pushError(lang.get("sync.restore_failed"));
     }
 }
 
