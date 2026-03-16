@@ -11,17 +11,26 @@ Language: **English** | [한국어](README.ko.md)
 
 ## What This Project Does
 
-`oc-save-keeper` is built around one simple goal: make save backup and restore safer across multiple devices and users.
+`oc-save-keeper` is a save manager for Nintendo Switch homebrew focused on **safe** backup and restore across multiple devices and users.
 
-- 🗂️ **Local first**: create versioned local backups before any risky restore.
-- ☁️ **Cloud sync**: upload and download through Dropbox.
-- 🛡️ **Safer decisions**: compare metadata (device/user/title/revision) before restore.
-- 🌏 **Bilingual UI**: Korean (`ko`) + English fallback.
+- 🗂️ **Local first**: versioned local backups before any risky restore
+- ☁️ **Cloud sync**: upload and download through Dropbox
+- 🛡️ **Safer decisions**: compare metadata (device/user/title/revision) before restore
+- 🌏 **Bilingual UI**: Korean (`ko`) + English fallback
+- 🔄 **Auto-rollback**: JKSV-style safety restoration with automatic rollback on failure
 
-## Credits
+## Credits & Attribution
 
-- Original project reference: [JKSV](https://github.com/J-D-K/JKSV)
-- This project is inspired by the Nintendo Switch save-management ecosystem and adds backup metadata, device-aware sync decisions, and Dropbox-focused workflows.
+This project is **inspired by and references** [JKSV](https://github.com/J-D-K/JKSV) by J-D-K.
+
+`oc-save-keeper` extends the Nintendo Switch save-management ecosystem with:
+
+- Backup metadata tracking (device, user, title, revision, timestamp)
+- Device-aware sync decisions with priority-based conflict handling
+- Dropbox-focused cloud workflows with optional bridge service
+- JKSV-style safety restoration engine with physical commits and auto-rollback
+
+If you find this project useful, please also check out the original [JKSV](https://github.com/J-D-K/JKSV) project.
 
 ## Quick Navigation
 
@@ -33,13 +42,43 @@ Language: **English** | [한국어](README.ko.md)
 - 🧪 [Build](#build)
 - ⚙️ [Release Automation](#release-automation)
 
-`oc-save-keeper` is a save manager for Nintendo Switch homebrew that focuses on three things:
+## Features
 
-- simple local backups
-- cloud sync with Dropbox
-- safer cross-device restore decisions
+### Core Features
 
-The app keeps track of which device and which user created a backup, then uses that metadata to explain why a cloud save is accepted or rejected.
+- Local save backups with version history
+- Dropbox upload and download
+- Device-aware and user-aware revision metadata
+- Priority-based conflict handling across multiple devices
+- Korean UI for `ko`, English fallback for everything else
+- Nintendo Switch shared font rendering for Korean and English text
+
+### Safety Features
+
+- **JKSV-style restoration engine**: Physical commits with auto-rollback on failure
+- **ZIP validation**: Verify archive integrity before restore
+- **Pre-restore snapshots**: Current save is automatically backed up before any restore
+- **Cross-user protection**: Automatic overwrite is blocked for different users
+
+### Cloud Features
+
+- **QR code authentication**: Scan QR to authorize Dropbox on your phone/PC
+- **Dropbox bridge service**: Optional Python backend for callback-and-poll OAuth UX
+- **Title-centric cloud paths**: Clean organization by game title
+- **Multi-save support**: Backup and restore multiple saves per title
+
+### UI/UX
+
+- **SaveShell workflow**: Modern, streamlined interface
+- **Catppuccin Mocha theme**: Smooth animations and large buttons
+- **Toast notifications**: Upload progress and operation feedback
+- **Applet mode detection**: Better compatibility across environments
+
+### Security
+
+- **SHA-512 integrity verification**: Strong hash for backup validation
+- **Rickroll guard**: Protection against unsecured HTTP requests
+- **Rate limiting**: Backend protection for bridge service
 
 ## Quick Start
 
@@ -65,40 +104,18 @@ Recommended for most users:
 /switch/oc-save-keeper/oc-save-keeper.nro
 ```
 
-Advanced/manual option:
-
-- download the standalone `.nro`
-- place it at `/switch/oc-save-keeper/oc-save-keeper.nro`
-
 ## Repository Layout
 
-Important project paths in this repository:
-
 ```text
-.github/workflows/release.yml    # CI build/release pipeline
-source/                          # app source code
-include/                         # headers
-tests/                           # host unit tests
-romfs/lang/                      # runtime language JSON files
-RELEASE_NOTES_v0.1.0-alpha.1.md  # current release notes doc
-TESTING_v0.1.0-alpha.1.md        # current test checklist doc
+.github/workflows/        # CI build/release pipelines
+source/                   # App source code
+include/                  # Header files
+tests/                    # Host unit tests
+romfs/lang/               # Runtime language JSON files
+backend/dropbox-bridge/   # Optional OAuth bridge service
+docs/                     # Documentation
+RELEASE_NOTES_*.md        # Release notes
 ```
-
-## Features
-
-- Local save backups with version history
-- Dropbox upload and download
-- Device-aware and user-aware revision metadata
-- Priority-based conflict handling across multiple devices
-- Korean UI for `ko`, English fallback for everything else
-- Nintendo Switch shared font rendering for Korean and English text
-
-### Feature Highlights
-
-- 📚 **Version history**: keep multiple recovery points per game.
-- 🧭 **Source clarity**: show which device and user created each backup.
-- ⚖️ **Conflict reasoning**: explain why local/cloud was preferred.
-- 🔐 **Safety by default**: block dangerous cross-user overwrite flows.
 
 ## Install
 
@@ -152,23 +169,19 @@ Then build normally:
 make
 ```
 
-Command-line override still works if you want it, but `.env` is the default path now.
-
 For GitHub Actions builds, set repository secret `DROPBOX_APP_KEY`.
 
 ### 3. Connect on Switch
 
 Launch `oc-save-keeper`, open the Dropbox setup screen, then:
 
-1. press `Open Sign-In`
-2. scan the QR code (or copy the generated Dropbox authorization link) and open it on your phone or PC
-3. approve the app
-4. copy the returned authorization code or the full redirected URL
-5. paste it into the Switch and press `Connect Dropbox`
+1. Press `Open Sign-In`
+2. Scan the QR code with your phone (or copy the authorization link to your PC)
+3. Approve the app on Dropbox
+4. Copy the returned authorization code or full redirected URL
+5. Paste it into the Switch and press `Connect Dropbox`
 
-The Switch build intentionally does not launch the Dropbox browser window directly anymore. This avoids web applet instability under Atmosphere and keeps the OAuth step on a device with a full browser.
-
-The app stores the resulting OAuth session here:
+The app stores the OAuth session here:
 
 ```text
 /switch/oc-save-keeper/config/dropbox_auth.json
@@ -176,10 +189,10 @@ The app stores the resulting OAuth session here:
 
 ## Dropbox Bridge (Optional)
 
-If you want callback-and-poll UX instead of manual code paste, use the Python bridge service under `backend/dropbox-bridge`.
+For callback-and-poll UX instead of manual code paste, use the Python bridge service.
 
 - Service docs: `backend/dropbox-bridge/README.md`
-- Architecture and load notes: `docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md`
+- Architecture notes: `docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md`
 
 If your public domain is `save.opencourse.kr`, register this redirect URI in Dropbox App Console:
 
@@ -220,11 +233,11 @@ Current behavior:
 
 ## Multiple Devices
 
-If you use more than one Switch or more than one setup, each device should keep its own identity:
+If you use more than one Switch, each device should keep its own identity:
 
 - `device_id.txt`: stable internal identifier
 - `device_label.txt`: human-readable device name
-- `device_priority.txt`: larger number means the device wins conflicts more often
+- `device_priority.txt`: larger number wins conflicts
 
 Example:
 
@@ -239,12 +252,6 @@ Another device might use:
 device_label.txt     -> Lite Backup
 device_priority.txt  -> 100
 ```
-
-With this setup, the UI can show:
-
-- which device created the backup
-- which user it belongs to
-- why the app kept local data or accepted cloud data
 
 ## Basic Usage
 
@@ -266,50 +273,32 @@ With this setup, the UI can show:
 
 If this is your first time using the app:
 
-1. launch `oc-save-keeper`
-2. confirm text renders correctly
-3. open one game that already has a save
-4. choose `Local Backup`
-5. connect Dropbox
-6. choose `Upload to Cloud`
+1. Launch `oc-save-keeper`
+2. Confirm text renders correctly
+3. Open one game that already has a save
+4. Choose `Local Backup`
+5. Connect Dropbox
+6. Choose `Upload to Cloud`
 
 After that, the same title on another device can use `Download from Cloud`.
-
-### What You Will See
-
-On the title detail screen, the app shows:
-
-- save size
-- latest backup device
-- latest backup user
-- latest backup source
-- current Dropbox connection state
-
-In version history, each entry is labeled with:
-
-- timestamp
-- device label
-- user name
-- source
-
-This is intentional. The goal is to make cross-device restores understandable even for non-technical users.
 
 ### Recommended Workflow
 
 For safer testing, use this order:
 
-1. create a local backup
-2. upload to Dropbox
-3. switch devices
-4. download from Dropbox
-5. review the decision reason
-6. restore only if the device and user match your intent
+1. Create a local backup
+2. Upload to Dropbox
+3. Switch devices
+4. Download from Dropbox
+5. Review the decision reason
+6. Restore only if the device and user match your intent
 
 ### Important Safety Notes
 
 - Do not test restore logic with your only copy of an important save.
 - Keep at least one known-good local backup before trying cross-device restores.
 - If the app says a backup came from another device, stop and read the device label before restoring.
+- The app creates a pre-restore snapshot automatically, but you should still be cautious.
 
 ## Troubleshooting
 
@@ -321,15 +310,14 @@ If something fails, check:
 
 Useful things to record when reporting an issue:
 
-- game title
-- local device label
-- selected user
-- exact action you performed
-- whether the app said local or cloud was preferred
+- Game title
+- Local device label
+- Selected user
+- Exact action you performed
+- Whether the app said local or cloud was preferred
 
 ## Known Issues
 
-- Dropbox token entry still needs a more polished on-device input flow.
 - Cloud version browsing is not implemented yet; the current flow focuses on the latest synchronized backup.
 - Cross-device restore is supported, but users should still verify the source device label before restoring.
 - This project is still in alpha, so restore behavior should be tested carefully with non-critical saves first.
@@ -350,7 +338,7 @@ oc-save-keeper.nro
 
 ## Release Automation
 
-GitHub Actions can build the release package automatically.
+GitHub Actions builds the release package automatically.
 
 The workflow is located at:
 
@@ -360,8 +348,18 @@ The workflow is located at:
 
 It is designed to:
 
-- build `oc-save-keeper.nro`
-- package `dist/oc-save-keeper-<ref>.zip`
-- upload artifacts on workflow runs
-- publish a `latest` prerelease on every `main` push
-- attach assets on tagged releases (`v*`)
+- Build `oc-save-keeper.nro`
+- Package `dist/oc-save-keeper-<ref>.zip`
+- Upload artifacts on workflow runs
+- Publish a `latest` prerelease on every `main` push
+- Attach assets on tagged releases (`v*`)
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Acknowledgments
+
+- [JKSV](https://github.com/J-D-K/JKSV) by J-D-K - Original save manager that inspired this project
+- [devkitPro](https://devkitpro.org/) - Toolchain for Nintendo Switch homebrew development
+- [libnx](https://github.com/switchbrew/libnx) - Nintendo Switch homebrew library

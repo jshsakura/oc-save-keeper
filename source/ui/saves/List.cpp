@@ -20,10 +20,20 @@ void List::onUpdate(const Controller& controller, const TouchInfo& touch, int in
         scrollDown(nextIndex, m_row, count);
     } else if (controller.gotDown(Button::Up)) {
         scrollUp(nextIndex, m_row, count);
-    } else if (m_row > 1 && controller.gotDown(Button::Right)) {
-        nextIndex = std::min(index + 1, std::max(0, count - 1));
-    } else if (m_row > 1 && controller.gotDown(Button::Left)) {
-        nextIndex = std::max(0, index - 1);
+    } else if (controller.gotDown(Button::Right)) {
+        if (m_row > 1) {
+            scrollDown(nextIndex, 1, count);
+        } else {
+            // Page jump for single column lists
+            scrollDown(nextIndex, m_page, count);
+        }
+    } else if (controller.gotDown(Button::Left)) {
+        if (m_row > 1) {
+            scrollUp(nextIndex, 1, count);
+        } else {
+            // Page jump for single column lists
+            scrollUp(nextIndex, m_page, count);
+        }
     }
 
     if (nextIndex != index) {

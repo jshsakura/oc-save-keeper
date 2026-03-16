@@ -4,13 +4,23 @@
  */
 #include "network/Dropbox.hpp"
 #include "network/DropboxUtil.hpp"
+#include "fs/FileUtil.hpp"
 #include "utils/Paths.hpp"
 #include <fstream>
 #include <cstring>
 #include <cctype>
+#include <sys/stat.h>
 #include <json-c/json.h>
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 namespace network {
+
+// RAII wrappers from dropbox namespace
+using dropbox::ScopedJson;
+using dropbox::ScopedCurlSlist;
+using fs::ScopedFile;
 
 // Dropbox API endpoints
 static constexpr const char* DROPBOX_AUTHORIZE_URL = "https://www.dropbox.com/oauth2/authorize";
@@ -26,8 +36,8 @@ static constexpr const char* DROPBOX_LEGACY_TOKEN_FILE = utils::paths::DROPBOX_L
 static constexpr const char* DROPBOX_APP_KEY_FILE = utils::paths::DROPBOX_APP_KEY_TXT;
 static constexpr const char* DROPBOX_ROOT_ENV_FILE = utils::paths::ROOT_ENV;
 static constexpr const char* DROPBOX_CONFIG_ENV_FILE = utils::paths::CONFIG_ENV;
-static constexpr const char* DROPBOX_OLD_AUTH_FILE = "/switch/oc-save-keeper/dropbox_auth.json";
-static constexpr const char* DROPBOX_OLD_LEGACY_TOKEN_FILE = "/switch/oc-save-keeper/dropbox_token.txt";
+static constexpr const char* DROPBOX_OLD_AUTH_FILE = "/oc-save-keeper/dropbox_auth.json";
+static constexpr const char* DROPBOX_OLD_LEGACY_TOKEN_FILE = "/oc-save-keeper/dropbox_token.txt";
 
 std::string trimCopy(std::string value) {
     const auto isSpace = [](unsigned char ch) {
@@ -85,6 +95,23 @@ Dropbox::~Dropbox() {
     }
 }
 
+bool Dropbox::isInternetConnected() {
+#ifdef __SWITCH__
+    Result rc = nifmInitialize(NifmServiceType_User);
+    if (R_SUCCEEDED(rc)) {
+        NifmInternetConnectionType type;
+        u32 wifiStrength;
+        NifmInternetConnectionStatus status;
+        rc = nifmGetInternetConnectionStatus(&type, &wifiStrength, &status);
+        nifmExit();
+        return R_SUCCEEDED(rc) && status == NifmInternetConnectionStatus_Connected;
+    }
+    return false;
+#else
+    return true;
+#endif
+}
+
 bool Dropbox::needsAuthentication() const {
     return !m_authenticated;
 }
@@ -133,8 +160,9 @@ bool Dropbox::startBridgeSession(DropboxBridgeSession& outSession) {
         return false;
     }
 
-    json_object* root = json_tokener_parse(response.c_str());
-    if (!root) return false;
+    ScopedJson scopedRoot(json_tokener_parse(response.c_str()));
+    if (!scopedRoot) return false;
+    json_object* root = scopedRoot.get();
 
     json_object* sidObj = nullptr;
     json_object* pollObj = nullptr;
@@ -151,7 +179,6 @@ bool Dropbox::startBridgeSession(DropboxBridgeSession& outSession) {
         outSession.pollUrl = json_object_get_string(pollUrlObj);
 
     outSession.active = !outSession.sessionId.empty() && !outSession.pollToken.empty();
-    json_object_put(root);
     return outSession.active;
 }
 
@@ -166,8 +193,9 @@ std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
     std::string response = performRequest(url, postData, "Content-Type: application/json", false);
     if (response.empty()) return "failed";
 
-    json_object* root = json_tokener_parse(response.c_str());
-    if (!root) return "failed";
+    ScopedJson scopedRoot(json_tokener_parse(response.c_str()));
+    if (!scopedRoot) return "failed";
+    json_object* root = scopedRoot.get();
 
     std::string status = "failed";
     json_object* statusObj = nullptr;
@@ -175,7 +203,6 @@ std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
         status = json_object_get_string(statusObj);
     }
 
-    json_object_put(root);
     return status;
 }
 
@@ -188,8 +215,9 @@ bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
     std::string response = performRequest(url, postData, "Content-Type: application/json", false);
     if (response.empty()) return false;
 
-    json_object* root = json_tokener_parse(response.c_str());
-    if (!root) return false;
+    ScopedJson scopedRoot(json_tokener_parse(response.c_str()));
+    if (!scopedRoot) return false;
+    json_object* root = scopedRoot.get();
 
     json_object *codeObj, *verifierObj, *stateObj, *redirectObj, *endpointObj;
     bool ok = json_object_object_get_ex(root, "authorization_code", &codeObj) &&
@@ -199,7 +227,7 @@ bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
               json_object_object_get_ex(root, "token_endpoint", &endpointObj);
 
     if (!ok) {
-        json_object_put(root);
+        LOG_ERROR("Dropbox: Bridge consume response missing fields");
         return false;
     }
 
@@ -208,6 +236,8 @@ bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
     std::string verifier = json_object_get_string(verifierObj);
     std::string redirectUri = json_object_get_string(redirectObj);
     std::string tokenEndpoint = json_object_get_string(endpointObj);
+
+    LOG_INFO("Dropbox: Exchanging code with redirect_uri: %s", redirectUri.c_str());
 
     std::string tokenPostData =
         "grant_type=authorization_code"
@@ -222,8 +252,8 @@ bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
         "Content-Type: application/x-www-form-urlencoded",
         false
     );
-    
-    json_object_put(root); // Put Consume response
+
+    // scopedRoot will be freed automatically
 
     if (tokenResponse.empty()) return false;
 
@@ -297,11 +327,12 @@ bool Dropbox::exchangeAuthorizationCode(const std::string& input) {
         return false;
     }
 
-    json_object* root = json_tokener_parse(response.c_str());
-    if (!root) {
+    ScopedJson scopedRoot(json_tokener_parse(response.c_str()));
+    if (!scopedRoot) {
         LOG_ERROR("Dropbox: OAuth token response parse failed");
         return false;
     }
+    json_object* root = scopedRoot.get();
 
     json_object* accessTokenObj = nullptr;
     json_object* refreshTokenObj = nullptr;
@@ -310,7 +341,6 @@ bool Dropbox::exchangeAuthorizationCode(const std::string& input) {
     const bool hasRefresh = json_object_object_get_ex(root, "refresh_token", &refreshTokenObj);
 
     if (!hasAccess || !hasRefresh) {
-        json_object_put(root);
         LOG_ERROR("Dropbox: OAuth token response missing required fields");
         return false;
     }
@@ -322,8 +352,6 @@ bool Dropbox::exchangeAuthorizationCode(const std::string& input) {
     } else {
         m_tokenExpiresAt = 0;
     }
-
-    json_object_put(root);
 
     m_authenticated = !m_accessToken.empty();
     m_codeVerifier.clear();
@@ -341,85 +369,88 @@ void Dropbox::cancelPendingAuthorization() {
 
 bool Dropbox::loadToken() {
     utils::paths::ensureBaseDirectories();
-    FILE* file = fopen(DROPBOX_AUTH_FILE, "r");
-    if (!file) {
-        file = fopen(DROPBOX_OLD_AUTH_FILE, "r");
-    }
-    if (file) {
-        std::string content;
-        char buffer[512];
-        while (fgets(buffer, sizeof(buffer), file)) {
-            content += buffer;
+    
+    // Try auth file (new or old location)
+    {
+        ScopedFile file(fopen(DROPBOX_AUTH_FILE, "r"));
+        if (!file) {
+            file = ScopedFile(fopen(DROPBOX_OLD_AUTH_FILE, "r"));
         }
-        fclose(file);
-
-        json_object* root = json_tokener_parse(content.c_str());
-        if (root) {
-            json_object* accessObj = nullptr;
-            json_object* refreshObj = nullptr;
-            json_object* expiresObj = nullptr;
-
-            if (json_object_object_get_ex(root, "access_token", &accessObj)) {
-                m_accessToken = json_object_get_string(accessObj);
-            }
-            if (json_object_object_get_ex(root, "refresh_token", &refreshObj)) {
-                m_refreshToken = json_object_get_string(refreshObj);
-            }
-            if (json_object_object_get_ex(root, "expires_at", &expiresObj)) {
-                m_tokenExpiresAt = static_cast<std::time_t>(json_object_get_int64(expiresObj));
+        if (file) {
+            std::string content;
+            char buffer[512];
+            while (fgets(buffer, sizeof(buffer), file.get())) {
+                content += buffer;
             }
 
-            json_object_put(root);
-            if (!m_accessToken.empty()) {
-                return true;
+            ScopedJson root(json_tokener_parse(content.c_str()));
+            if (root) {
+                json_object* accessObj = nullptr;
+                json_object* refreshObj = nullptr;
+                json_object* expiresObj = nullptr;
+
+                if (json_object_object_get_ex(root.get(), "access_token", &accessObj)) {
+                    m_accessToken = json_object_get_string(accessObj);
+                }
+                if (json_object_object_get_ex(root.get(), "refresh_token", &refreshObj)) {
+                    m_refreshToken = json_object_get_string(refreshObj);
+                }
+                if (json_object_object_get_ex(root.get(), "expires_at", &expiresObj)) {
+                    m_tokenExpiresAt = static_cast<std::time_t>(json_object_get_int64(expiresObj));
+                }
+
+                if (!m_accessToken.empty()) {
+                    return true;
+                }
             }
         }
     }
 
-    file = fopen(DROPBOX_LEGACY_TOKEN_FILE, "r");
-    if (!file) {
-        file = fopen(DROPBOX_OLD_LEGACY_TOKEN_FILE, "r");
-    }
-    if (!file) {
-        return false;
-    }
+    // Try legacy token file
+    {
+        ScopedFile file(fopen(DROPBOX_LEGACY_TOKEN_FILE, "r"));
+        if (!file) {
+            file = ScopedFile(fopen(DROPBOX_OLD_LEGACY_TOKEN_FILE, "r"));
+        }
+        if (!file) {
+            return false;
+        }
 
-    char token[513];
-    if (!fgets(token, sizeof(token), file)) {
-        fclose(file);
-        return false;
-    }
+        char token[513];
+        if (!fgets(token, sizeof(token), file.get())) {
+            return false;
+        }
 
-    token[strcspn(token, "\n")] = 0;
-    m_accessToken = token;
-    m_refreshToken.clear();
-    m_tokenExpiresAt = 0;
-    fclose(file);
-    if (!m_accessToken.empty()) {
-        saveToken();
-        remove(DROPBOX_LEGACY_TOKEN_FILE);
-        remove(DROPBOX_OLD_LEGACY_TOKEN_FILE);
+        token[strcspn(token, "\n")] = 0;
+        m_accessToken = token;
+        m_refreshToken.clear();
+        m_tokenExpiresAt = 0;
+        if (!m_accessToken.empty()) {
+            saveToken();
+            remove(DROPBOX_LEGACY_TOKEN_FILE);
+            remove(DROPBOX_OLD_LEGACY_TOKEN_FILE);
+        }
+        return !m_accessToken.empty();
     }
-    return !m_accessToken.empty();
 }
 
 bool Dropbox::saveToken() {
     utils::paths::ensureBaseDirectories();
-    json_object* root = json_object_new_object();
-    json_object_object_add(root, "access_token", json_object_new_string(m_accessToken.c_str()));
-    json_object_object_add(root, "refresh_token", json_object_new_string(m_refreshToken.c_str()));
-    json_object_object_add(root, "expires_at", json_object_new_int64(static_cast<long long>(m_tokenExpiresAt)));
+    ScopedJson root(json_object_new_object());
+    if (!root) {
+        return false;
+    }
+    json_object_object_add(root.get(), "access_token", json_object_new_string(m_accessToken.c_str()));
+    json_object_object_add(root.get(), "refresh_token", json_object_new_string(m_refreshToken.c_str()));
+    json_object_object_add(root.get(), "expires_at", json_object_new_int64(static_cast<long long>(m_tokenExpiresAt)));
 
-    const char* text = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PLAIN);
-    FILE* file = fopen(DROPBOX_AUTH_FILE, "w");
+    const char* text = json_object_to_json_string_ext(root.get(), JSON_C_TO_STRING_PLAIN);
+    ScopedFile file(fopen(DROPBOX_AUTH_FILE, "w"));
     if (!file) {
-        json_object_put(root);
         return false;
     }
 
-    const int writeResult = fprintf(file, "%s\n", text);
-    fclose(file);
-    json_object_put(root);
+    const int writeResult = fprintf(file.get(), "%s\n", text);
     return writeResult > 0;
 }
 
@@ -464,38 +495,41 @@ bool Dropbox::uploadFile(const std::string& localPath,
                          std::function<void(size_t, size_t)> progress) {
     (void)progress;
     
+    LOG_INFO("Dropbox: uploadFile called: %s -> %s", localPath.c_str(), dropboxPath.c_str());
+    
     if (!ensureAccessToken()) {
         LOG_ERROR("Dropbox: Not authenticated");
         return false;
     }
     
     // Read file
-    FILE* file = fopen(localPath.c_str(), "rb");
+    ScopedFile file(fopen(localPath.c_str(), "rb"));
     if (!file) {
         LOG_ERROR("Dropbox: Cannot open file: %s", localPath.c_str());
         return false;
     }
     
-    fseek(file, 0, SEEK_END);
-    long fileSize = ftell(file);
-    fseek(file, 0, SEEK_SET);
+    fseek(file.get(), 0, SEEK_END);
+    long fileSize = ftell(file.get());
+    fseek(file.get(), 0, SEEK_SET);
     
     // Build API arguments header
     std::string apiArg = dropbox::buildUploadArg(dropboxPath);
     
     // Setup curl for upload
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, ("Authorization: Bearer " + m_accessToken).c_str());
-    headers = curl_slist_append(headers, ("Dropbox-API-Arg: " + apiArg).c_str());
-    headers = curl_slist_append(headers, "Content-Type: application/octet-stream");
+    struct curl_slist* rawHeaders = nullptr;
+    rawHeaders = curl_slist_append(rawHeaders, ("Authorization: Bearer " + m_accessToken).c_str());
+    rawHeaders = curl_slist_append(rawHeaders, ("Dropbox-API-Arg: " + apiArg).c_str());
+    rawHeaders = curl_slist_append(rawHeaders, "Content-Type: application/octet-stream");
+    ScopedCurlSlist headers(rawHeaders);
     
     curl_easy_reset(m_curl);
     const std::string uploadUrl = std::string(DROPBOX_CONTENT) + "/files/upload";
     curl_easy_setopt(m_curl, CURLOPT_URL, uploadUrl.c_str());
     curl_easy_setopt(m_curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers.get());
     curl_easy_setopt(m_curl, CURLOPT_READFUNCTION, readCallback);
-    curl_easy_setopt(m_curl, CURLOPT_READDATA, file);
+    curl_easy_setopt(m_curl, CURLOPT_READDATA, file.get());
     curl_easy_setopt(m_curl, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)fileSize);
     
     std::string response;
@@ -505,8 +539,6 @@ bool Dropbox::uploadFile(const std::string& localPath,
     CURLcode res = curl_easy_perform(m_curl);
     long httpCode = 0;
     curl_easy_getinfo(m_curl, CURLINFO_RESPONSE_CODE, &httpCode);
-    fclose(file);
-    curl_slist_free_all(headers);
     
     if (res != CURLE_OK) {
         LOG_ERROR("Dropbox: Upload failed: %s", curl_easy_strerror(res));
@@ -518,6 +550,7 @@ bool Dropbox::uploadFile(const std::string& localPath,
         return false;
     }
     
+    LOG_INFO("Dropbox: Upload succeeded: %s -> %s", localPath.c_str(), dropboxPath.c_str());
     return true;
 }
 
@@ -535,28 +568,26 @@ bool Dropbox::downloadFile(const std::string& dropboxPath,
     // Build API arguments header
     std::string apiArg = dropbox::buildDownloadArg(dropboxPath);
     
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, ("Authorization: Bearer " + m_accessToken).c_str());
-    headers = curl_slist_append(headers, ("Dropbox-API-Arg: " + apiArg).c_str());
+    struct curl_slist* rawHeaders = nullptr;
+    rawHeaders = curl_slist_append(rawHeaders, ("Authorization: Bearer " + m_accessToken).c_str());
+    rawHeaders = curl_slist_append(rawHeaders, ("Dropbox-API-Arg: " + apiArg).c_str());
+    ScopedCurlSlist headers(rawHeaders);
     
-    FILE* file = fopen(localPath.c_str(), "wb");
+    ScopedFile file(fopen(localPath.c_str(), "wb"));
     if (!file) {
         LOG_ERROR("Dropbox: Cannot create file: %s", localPath.c_str());
-        curl_slist_free_all(headers);
         return false;
     }
     
     curl_easy_reset(m_curl);
     const std::string downloadUrl = std::string(DROPBOX_CONTENT) + "/files/download";
     curl_easy_setopt(m_curl, CURLOPT_URL, downloadUrl.c_str());
-    curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, file);
+    curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers.get());
+    curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, file.get());
     
     CURLcode res = curl_easy_perform(m_curl);
     long httpCode = 0;
     curl_easy_getinfo(m_curl, CURLINFO_RESPONSE_CODE, &httpCode);
-    fclose(file);
-    curl_slist_free_all(headers);
     
     if (res != CURLE_OK) {
         LOG_ERROR("Dropbox: Download failed: %s", curl_easy_strerror(res));
@@ -568,6 +599,16 @@ bool Dropbox::downloadFile(const std::string& dropboxPath,
         LOG_ERROR("Dropbox: Download HTTP %ld for path %s", httpCode, dropboxPath.c_str());
         remove(localPath.c_str());
         return false;
+    }
+
+    // Log successful download with file size
+    struct stat st;
+    if (stat(localPath.c_str(), &st) == 0) {
+        LOG_DEBUG("Download complete: %s -> %s (HTTP %ld, %ld bytes)", 
+                  dropboxPath.c_str(), localPath.c_str(), httpCode, st.st_size);
+    } else {
+        LOG_DEBUG("Download complete: %s -> %s (HTTP %ld)", 
+                  dropboxPath.c_str(), localPath.c_str(), httpCode);
     }
     
     return true;
@@ -626,12 +667,12 @@ bool Dropbox::createFolder(const std::string& path) {
     
     std::string postData = dropbox::buildCreateFolderRequest(path);
     
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, ("Authorization: Bearer " + m_accessToken).c_str());
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+    struct curl_slist* rawHeaders = nullptr;
+    rawHeaders = curl_slist_append(rawHeaders, ("Authorization: Bearer " + m_accessToken).c_str());
+    rawHeaders = curl_slist_append(rawHeaders, "Content-Type: application/json");
+    ScopedCurlSlist headers(rawHeaders);
     
     std::string response = performRequest(std::string(DROPBOX_API_V2) + "/files/create_folder_v2", postData, "", true);
-    curl_slist_free_all(headers);
     
     return !response.empty();
 }
@@ -641,12 +682,12 @@ bool Dropbox::deleteFile(const std::string& dropboxPath) {
     
     std::string postData = dropbox::buildDeleteRequest(dropboxPath);
     
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, ("Authorization: Bearer " + m_accessToken).c_str());
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+    struct curl_slist* rawHeaders = nullptr;
+    rawHeaders = curl_slist_append(rawHeaders, ("Authorization: Bearer " + m_accessToken).c_str());
+    rawHeaders = curl_slist_append(rawHeaders, "Content-Type: application/json");
+    ScopedCurlSlist headers(rawHeaders);
     
     std::string response = performRequest(std::string(DROPBOX_API_V2) + "/files/delete_v2", postData, "", true);
-    curl_slist_free_all(headers);
     
     return !response.empty();
 }
@@ -813,15 +854,16 @@ std::string Dropbox::performRequest(const std::string& url,
     curl_easy_setopt(m_curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, &response);
     
-    struct curl_slist* headers = nullptr;
+    struct curl_slist* rawHeaders = nullptr;
     if (!authHeader.empty()) {
-        headers = curl_slist_append(headers, authHeader.c_str());
+        rawHeaders = curl_slist_append(rawHeaders, authHeader.c_str());
     } else if (m_authenticated && !m_accessToken.empty()) {
-        headers = curl_slist_append(headers, ("Authorization: Bearer " + m_accessToken).c_str());
+        rawHeaders = curl_slist_append(rawHeaders, ("Authorization: Bearer " + m_accessToken).c_str());
     }
     if (isApiV2) {
-        headers = curl_slist_append(headers, "Content-Type: application/json");
+        rawHeaders = curl_slist_append(rawHeaders, "Content-Type: application/json");
     }
+    ScopedCurlSlist headers(rawHeaders);
     
     if (!postData.empty()) {
         curl_easy_setopt(m_curl, CURLOPT_POST, 1L);
@@ -829,27 +871,31 @@ std::string Dropbox::performRequest(const std::string& url,
     }
     
     if (headers) {
-        curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers.get());
     }
-    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(m_curl, CURLOPT_USERAGENT, "oc-save-keeper/1.0");
+    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(m_curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(m_curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(m_curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 30L);
     curl_easy_setopt(m_curl, CURLOPT_TIMEOUT, 60L);
     
     CURLcode res = curl_easy_perform(m_curl);
     long httpCode = 0;
     curl_easy_getinfo(m_curl, CURLINFO_RESPONSE_CODE, &httpCode);
     
-    if (headers) curl_slist_free_all(headers);
-    
     if (res != CURLE_OK) {
-        LOG_ERROR("Dropbox: Request failed: %s", curl_easy_strerror(res));
+        LOG_ERROR("Dropbox: Request failed: %s (url: %s)", curl_easy_strerror(res), url.c_str());
         return "";
     }
 
     if (!dropbox::isSuccessfulHttpStatus(httpCode)) {
-        LOG_ERROR("Dropbox: Request HTTP %ld failed for URL: %s", httpCode, url.c_str());
+        if (response.find("insufficient_scope") != std::string::npos || response.find("not_permitted") != std::string::npos) {
+            LOG_ERROR("Dropbox: PERMISSION ERROR. Please enable 'files.metadata.read' scope in Dropbox App Console.");
+        }
+        LOG_ERROR("Dropbox: Request HTTP %ld failed for URL: %s response: %s", httpCode, url.c_str(), response.c_str());
         return "";
     }
     

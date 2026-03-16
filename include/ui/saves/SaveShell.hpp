@@ -65,7 +65,9 @@ private:
         Connecting,
         Success,
         Failed,
+        Expired,
         ConfirmLogout,
+        ConfirmCancel,
     };
 
     void pushRootScreen();
@@ -98,6 +100,7 @@ private:
     TTF_Font* selectFont(TTF_Font* preferred, const std::string& text) const;
     std::string tr(const char* key, const char* fallback) const;
     void setButtonDown(Button button);
+    void setStatus(const std::string& message);
 
     SDL_Renderer* m_renderer;
     network::Dropbox& m_dropbox;
@@ -122,11 +125,13 @@ private:
     DropboxAuthState m_dropboxState = DropboxAuthState::Idle;
     int m_overlayIndex = 0;
     std::string m_statusMessage;
+    u64 m_statusTime = 0;
     std::string m_authUrl;
     utils::QRCodeMatrix m_authQrCode;
     network::DropboxBridgeSession m_bridgeSession{};
     u64 m_lastPollTime = 0;
     bool m_hostTextInput = false;
+    bool m_isAppletMode = false;
     static constexpr std::size_t MAX_ICON_CACHE_ITEMS = 24;
     static constexpr int ICON_TEXTURE_SIZE = 96;
     std::map<std::string, SDL_Texture*> m_iconCache;

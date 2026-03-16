@@ -94,6 +94,8 @@ void SaveMenuScreen::reload() {
     } else if (m_index >= static_cast<int>(m_entries.size())) {
         m_index = static_cast<int>(m_entries.size()) - 1;
     }
+    
+    Runtime::instance().notify(utils::Language::instance().get("ui.refresh_completed"));
 }
 
 void SaveMenuScreen::openActions() {
@@ -104,30 +106,68 @@ void SaveMenuScreen::openActions() {
     }
 
     const auto entry = m_entries[m_index];
+    const bool isAuthed = m_backend->isCloudAuthenticated();
+
     m_sidebar = std::make_shared<Sidebar>(entry.name, Sidebar::Side::Right);
+    
+    // 1. 로컬 백업 (Local Backup)
     m_sidebar->add<SidebarEntryCallback>(lang.get("detail.backup"), [this, entry]() {
+        const auto& lang = utils::Language::instance();
+        Runtime::instance().notify(lang.get("sync.syncing"));
+        m_isOperationInProgress = true;
+        
+        m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
         const auto result = m_backend->backup(entry.titleId);
+
+        m_isOperationInProgress = false;
         if (result.ok) {
-            Runtime::instance().notify(result.message);
+            Runtime::instance().notify(lang.get("sync.complete"));
             reload();
         } else {
             Runtime::instance().pushError(result.message);
         }
     }, false, lang.get("ui.action_backup_hint"));
-    m_sidebar->add<SidebarEntryCallback>(lang.get("detail.upload"), [this, entry]() {
-        const auto result = m_backend->upload(entry.titleId);
-        if (result.ok) {
-            Runtime::instance().notify(result.message);
-        } else {
-            Runtime::instance().pushError(result.message);
-        }
-    }, false, lang.get("ui.action_upload_hint"));
-    m_sidebar->add<SidebarEntryCallback>(lang.get("detail.history"), [this]() {
+
+    // 2. 로컬 버전 (Local Versions)
+    m_sidebar->add<SidebarEntryCallback>(lang.get("detail.history"), [this, entry]() {
+        m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
         openHistory(SaveSource::Local);
     }, true, lang.get("ui.action_history_hint"));
-    m_sidebar->add<SidebarEntryCallback>(lang.get("history.cloud"), [this]() {
+
+    // 3. 드롭박스 업로드 (Dropbox Upload)
+    auto uploadBtn = m_sidebar->add<SidebarEntryCallback>(lang.get("detail.upload"), [this, entry]() {
+        const auto& lang = utils::Language::instance();
+        Runtime::instance().notify(lang.get("sync.uploading"));
+        Runtime::instance().forceRender();
+        m_isOperationInProgress = true;
+        
+        m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
+        const auto result = m_backend->upload(entry.titleId);
+        
+        m_isOperationInProgress = false;
+        if (result.ok) {
+            Runtime::instance().notify(lang.get("sync.upload_completed"));
+            reload(); 
+        } else {
+            Runtime::instance().pushError(lang.get("sync.upload_failed"));
+        }
+    }, false, lang.get("ui.action_upload_hint"));
+
+    if (!isAuthed) {
+        uploadBtn->setEnabled(false);
+        uploadBtn->setInfo(lang.get("history.login_needed"));
+    }
+
+    // 4. 드롭박스 이력 (Dropbox History)
+    auto cloudHistoryBtn = m_sidebar->add<SidebarEntryCallback>(lang.get("history.cloud"), [this, entry]() {
+        m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
         openHistory(SaveSource::Cloud);
     }, true, lang.get("ui.action_cloud_hint"));
+
+    if (!isAuthed) {
+        cloudHistoryBtn->setEnabled(false);
+        cloudHistoryBtn->setInfo(lang.get("history.login_needed"));
+    }
 }
 
 void SaveMenuScreen::openHistory(SaveSource source) {

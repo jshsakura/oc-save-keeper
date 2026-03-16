@@ -21,9 +21,22 @@ public:
         return m_info;
     }
 
+    void setInfo(const std::string& info) {
+        m_info = info;
+    }
+
+    bool isEnabled() const {
+        return m_enabled;
+    }
+
+    void setEnabled(bool enabled) {
+        m_enabled = enabled;
+    }
+
 protected:
     std::string m_title;
     std::string m_info;
+    bool m_enabled = true;
 };
 
 class SidebarEntryCallback final : public SidebarEntryBase {
@@ -70,6 +83,9 @@ public:
         return m_index;
     }
 
+    void setStatusMessage(const std::string& msg) { m_statusMessage = msg; }
+    const std::string& statusMessage() const { return m_statusMessage; }
+
 private:
     void setIndex(int index);
     void syncActions();
@@ -79,6 +95,7 @@ private:
     std::vector<std::unique_ptr<SidebarEntryBase>> m_items;
     std::unique_ptr<List> m_list;
     int m_index = 0;
+    std::string m_statusMessage;
 };
 
 } // namespace ui::saves

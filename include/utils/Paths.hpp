@@ -1,6 +1,6 @@
 #pragma once
-
 #include <sys/stat.h>
+#include <string>
 
 namespace utils::paths {
 
@@ -19,6 +19,11 @@ inline constexpr const char* DROPBOX_LEGACY_TOKEN = "/switch/oc-save-keeper/conf
 inline constexpr const char* DROPBOX_APP_KEY_TXT = "/switch/oc-save-keeper/config/dropbox_app_key.txt";
 inline constexpr const char* ROOT_ENV = "/switch/oc-save-keeper/.env";
 inline constexpr const char* CONFIG_ENV = "/switch/oc-save-keeper/config/.env";
+
+inline constexpr const char* DEVICE_ID = "/switch/oc-save-keeper/config/device_id.txt";
+inline constexpr const char* DEVICE_PRIORITY = "/switch/oc-save-keeper/config/device_priority.txt";
+inline constexpr const char* LANGUAGE_PREF = "/switch/oc-save-keeper/config/language.pref";
+inline constexpr const char* LOG_FILE = "/switch/oc-save-keeper/logs/oc-save-keeper.log";
 
 inline void ensureBaseDirectories() {
     mkdir(ROOT, 0777);

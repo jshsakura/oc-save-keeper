@@ -40,7 +40,7 @@ NROFLAGS    :=  --icon=$(TOPDIR)/$(APP_ICON) --nacp=$(TOPDIR)/$(TARGET).nacp --r
 DOCKER_SWITCH_BUILD := docker run --rm -e DROPBOX_APP_KEY="$(DROPBOX_APP_KEY)" -v $(CURDIR):/work -w /work devkitpro/devkita64 make DROPBOX_APP_KEY="$(DROPBOX_APP_KEY)"
 
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS	:=	$(INCLUDE) -D__SWITCH__ `sdl2-config --cflags` `curl-config --cflags` -g -Wall -O2 -ffunction-sections -I$(PORTLIBS)/include/freetype2 $(ARCH) $(DROPBOX_APP_KEY_DEFINE)
+CFLAGS	:=	$(INCLUDE) -D__SWITCH__ `sdl2-config --cflags` `curl-config --cflags` -g -Wall -O2 -ffunction-sections -I$(PORTLIBS)/include/freetype2 $(ARCH) $(DROPBOX_APP_KEY_DEFINE) -DNDEBUG
 CXXFLAGS:= $(CFLAGS) -fno-rtti -fno-exceptions -std=c++20
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)

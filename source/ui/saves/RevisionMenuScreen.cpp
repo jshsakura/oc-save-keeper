@@ -87,27 +87,31 @@ void RevisionMenuScreen::reload() {
     } else if (m_index >= static_cast<int>(m_entries.size())) {
         m_index = static_cast<int>(m_entries.size()) - 1;
     }
+
+    Runtime::instance().notify(utils::Language::instance().get("ui.refresh_completed"));
 }
 
 void RevisionMenuScreen::restoreSelected() {
     const auto& lang = utils::Language::instance();
-    if (m_entries.empty() || !m_backend) {
+    
+    if (m_entries.empty()) {
         Runtime::instance().notify(lang.get("ui.no_revision_entries"));
         return;
     }
 
     const auto& entry = m_entries[m_index];
     SaveActionResult result;
+    
     if (m_source == SaveSource::Cloud) {
-        result = m_backend->download(m_titleId, entry.id);
+        result = m_backend->download(m_titleId, entry.path);
     } else {
         result = m_backend->restore(m_titleId, entry.id, m_source);
     }
 
     if (result.ok) {
-        Runtime::instance().notify(result.message);
+        Runtime::instance().notify(lang.get("sync.restore_success"));
     } else {
-        Runtime::instance().pushError(result.message);
+        Runtime::instance().pushError(lang.get("sync.restore_failed"));
     }
 }
 

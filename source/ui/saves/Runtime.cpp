@@ -3,6 +3,8 @@
 #include "ui/saves/Object.hpp"
 #include "utils/Logger.hpp"
 
+#include <SDL2/SDL.h>
+
 namespace ui::saves {
 
 Runtime& Runtime::instance() {
@@ -59,10 +61,18 @@ void Runtime::pop() {
 
 void Runtime::notify(const std::string& text) {
     LOG_INFO("ui runtime notify: %s", text.c_str());
+    m_lastNotification = text;
 }
 
 void Runtime::pushError(const std::string& text) {
     LOG_ERROR("ui runtime error: %s", text.c_str());
+    m_lastNotification = "Error: " + text;
+}
+
+std::string Runtime::consumeNotification() {
+    std::string text = std::move(m_lastNotification);
+    m_lastNotification.clear();
+    return text;
 }
 
 void Runtime::playSound(SoundEffect effect) {
@@ -80,6 +90,19 @@ Theme& Runtime::theme() {
 
 std::vector<AccountProfileBase> Runtime::getAccountList() const {
     return {};
+}
+
+void Runtime::forceRender() {
+    if (!m_renderer) return;
+    
+    SDL_SetRenderDrawColor(m_renderer, 30, 30, 40, 255);
+    SDL_RenderClear(m_renderer);
+    
+    if (auto obj = current()) {
+        obj->draw();
+    }
+    
+    SDL_RenderPresent(m_renderer);
 }
 
 } // namespace ui::saves

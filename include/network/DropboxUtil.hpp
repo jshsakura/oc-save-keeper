@@ -7,8 +7,42 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <json-c/json.h>
+#include <curl/curl.h>
+#include <curl/curl.h>
 
 namespace network::dropbox {
+
+struct ScopedCurlSlist {
+    struct curl_slist* list = nullptr;
+    explicit ScopedCurlSlist(struct curl_slist* l = nullptr) : list(l) {}
+    ~ScopedCurlSlist() { if (list) curl_slist_free_all(list); }
+    ScopedCurlSlist(const ScopedCurlSlist&) = delete;
+    ScopedCurlSlist& operator=(const ScopedCurlSlist&) = delete;
+    ScopedCurlSlist(ScopedCurlSlist&& o) noexcept : list(o.list) { o.list = nullptr; }
+    ScopedCurlSlist& operator=(ScopedCurlSlist&& o) noexcept {
+        if (this != &o) { if (list) curl_slist_free_all(list); list = o.list; o.list = nullptr; }
+        return *this;
+    }
+    struct curl_slist* get() const { return list; }
+    operator bool() const { return list != nullptr; }
+};
+
+struct ScopedJson {
+    json_object* obj = nullptr;
+    explicit ScopedJson(json_object* o = nullptr) : obj(o) {}
+    ~ScopedJson() { if (obj) json_object_put(obj); }
+    ScopedJson(const ScopedJson&) = delete;
+    ScopedJson& operator=(const ScopedJson&) = delete;
+    ScopedJson(ScopedJson&& o) noexcept : obj(o.obj) { o.obj = nullptr; }
+    ScopedJson& operator=(ScopedJson&& o) noexcept {
+        if (this != &o) { if (obj) json_object_put(obj); obj = o.obj; o.obj = nullptr; }
+        return *this;
+    }
+    json_object* get() const { return obj; }
+    json_object* release() { json_object* r = obj; obj = nullptr; return r; }
+    operator bool() const { return obj != nullptr; }
+};
 
 inline bool isSuccessfulHttpStatus(long statusCode) {
     return statusCode >= 200 && statusCode < 300;
