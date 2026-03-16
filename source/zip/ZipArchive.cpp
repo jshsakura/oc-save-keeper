@@ -261,7 +261,14 @@ bool ZipArchive::extractFile(const std::string& archivePath, const std::string& 
     }
     
     fclose(dstFile);
-    unzCloseCurrentFile(m_unz);
+    int crcResult = unzCloseCurrentFile(m_unz);
+    if (crcResult == UNZ_CRCERROR) {
+        LOG_ERROR("ZIP CRC check failed for: %s", archivePath.c_str());
+        return false;
+    } else if (crcResult != UNZ_OK) {
+        LOG_ERROR("ZIP close error %d for: %s", crcResult, archivePath.c_str());
+        return false;
+    }
     
     return success;
 }
@@ -269,22 +276,38 @@ bool ZipArchive::extractFile(const std::string& archivePath, const std::string& 
 bool ZipArchive::extractAll(const std::string& destDir) {
     if (!m_isOpen || m_isWriting) return false;
     
-    // Create destination directory
     fs::ensureDirectoryExists(destDir);
     
-    // Go to first file
     if (unzGoToFirstFile(m_unz) != UNZ_OK) {
-        return true; // Empty archive
+        return true;
     }
     
     bool success = true;
     do {
-        // Get file info
         unz_file_info64 info;
         char filename[512];
         if (unzGetCurrentFileInfo64(m_unz, &info, filename, sizeof(filename),
                                      nullptr, 0, nullptr, 0) != UNZ_OK) {
             success = false;
+            continue;
+        }
+        
+        // Security: Check for path traversal
+        std::string entryName(filename);
+        if (entryName.empty()) {
+            LOG_ERROR("ZIP: Empty filename, skipping");
+            continue;
+        }
+        if (entryName.find("..") != std::string::npos) {
+            LOG_ERROR("ZIP: Path traversal detected, skipping: %s", filename);
+            continue;
+        }
+        if (entryName[0] == '/' || entryName[0] == '\\') {
+            LOG_ERROR("ZIP: Absolute path detected, skipping: %s", filename);
+            continue;
+        }
+        if (entryName.length() >= 2 && entryName[1] == ':') {
+            LOG_ERROR("ZIP: Windows absolute path detected, skipping: %s", filename);
             continue;
         }
         
