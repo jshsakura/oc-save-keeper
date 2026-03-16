@@ -5,3 +5,6 @@ dist/
 *.elf
 *.nacp
 *.nro
+
+# Sisyphus agent files
+.sisyphus/
