@@ -66,7 +66,8 @@ jobs:
           if [ -n "${DROPBOX_APP_KEY}" ]; then
             printf '%s\n' "${DROPBOX_APP_KEY}" > "${RELEASE_DIR}/switch/oc-save-keeper/config/dropbox_app_key.txt"
           fi
-          cp README.md RELEASE_NOTES_v0.1.0-alpha.1.md TESTING_v0.1.0-alpha.1.md "${RELEASE_DIR}/docs/"
+          cp README.md TESTING_v0.1.0-alpha.1.md "${RELEASE_DIR}/docs/"
+          if ls RELEASE_NOTES_*.md 1> /dev/null 2>&1; then cp RELEASE_NOTES_*.md "${RELEASE_DIR}/docs/"; fi
           if [ -f FONTS_NOTICE.md ]; then cp FONTS_NOTICE.md "${RELEASE_DIR}/docs/"; fi
 
           cd dist
