@@ -18,7 +18,7 @@
 
 기존의 복잡한 수동 입력 방식에서 **QR 코드 기반의 자동 인증**으로 개편되었습니다.
 
-- **백엔드 브리지**: `https://save.opencourse.kr` (FastAPI + Redis 기반)
+- **백엔드 브리지**: `https://example.yourdomain.com` (FastAPI + Redis 기반)
 - **인증 과정**:
   1. 앱에서 브리지 세션 시작 (`/v1/sessions/start`)
   2. 반환된 URL을 QR 코드로 표시

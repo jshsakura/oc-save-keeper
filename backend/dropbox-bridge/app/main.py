@@ -27,7 +27,7 @@ def get_env(name: str, default: str = "") -> str:
 
 
 APP_KEY = get_env("DROPBOX_APP_KEY")
-REDIRECT_BASE_URL = get_env("REDIRECT_BASE_URL", "https://save.opencourse.kr")
+REDIRECT_BASE_URL = get_env("REDIRECT_BASE_URL", "https://example.yourdomain.com")
 POLL_TOKEN_SECRET = get_env("POLL_TOKEN_SECRET")
 
 # 보안 강화: 파일에서 시크릿 읽기 지원 (Docker Secrets 스타일)

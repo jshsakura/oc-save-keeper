@@ -194,16 +194,16 @@ For callback-and-poll UX instead of manual code paste, use the Python bridge ser
 - Service docs: `backend/dropbox-bridge/README.md`
 - Architecture notes: `docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md`
 
-If your public domain is `save.opencourse.kr`, register this redirect URI in Dropbox App Console:
+If your public domain is `example.yourdomain.com`, register this redirect URI in Dropbox App Console:
 
 ```text
-https://save.opencourse.kr/oauth/dropbox/callback
+https://example.yourdomain.com/oauth/dropbox/callback
 ```
 
 Then set:
 
 ```text
-REDIRECT_BASE_URL=https://save.opencourse.kr
+REDIRECT_BASE_URL=https://example.yourdomain.com
 ```
 
 ## How Sync Decisions Work

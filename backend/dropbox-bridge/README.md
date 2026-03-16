@@ -6,10 +6,10 @@ It exists because Dropbox does not support OAuth Device Code Grant, so the Switc
 
 ## Domain and Redirect URI
 
-If your production domain is `save.opencourse.kr`, register this exact redirect URI in Dropbox App Console:
+If your production domain is `example.yourdomain.com`, register this exact redirect URI in Dropbox App Console:
 
 ```text
-https://save.opencourse.kr/oauth/dropbox/callback
+https://example.yourdomain.com/oauth/dropbox/callback
 ```
 
 `REDIRECT_BASE_URL` must match the registered domain.
@@ -43,7 +43,7 @@ curl http://localhost:8080/healthz
 ## Environment Variables
 
 - `DROPBOX_APP_KEY`: Dropbox app key.
-- `REDIRECT_BASE_URL`: external HTTPS URL, example `https://save.opencourse.kr`.
+- `REDIRECT_BASE_URL`: external HTTPS URL, example `https://example.yourdomain.com`.
 - `POLL_TOKEN_SECRET`: random secret for poll token HMAC hashing.
 - `REDIS_URL`: redis connection string.
 - `STATE_TTL_SECONDS`: state mapping TTL.
