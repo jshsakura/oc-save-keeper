@@ -11,20 +11,29 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <switch.h>
+#include <cstdio>
 #include "utils/Logger.hpp"
 
 namespace fs {
 
-/**
- * Default journal size for save data commits (16MB)
- * JKSV uses similar journal thresholding.
- */
 constexpr int64_t DEFAULT_JOURNAL_SIZE = 0x1000000;
-constexpr size_t COPY_BUFFER_SIZE = 0x10000; // 64KB
+constexpr size_t COPY_BUFFER_SIZE = 0x10000;
 
-/**
- * Ensure a directory path exists
- */
+struct ScopedFile {
+    FILE* fp = nullptr;
+    explicit ScopedFile(FILE* f = nullptr) : fp(f) {}
+    ~ScopedFile() { if (fp) fclose(fp); }
+    ScopedFile(const ScopedFile&) = delete;
+    ScopedFile& operator=(const ScopedFile&) = delete;
+    ScopedFile(ScopedFile&& o) noexcept : fp(o.fp) { o.fp = nullptr; }
+    ScopedFile& operator=(ScopedFile&& o) noexcept {
+        if (this != &o) { if (fp) fclose(fp); fp = o.fp; o.fp = nullptr; }
+        return *this;
+    }
+    FILE* get() const { return fp; }
+    operator bool() const { return fp != nullptr; }
+};
+
 bool ensureDirectoryExists(const std::string& path);
 
 /**
