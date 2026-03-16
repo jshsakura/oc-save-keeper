@@ -45,6 +45,7 @@ public:
 #endif
     void update();
     void render();
+    void showProcessingOverlay(const std::string& message);
 
     bool shouldExit() const {
         return m_shouldExit;

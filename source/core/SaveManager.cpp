@@ -92,13 +92,7 @@ bool writeBinaryFile(const char* path, const void* data, size_t size) {
 }
 
 bool looksBrokenDeviceToken(const std::string& value) {
-    return value.empty() || value.find("FFFFFFFFFFFFFFFF") != std::string::npos;
-}
-
-bool isAlwaysDeviceSave(uint64_t titleId) {
-    // 0x010070400032A000: Animal Crossing: New Horizons (ACNH)
-    // Add other special IDs here if needed.
-    return (titleId == 0x010070400032A000ULL);
+    return value.empty() || value.length() < 8;
 }
 
 SaveType convertSaveType(u8 type) {
@@ -122,14 +116,14 @@ SaveType convertSaveType(u8 type) {
 
 std::string makeDeviceLabel(const std::string& deviceId) {
     if (deviceId.empty()) {
-        return "Device";
+        return "Unknown";
     }
 
     const size_t dash = deviceId.find('-');
     const std::string compact = dash == std::string::npos ? deviceId : deviceId.substr(dash + 1);
     const size_t nextDash = compact.find('-');
     const std::string token = nextDash == std::string::npos ? compact : compact.substr(0, nextDash);
-    return "Device " + token;
+    return token;
 }
 
 struct TitleSaveRecord {
@@ -186,10 +180,10 @@ bool SaveManager::loadDeviceConfig() {
         m_deviceId = readLineFromFile(DEVICE_ID_PATH);
     }
     if (looksBrokenDeviceToken(m_deviceId)) {
-        char generated[32];
-        std::snprintf(generated, sizeof(generated), "dev-%08llX-%08lX",
-                      static_cast<unsigned long long>(time(nullptr)),
-                      static_cast<unsigned long>(clock()));
+        char generated[24];
+        std::snprintf(generated, sizeof(generated), "dev-%08X-%04X",
+                      static_cast<unsigned int>(time(nullptr) & 0xFFFFFFFF),
+                      static_cast<unsigned int>(clock() & 0xFFFF));
         m_deviceId = generated;
         if (!utils::SettingsStore::setString("device_id", m_deviceId)) {
             return false;
@@ -271,6 +265,7 @@ bool SaveManager::loadUsers() {
             accountProfileClose(&profile);
         }
     }
+    accountExit();
 #else
     // For development/testing, create a mock user
     UserInfo mockUser;
@@ -357,13 +352,21 @@ void SaveManager::scanTitles() {
                     title->hasDeviceSave = record.hasDevice || record.hasSystem;
                     title->deviceSize = record.hasDevice ? record.deviceSize : record.systemSize;
 
-                    // Set hasSave to true if either exists, default to Account for general UI
+                    // Set hasSave to true if either exists
                     title->hasSave = title->hasAccountSave || title->hasDeviceSave;
-                    if (title->hasAccountSave) {
+                    
+                    // Priority: if it's a "device only" save like ACNH, it will correctly pick Device
+                    // Otherwise, if current view is Device view, pick Device.
+                    if (isDeviceUser && title->hasDeviceSave) {
+                        title->saveType = record.hasDevice ? SaveType::Device : SaveType::System;
+                        title->actualSaveType = title->saveType;
+                        title->saveSize = title->deviceSize;
+                    } else if (title->hasAccountSave) {
                         title->saveType = SaveType::Account;
                         title->actualSaveType = SaveType::Account;
                         title->saveSize = title->accountSize;
                     } else if (title->hasDeviceSave) {
+                        // Fallback for games that only have Device saves
                         title->saveType = record.hasDevice ? SaveType::Device : SaveType::System;
                         title->actualSaveType = title->saveType;
                         title->saveSize = title->deviceSize;
@@ -563,10 +566,7 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
     int64_t journalSize = fs::getSaveJournalSize(title->titleId);
     
     // Use scoped mount for RAII safety
-    bool isDevice = title->actualSaveType == SaveType::Device || 
-                    title->actualSaveType == SaveType::System ||
-                    isAlwaysDeviceSave(title->titleId);
-    fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid, isDevice);
+    fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid, title->actualSaveType);
     if (!saveMount.isOpen()) {
         LOG_ERROR("Backup: Failed to mount save for %s", title->name.c_str());
         rmdir(backupPath.c_str()); // Clean up empty folder
@@ -624,14 +624,15 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
     // if the power goes out or the restoration fails.
     LOG_INFO("Restore: Creating safety rollback backup...");
     createVersionedBackup(title, DEFAULT_MAX_VERSIONS);
+    
+    // Remember the path of the rollback backup just in case
+    auto versions = getBackupVersions(title);
+    std::string rollbackPath = versions.empty() ? "" : versions.front().path;
 
     // Get journal size for proper commits
     int64_t journalSize = fs::getSaveJournalSize(title->titleId);    
     // Use scoped mount for RAII safety
-    bool isDevice = title->actualSaveType == SaveType::Device || 
-                    title->actualSaveType == SaveType::System ||
-                    isAlwaysDeviceSave(title->titleId);
-    fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid, isDevice);
+    fs::ScopedSaveMount saveMount("save", title->titleId, m_selectedUser->uid, title->actualSaveType);
     if (!saveMount.isOpen()) {
         LOG_ERROR("Failed to mount save for restore");
         return false;
@@ -639,21 +640,31 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
     
     std::string savePath = saveMount.getMountPath();
     
-    // Clear existing save data first (JKSV Style: only contents, not the mount root)
-    if (!fs::clearDirectoryContents(savePath)) {
-        LOG_ERROR("Failed to clear existing save data contents safely");
-        return false;
-    }
+    auto performRestore = [&](const std::string& srcPath) -> bool {
+        if (!fs::clearDirectoryContents(savePath)) {
+            LOG_ERROR("Failed to clear existing save data contents safely");
+            return false;
+        }
+        if (!fs::copyDirectoryWithProgress(srcPath, savePath, journalSize, saveMount.getMountName())) {
+            LOG_ERROR("Failed to copy save data from %s", srcPath.c_str());
+            return false;
+        }
+        if (!saveMount.commit()) {
+            LOG_ERROR("Failed to final commit save data");
+            return false;
+        }
+        return true;
+    };
 
-    // Copy from backup to save (JKSV Style Physical Commits)
-    if (!fs::copyDirectoryWithProgress(backupPath, savePath, journalSize, saveMount.getMountName())) {
-        LOG_ERROR("Failed to restore save data");
-        return false;
-    }
-
-    // Final physical commit to ensure everything is flushed (JKSV Style)
-    if (!saveMount.commit()) {
-        LOG_ERROR("Failed to final commit save data");
+    if (!performRestore(backupPath)) {
+        LOG_ERROR("Restore failed! Attempting to rollback from %s", rollbackPath.c_str());
+        if (!rollbackPath.empty() && rollbackPath != backupPath) {
+            if (performRestore(rollbackPath)) {
+                LOG_INFO("Rollback successful.");
+            } else {
+                LOG_ERROR("CRITICAL: Rollback failed! Save data may be corrupted.");
+            }
+        }
         return false;
     }
 #else

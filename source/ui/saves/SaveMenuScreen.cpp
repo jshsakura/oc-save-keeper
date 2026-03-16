@@ -110,18 +110,19 @@ void SaveMenuScreen::openActions() {
 
     m_sidebar = std::make_shared<Sidebar>(entry.name, Sidebar::Side::Right);
     
-    // 1. 로컬 백업 (Local Backup)
     m_sidebar->add<SidebarEntryCallback>(lang.get("detail.backup"), [this, entry]() {
         const auto& lang = utils::Language::instance();
-        Runtime::instance().notify(lang.get("sync.syncing"));
+        Runtime::instance().setLoading(true, lang.get("sync.syncing"));
+        Runtime::instance().forceRender();
         m_isOperationInProgress = true;
         
         m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
         const auto result = m_backend->backup(entry.titleId);
 
         m_isOperationInProgress = false;
+        Runtime::instance().setLoading(false);
         if (result.ok) {
-            Runtime::instance().notify(lang.get("sync.complete"));
+            Runtime::instance().notify(lang.get("sync.success"));
             reload();
         } else {
             Runtime::instance().pushError(result.message);
@@ -134,10 +135,9 @@ void SaveMenuScreen::openActions() {
         openHistory(SaveSource::Local);
     }, true, lang.get("ui.action_history_hint"));
 
-    // 3. 드롭박스 업로드 (Dropbox Upload)
     auto uploadBtn = m_sidebar->add<SidebarEntryCallback>(lang.get("detail.upload"), [this, entry]() {
         const auto& lang = utils::Language::instance();
-        Runtime::instance().notify(lang.get("sync.uploading"));
+        Runtime::instance().setLoading(true, lang.get("sync.uploading"));
         Runtime::instance().forceRender();
         m_isOperationInProgress = true;
         
@@ -145,8 +145,9 @@ void SaveMenuScreen::openActions() {
         const auto result = m_backend->upload(entry.titleId);
         
         m_isOperationInProgress = false;
+        Runtime::instance().setLoading(false);
         if (result.ok) {
-            Runtime::instance().notify(lang.get("sync.upload_completed"));
+            Runtime::instance().notify(lang.get("sync.success"));
             reload(); 
         } else {
             Runtime::instance().pushError(lang.get("sync.upload_failed"));

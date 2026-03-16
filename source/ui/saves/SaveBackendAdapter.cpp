@@ -181,15 +181,24 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
     }
 
     const auto& lang = utils::Language::instance();
+    const std::string currentDeviceId = m_saveManager.getDeviceId();
+
     if (source == SaveSource::Local) {
         for (const auto& version : m_saveManager.getBackupVersions(title)) {
             SaveRevisionEntry entry;
             entry.id = version.path;
             entry.label = version.name;
             entry.path = version.path;
-            entry.deviceLabel = version.deviceLabel;
+            
+            // If the local backup originated from this device, show '현재 기기'
+            if (version.deviceId == currentDeviceId || version.source == "local") {
+                entry.deviceLabel = lang.get("history.source_local");
+            } else {
+                entry.deviceLabel = version.deviceLabel.empty() ? lang.get("history.unknown_device") : version.deviceLabel;
+            }
+
             entry.userLabel = version.userName;
-            entry.sourceLabel = (version.source == "local") ? lang.get("history.source_local") : version.source;
+            entry.sourceLabel = (version.source == "local") ? lang.get("history.source_local") : lang.get("history.source_dropbox");
             entry.timestamp = version.timestamp;
             entry.size = version.size;
             entry.source = SaveSource::Local;
@@ -214,11 +223,16 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
             entry.id = file.path;
             entry.label = incomingMeta.backupName.empty() ? file.name : incomingMeta.backupName;
             entry.path = file.path.substr(0, file.path.size() - 5) + ".zip";
-            entry.deviceLabel = incomingMeta.deviceLabel;
-            entry.userLabel = incomingMeta.userName;
             
-            std::string src = incomingMeta.source.empty() ? "Dropbox" : incomingMeta.source;
-            entry.sourceLabel = (src == "Dropbox" || src == "cloud") ? lang.get("history.source_dropbox") : src;
+            // For Cloud revisions: if the meta device ID matches current, show '현재 기기'
+            if (incomingMeta.deviceId == currentDeviceId) {
+                entry.deviceLabel = lang.get("history.source_local");
+            } else {
+                entry.deviceLabel = incomingMeta.deviceLabel.empty() ? lang.get("history.unknown_device") : incomingMeta.deviceLabel;
+            }
+
+            entry.userLabel = incomingMeta.userName;
+            entry.sourceLabel = lang.get("history.source_dropbox");
             
             entry.timestamp = incomingMeta.createdAt != 0 ? incomingMeta.createdAt : file.modifiedTime;
             entry.size = incomingMeta.size > 0 ? incomingMeta.size : static_cast<int64_t>(file.size);
@@ -352,6 +366,30 @@ SaveActionResult SaveBackendAdapter::refresh(uint64_t titleId) {
         true,
         versions.empty() ? "No local backups found" : "Refresh completed"
     };
+}
+
+SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std::string& revisionId, SaveSource source) {
+    auto* title = m_saveManager.getTitleById(titleId);
+    if (!title) {
+        return {false, "Unknown title"};
+    }
+
+    if (source == SaveSource::Local) {
+        // revisionId is the file path for local
+        const bool ok = m_saveManager.deleteBackup(revisionId);
+        if (ok) g_remoteCacheValid = false;
+        return { ok, ok ? "Local backup deleted" : "Delete failed" };
+    } else {
+        // revisionId is the Dropbox path for cloud .zip
+        if (!m_dropbox.isAuthenticated()) {
+            return {false, "Dropbox is not connected"};
+        }
+
+        const std::string metaPath = revisionId.substr(0, revisionId.size() - 4) + ".meta";
+        const bool ok = m_dropbox.deleteFile(revisionId) && m_dropbox.deleteFile(metaPath);
+        if (ok) g_remoteCacheValid = false;
+        return { ok, ok ? "Cloud backup deleted" : "Delete failed" };
+    }
 }
 
 void SaveBackendAdapter::setTargetType(uint64_t titleId, bool isDevice, bool isSystem) {

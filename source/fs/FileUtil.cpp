@@ -56,8 +56,18 @@ bool copyFileWithProgress(const std::string& source, const std::string& dest,
         return false;
     }
     
-    fseek(srcFile, 0, SEEK_END);
-    size_t fileSize = ftell(srcFile);
+    if (fseek(srcFile, 0, SEEK_END) != 0) {
+        LOG_ERROR("FS: Failed to seek in source %s", source.c_str());
+        fclose(srcFile);
+        return false;
+    }
+    long long fileSizeLong = ftell(srcFile);
+    if (fileSizeLong < 0) {
+        LOG_ERROR("FS: Failed to get file size for %s", source.c_str());
+        fclose(srcFile);
+        return false;
+    }
+    size_t fileSize = static_cast<size_t>(fileSizeLong);
     fseek(srcFile, 0, SEEK_SET);
     
     FILE* dstFile = fopen(dest.c_str(), "wb");

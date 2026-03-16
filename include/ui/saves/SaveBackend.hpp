@@ -61,6 +61,7 @@ public:
     virtual SaveActionResult upload(uint64_t titleId) = 0;
     virtual SaveActionResult download(uint64_t titleId, const std::string& revisionId) = 0;
     virtual SaveActionResult refresh(uint64_t titleId) = 0;
+    virtual SaveActionResult deleteRevision(uint64_t titleId, const std::string& revisionId, SaveSource source) = 0;
 
     virtual void setTargetType(uint64_t titleId, bool isDevice, bool isSystem) = 0;
 

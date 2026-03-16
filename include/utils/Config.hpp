@@ -13,7 +13,12 @@ namespace utils {
 class Config {
 public:
     Config() = default;
-    ~Config() = default;
+    ~Config() {
+        if (m_root) {
+            json_object_put(m_root);
+            m_root = nullptr;
+        }
+    }
     
     bool load(const std::string& path) {
         FILE* file = fopen(path.c_str(), "r");
@@ -30,10 +35,15 @@ public:
         fclose(file);
         
         // Parse JSON
-        m_root = json_tokener_parse(buffer);
+        json_object* newRoot = json_tokener_parse(buffer);
         delete[] buffer;
         
-        if (!m_root) return false;
+        if (!newRoot) return false;
+        
+        if (m_root) {
+            json_object_put(m_root);
+        }
+        m_root = newRoot;
         
         return true;
     }

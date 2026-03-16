@@ -1,9 +1,11 @@
 #include "ui/saves/Runtime.hpp"
 
 #include "ui/saves/Object.hpp"
+#include "ui/saves/SaveShell.hpp"
 #include "utils/Logger.hpp"
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 
 namespace ui::saves {
 
@@ -77,7 +79,6 @@ std::string Runtime::consumeNotification() {
 
 void Runtime::playSound(SoundEffect effect) {
     (void)effect;
-    // The lightweight GUI does not use runtime sound assets.
 }
 
 const Theme& Runtime::theme() const {
@@ -92,17 +93,67 @@ std::vector<AccountProfileBase> Runtime::getAccountList() const {
     return {};
 }
 
+void Runtime::setLoading(bool loading, const std::string& message) {
+    m_isLoading = loading;
+    m_loadingMessage = message;
+}
+
 void Runtime::forceRender() {
     if (!m_renderer) return;
     
-    SDL_SetRenderDrawColor(m_renderer, 30, 30, 40, 255);
-    SDL_RenderClear(m_renderer);
-    
-    if (auto obj = current()) {
-        obj->draw();
+    if (m_shell) {
+        m_shell->render();
+    } else {
+        SDL_SetRenderDrawColor(m_renderer, 10, 16, 28, 255);
+        SDL_RenderClear(m_renderer);
+        
+        if (auto obj = current()) {
+            obj->draw();
+        }
+        
+        if (m_isLoading) {
+            drawLoadingOverlay();
+        }
     }
     
     SDL_RenderPresent(m_renderer);
+}
+
+void Runtime::drawLoadingOverlay() {
+    if (!m_renderer) return;
+    
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    
+    SDL_Rect overlay{0, 0, 1280, 720};
+    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 180);
+    SDL_RenderFillRect(m_renderer, &overlay);
+    
+    SDL_Rect box{440, 300, 400, 120};
+    SDL_SetRenderDrawColor(m_renderer, 17, 24, 39, 255);
+    SDL_RenderFillRect(m_renderer, &box);
+    SDL_SetRenderDrawColor(m_renderer, 56, 189, 248, 255);
+    SDL_RenderDrawRect(m_renderer, &box);
+    
+    if (m_font && !m_loadingMessage.empty()) {
+        SDL_Color white{241, 245, 249, 255};
+        SDL_Surface* surface = TTF_RenderUTF8_Blended(m_font, m_loadingMessage.c_str(), white);
+        if (surface) {
+            SDL_Texture* texture = SDL_CreateTextureFromSurface(m_renderer, surface);
+            if (texture) {
+                SDL_Rect dest{
+                    box.x + (box.w - surface->w) / 2,
+                    box.y + (box.h - surface->h) / 2,
+                    surface->w,
+                    surface->h
+                };
+                SDL_RenderCopy(m_renderer, texture, nullptr, &dest);
+                SDL_DestroyTexture(texture);
+            }
+            SDL_FreeSurface(surface);
+        }
+    }
+    
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_NONE);
 }
 
 } // namespace ui::saves

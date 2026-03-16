@@ -117,11 +117,18 @@ bool initialize() {
 
 void cleanup() {
 #ifdef __SWITCH__
-    accountExit();
     romfsExit();
     socketExit();
 #endif
     curl_global_cleanup();
+
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        SDL_Joystick* joy = SDL_JoystickFromInstanceID(i);
+        if (joy) {
+            SDL_JoystickClose(joy);
+        }
+    }
+
     IMG_Quit();
     
     if (g_renderer) {
@@ -161,9 +168,6 @@ void run() {
         padUpdate(&g_pad);
         const u64 keysDown = padGetButtonsDown(&g_pad);
         mainUI.handlePadButtons(keysDown);
-        if (keysDown & (HidNpadButton_Plus | HidNpadButton_Minus)) {
-            g_running = false;
-        }
 #endif
 
         while (SDL_PollEvent(&event)) {

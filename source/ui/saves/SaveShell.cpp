@@ -55,10 +55,11 @@ std::string currentSelectionSubtitle(core::SaveManager& saveManager, network::Dr
     const std::string mode = user && user->id == "device"
         ? lang.get("ui.mode_device")
         : lang.get("ui.mode_user");
-    const std::string cloud = dropbox.isAuthenticated()
-        ? lang.get("status.connected")
-        : lang.get("status.disconnected");
-    return mode + "  |  " + selected + "  |  " + cloud;
+    
+    // Display localized device label + ID instead of cloud status - removed colon
+    const std::string device = lang.get("ui.device") + " " + saveManager.getDeviceLabel();
+    
+    return mode + "  |  " + selected + "  |  " + device;
 }
 
 #ifndef __SWITCH__
@@ -187,7 +188,8 @@ bool SaveShell::initialize() {
 #endif
 
     utils::Language::instance().init();
-    // Match the old MainUI startup flow so the first screen has data.
+    Runtime::instance().setFont(m_fontMedium);
+    Runtime::instance().setShell(this);
     m_saveManager.scanTitles();
     m_backend = std::make_shared<SaveBackendAdapter>(m_saveManager, m_dropbox);
     pushRootScreen();
@@ -218,6 +220,8 @@ void SaveShell::handleEvent(const SDL_Event& event) {
                 case 3: setButtonDown(Button::Y); break;
                 case 4: setButtonDown(Button::L); break;
                 case 5: setButtonDown(Button::R); break;
+                case 10: setButtonDown(Button::Plus); break;
+                case 11: setButtonDown(Button::Minus); break;
                 default: break;
             }
             break;
@@ -230,6 +234,9 @@ void SaveShell::handleEvent(const SDL_Event& event) {
                 case SDLK_y: setButtonDown(Button::Y); break;
                 case SDLK_l: setButtonDown(Button::L); break;
                 case SDLK_r: setButtonDown(Button::R); break;
+                case SDLK_PLUS:
+                case SDLK_EQUALS: setButtonDown(Button::Plus); break;
+                case SDLK_MINUS: setButtonDown(Button::Minus); break;
                 case SDLK_LEFT: setButtonDown(Button::Left); break;
                 case SDLK_RIGHT: setButtonDown(Button::Right); break;
                 case SDLK_UP: setButtonDown(Button::Up); break;
@@ -266,6 +273,8 @@ void SaveShell::handlePadButtons(u64 keysDown) {
     if (keysDown & HidNpadButton_Y) setButtonDown(Button::Y);
     if (keysDown & HidNpadButton_L) setButtonDown(Button::L);
     if (keysDown & HidNpadButton_R) setButtonDown(Button::R);
+    if (keysDown & HidNpadButton_Plus) setButtonDown(Button::Plus);
+    if (keysDown & HidNpadButton_Minus) setButtonDown(Button::Minus);
     if (keysDown & (HidNpadButton_Up | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) setButtonDown(Button::Up);
     if (keysDown & (HidNpadButton_Down | HidNpadButton_StickLDown | HidNpadButton_StickRDown)) setButtonDown(Button::Down);
     if (keysDown & (HidNpadButton_Left | HidNpadButton_StickLLeft | HidNpadButton_StickRLeft)) setButtonDown(Button::Left);
@@ -355,6 +364,27 @@ void SaveShell::resetInput() {
     m_touch = {};
 }
 
+void SaveShell::showProcessingOverlay(const std::string& message) {
+    // 1. Draw current screen as background
+    render();
+
+    // 2. Semi-transparent dark layer
+    SDL_Rect fullScreen = {0, 0, 1280, 720};
+    SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 150); 
+    SDL_RenderFillRect(m_renderer, &fullScreen);
+
+    // 3. Status box in center
+    SDL_Rect box = {1280/2 - 300, 720/2 - 60, 600, 120};
+    drawPanel(m_renderer, box, color(15, 23, 42, 255), color(56, 189, 248, 255));
+    
+    // 4. Progress text
+    renderTextCentered(message, box, m_fontMedium, color(241, 245, 249, 255));
+
+    // 5. Present immediately so user sees it while the CPU is busy
+    SDL_RenderPresent(m_renderer);
+}
+
 void SaveShell::render() {
     auto current = Runtime::instance().current();
     if (!current) {
@@ -380,6 +410,21 @@ void SaveShell::render() {
     } else if (m_overlay == Overlay::DropboxAuth) {
         renderDropboxOverlay();
     }
+
+    if (Runtime::instance().isLoading()) {
+        const std::string& msg = Runtime::instance().loadingMessage();
+        
+        // Darken screen
+        SDL_Rect shade{0, 0, 1280, 720};
+        SDL_SetRenderDrawBlendMode(m_renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(m_renderer, 2, 6, 14, 170);
+        SDL_RenderFillRect(m_renderer, &shade);
+
+        // Status box
+        SDL_Rect box = {1280/2 - 300, 720/2 - 60, 600, 120};
+        drawPanel(m_renderer, box, color(15, 23, 42, 255), color(56, 189, 248, 255));
+        renderTextCentered(msg, box, m_fontMedium, color(241, 245, 249, 255));
+    }
 }
 
 void SaveShell::renderHeader(const std::string& title, const std::string& subtitle) {
@@ -389,32 +434,36 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     SDL_Rect accent{24, 24, 8, 40};
     SDL_RenderFillRect(m_renderer, &accent);
     
-    // Main App Name
-    renderText(tr("app.name", "OC Save Keeper"), 46, 18, m_fontLarge, color(241, 245, 249));
+    // Main App Name - Moved down slightly (18 -> 24)
+    renderText(tr("app.name", "OC Save Keeper"), 46, 24, m_fontLarge, color(241, 245, 249));
     
-    // Screen Title next to it - smaller font and moved right
+    // Screen Title next to it - smaller font and moved right/down
     if (!title.empty()) {
-        renderText(title, 350, 30, m_fontSmall, color(148, 163, 184));
+        renderText(title, 350, 36, m_fontSmall, color(148, 163, 184));
     }
 
     if (!subtitle.empty()) {
-        renderText(subtitle, 36, 74, m_fontSmall, color(148, 163, 184));
+        renderText(subtitle, 46, 64, m_fontSmall, color(148, 163, 184));
     }
+
+    const int chipW = 180;
+    const int chipX = 1280 - 24 - chipW; // 1076
+    const int chipY = 33; // Centered vertically (96/2 - 30/2 = 33)
 
     if (m_isAppletMode) {
         renderStatusChip(tr("app.applet_warning_title", "Applet Mode"),
-                         1048 - 220, // To the left of the Dropbox chip
-                         22,
-                         208,
+                         chipX - (chipW + 12), // 884
+                         chipY,
+                         chipW,
                          color(185, 28, 28), // Brighter red background (Red-700)
                          color(248, 113, 113));
     }
 
     renderStatusChip(tr(m_dropbox.isAuthenticated() ? "status.connected" : "status.disconnected",
                         m_dropbox.isAuthenticated() ? "Connected" : "Not connected"),
-                     1048,
-                     22,
-                     208,
+                     chipX,
+                     chipY,
+                     chipW,
                      m_dropbox.isAuthenticated() ? color(20, 83, 45) : color(69, 26, 26),
                      m_dropbox.isAuthenticated() ? color(74, 222, 128) : color(248, 113, 113));
     SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
@@ -429,13 +478,11 @@ void SaveShell::renderFooter(const std::string& leftHint, const std::string& rig
     renderText(leftHint, 24, footer.y + 10, m_fontSmall, color(148, 163, 184));
     
     if (!rightHint.empty()) {
-        const int maxW = 800; // 우측 텍스트 최대 너비
+        const int maxW = 800;
         const std::string fitted = fitText(m_fontSmall, rightHint, maxW);
-        // 정확한 너비 계산 대신 대략적인 우측 정렬 시도 (TTF 너비 측정 함수 부재 시)
-        // 화면 우측에서 24px 떨어뜨리고, 예상 너비만큼 뺌
-        // More conservative estimate for Korean characters (they can be ~14-16px wide in TTF)
-        const int estimatedW = static_cast<int>(fitted.size() * 14);
-        const int x = std::max(24, 1280 - 24 - estimatedW);
+        int textW = 0;
+        TTF_SizeText(m_fontSmall, fitted.c_str(), &textW, nullptr);
+        const int x = std::max(24, 1280 - 24 - textW);
         renderText(fitted, x, footer.y + 10, m_fontSmall, color(100, 116, 139));
     }
 }
@@ -528,7 +575,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
         renderSidebar(*screen.sidebar());
     }
 
-    renderFooter(tr("footer.hint.main", "A: Open  X: Refresh  Y: Language  L: Users  B: Exit"));
+    renderFooter(tr("footer.hint.main", "A: Open  B: Exit  X: Refresh  Y: Language  L: Users"));
 }
 
 void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
@@ -573,7 +620,11 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
         SDL_RenderDrawLine(m_renderer, row.x, row.y + row.h + 11, row.x + row.w, row.y + row.h + 11);
     }
 
-    renderFooter(tr("footer.hint.revision", "A: Restore/Download  X: Refresh  Y: Language  L: Users  B: Back"),
+    if (screen.sidebar()) {
+        renderSidebar(*screen.sidebar());
+    }
+
+    renderFooter(tr("footer.hint.revision", "A: Restore/Download  B: Back  X: Refresh  Y: Language  L: Users  -: Delete"),
                  m_statusMessage.empty() ? screen.titleLabel() : m_statusMessage);
 }
 
@@ -668,23 +719,30 @@ void SaveShell::renderTextCentered(const std::string& text, const SDL_Rect& rect
 }
 
 std::string SaveShell::fitText(TTF_Font* font, const std::string& text, int maxWidth) const {
+    if (text.empty()) return "";
+    
     TTF_Font* actualFont = selectFont(font, text);
     if (!actualFont) {
         return text;
     }
+    
     int width = 0;
-    int height = 0;
-    TTF_SizeUTF8(actualFont, text.c_str(), &width, &height);
+    if (TTF_SizeUTF8(actualFont, text.c_str(), &width, nullptr) != 0) {
+        return text;
+    }
+    
     if (width <= maxWidth) {
         return text;
     }
 
     std::string clipped = text;
     while (!clipped.empty()) {
-        clipped.pop_back();
+        do {
+            clipped.pop_back();
+        } while (!clipped.empty() && (static_cast<unsigned char>(clipped.back()) & 0xC0) == 0x80);
+        
         std::string trial = clipped + "...";
-        TTF_SizeUTF8(actualFont, trial.c_str(), &width, &height);
-        if (width <= maxWidth) {
+        if (TTF_SizeUTF8(actualFont, trial.c_str(), &width, nullptr) == 0 && width <= maxWidth) {
             return trial;
         }
     }
@@ -980,7 +1038,7 @@ void SaveShell::updateOverlay() {
 
         // Always check status chip in the top right, regardless of overlay (unless in Auth itself)
         if (m_overlay != Overlay::DropboxAuth) {
-            SDL_Rect statusChip{1048, 22, 208, 30};
+            SDL_Rect statusChip{1076, 33, 180, 30};
             if (tx >= statusChip.x && tx <= statusChip.x + statusChip.w && 
                 ty >= statusChip.y && ty <= statusChip.y + statusChip.h) {
                 openDropboxOverlay();

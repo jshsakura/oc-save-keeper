@@ -2,6 +2,7 @@
 
 #include "ui/saves/Runtime.hpp"
 #include "utils/Language.hpp"
+#include "utils/Logger.hpp"
 
 namespace ui::saves {
 
@@ -23,6 +24,9 @@ RevisionMenuScreen::RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uin
     }});
     setAction(Button::X, Action{lang.get("ui.refresh"), [this]() {
         reload();
+    }});
+    setAction(Button::Minus, Action{lang.get("history.restore_delete_hint"), [this]() {
+        deleteSelected();
     }});
 }
 
@@ -46,6 +50,14 @@ int RevisionMenuScreen::visibleCount() const {
 }
 
 void RevisionMenuScreen::update(const Controller& controller, const TouchInfo& touch) {
+    if (m_sidebar) {
+        m_sidebar->update(controller, touch);
+        if (m_sidebar->shouldPop()) {
+            m_sidebar.reset();
+        }
+        return;
+    }
+
     MenuBase::update(controller, touch);
 
     if (!m_list) {
@@ -72,6 +84,10 @@ void RevisionMenuScreen::draw() {
         const bool selected = index == m_index;
         drawEntry(m_layout, rect, selected, 0, entry.label.c_str(), entry.deviceLabel.c_str(), entry.sourceLabel.c_str());
     });
+
+    if (m_sidebar) {
+        m_sidebar->draw();
+    }
 }
 
 void RevisionMenuScreen::reload() {
@@ -99,6 +115,9 @@ void RevisionMenuScreen::restoreSelected() {
         return;
     }
 
+    Runtime::instance().setLoading(true, lang.get("sync.restoring"));
+    Runtime::instance().forceRender();
+
     const auto& entry = m_entries[m_index];
     SaveActionResult result;
     
@@ -108,11 +127,52 @@ void RevisionMenuScreen::restoreSelected() {
         result = m_backend->restore(m_titleId, entry.id, m_source);
     }
 
+    Runtime::instance().setLoading(false);
+
     if (result.ok) {
         Runtime::instance().notify(lang.get("sync.restore_success"));
     } else {
-        Runtime::instance().pushError(lang.get("sync.restore_failed"));
+        Runtime::instance().pushError(result.message.empty() ? lang.get("sync.restore_failed") : result.message);
     }
+}
+
+void RevisionMenuScreen::deleteSelected() {
+    LOG_INFO("deleteSelected() called");
+    const auto& lang = utils::Language::instance();
+    
+    if (m_entries.empty()) {
+        LOG_WARNING("deleteSelected: no entries");
+        return;
+    }
+
+    const auto& entry = m_entries[m_index];
+    LOG_INFO("deleteSelected: creating sidebar for entry %s", entry.label.c_str());
+
+    // Show confirmation sidebar instead of immediate deletion
+    m_sidebar = std::make_shared<Sidebar>(lang.get("ui.confirm_delete"), Sidebar::Side::Right);
+    
+    m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this, entry]() {
+        const auto& lang = utils::Language::instance();
+        this->m_sidebar.reset();
+        
+        Runtime::instance().setLoading(true, lang.get("sync.deleting"));
+        Runtime::instance().forceRender();
+
+        auto result = m_backend->deleteRevision(m_titleId, entry.id, m_source);
+
+        Runtime::instance().setLoading(false);
+
+        if (result.ok) {
+            Runtime::instance().notify(lang.get("sync.delete_success"));
+            reload();
+        } else {
+            Runtime::instance().pushError(result.message.empty() ? lang.get("sync.delete_failed") : result.message);
+        }
+    }, false, lang.get("ui.confirm_delete_hint"));
+
+    m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
+        this->m_sidebar.reset();
+    }, true);
 }
 
 } // namespace ui::saves

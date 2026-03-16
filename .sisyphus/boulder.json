@@ -1,9 +1,9 @@
 {
-  "active_plan": "/home/ubuntu/app/jupyterLab/notebooks/oc-save-keeper/.sisyphus/plans/hotfix-cloud-force-restore.md",
-  "started_at": "2026-03-15T20:51:20.472Z",
+  "active_plan": "/home/ubuntu/app/jupyterLab/notebooks/oc-save-keeper/.sisyphus/plans/hotfix-ui-text-positions.md",
+  "started_at": "2026-03-15T21:25:43.038Z",
   "session_ids": [
     "ses_30d1b96f4ffecCYmHzuu4l4wcM"
   ],
-  "plan_name": "hotfix-cloud-force-restore",
+  "plan_name": "hotfix-ui-text-positions",
   "agent": "atlas"
 }

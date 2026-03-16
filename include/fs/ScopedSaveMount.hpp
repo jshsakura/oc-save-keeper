@@ -9,6 +9,7 @@
 #include <string>
 #include <switch.h>
 #include "utils/Logger.hpp"
+#include "core/SaveManager.hpp"
 
 namespace fs {
 
@@ -22,7 +23,7 @@ public:
     /**
      * Mount a save data filesystem using JKSV's exact parameter sequence
      */
-    ScopedSaveMount(const std::string& mountName, uint64_t titleId, AccountUid uid, bool isDevice = false)
+    ScopedSaveMount(const std::string& mountName, uint64_t titleId, AccountUid uid, core::SaveType saveType = core::SaveType::Account)
         : m_mountName(mountName)
         , m_isOpen(false) {
         
@@ -31,8 +32,8 @@ public:
         // JKSV does this to ensure a clean mount point.
         fsdevUnmountDevice(mountName.c_str());
 
-        LOG_INFO("FS: Mounting %s (JKSV Style). Title: %016lX, UID: %016lX%016lX, Device: %d", 
-                 mountName.c_str(), titleId, uid.uid[1], uid.uid[0], isDevice);
+        LOG_INFO("FS: Mounting %s (JKSV Style). Title: %016lX, UID: %016lX%016lX, Type: %d", 
+                 mountName.c_str(), titleId, uid.uid[1], uid.uid[0], static_cast<int>(saveType));
                  
         FsFileSystem saveFs;
         Result rc;
@@ -41,8 +42,30 @@ public:
         FsSaveDataAttribute attr;
         std::memset(&attr, 0, sizeof(attr));
         attr.application_id = titleId;
-        attr.uid = uid;
-        attr.save_data_type = isDevice ? FsSaveDataType_Device : FsSaveDataType_Account;
+        
+        // Device and System saves must have UID zeroed out (standard Switch behavior)
+        if (saveType == core::SaveType::Device || saveType == core::SaveType::System) {
+            std::memset(&attr.uid, 0, sizeof(attr.uid));
+        } else {
+            attr.uid = uid;
+        }
+        
+        switch (saveType) {
+            case core::SaveType::System:
+                attr.save_data_type = FsSaveDataType_System;
+                break;
+            case core::SaveType::Device:
+                attr.save_data_type = FsSaveDataType_Device;
+                break;
+            case core::SaveType::BCAT:
+                attr.save_data_type = FsSaveDataType_Bcat;
+                break;
+            case core::SaveType::Account:
+            default:
+                attr.save_data_type = FsSaveDataType_Account;
+                break;
+        }
+
         attr.save_data_rank = FsSaveDataRank_Primary; // JKSV default
         attr.save_data_index = 0;                     // JKSV default
         

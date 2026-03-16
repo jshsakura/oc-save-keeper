@@ -90,15 +90,15 @@ enum class Button : u64 {
     R2 = 1ULL << 7,
     L3 = 1ULL << 8,
     R3 = 1ULL << 9,
-    Start = 1ULL << 10,
-    Select = 1ULL << 11,
+    Plus = 1ULL << 10,
+    Minus = 1ULL << 11,
     Left = 1ULL << 12,
     Right = 1ULL << 13,
     Up = 1ULL << 14,
     Down = 1ULL << 15,
     AnyButton = (1ULL << 0) | (1ULL << 1) | (1ULL << 2) | (1ULL << 3) |
                 (1ULL << 4) | (1ULL << 5) | (1ULL << 6) | (1ULL << 7) |
-                (1ULL << 8) | (1ULL << 9) | (1ULL << 10) | (1ULL << 11),
+                (1ULL << 8) | (1ULL << 9), // Exclude Plus/Minus from AnyButton
 };
 
 inline Button operator|(Button lhs, Button rhs) {

@@ -2,6 +2,7 @@
 
 #include "ui/saves/GridMenuBase.hpp"
 #include "ui/saves/SaveBackend.hpp"
+#include "ui/saves/Sidebar.hpp"
 
 #include <memory>
 
@@ -30,15 +31,21 @@ public:
         return m_titleLabel;
     }
 
+    const std::shared_ptr<Sidebar>& sidebar() const {
+        return m_sidebar;
+    }
+
     int firstVisibleIndex() const;
     int visibleCount() const;
 
 private:
     void reload();
     void restoreSelected();
+    void deleteSelected();
 
     std::shared_ptr<SaveBackend> m_backend;
     std::unique_ptr<List> m_list;
+    std::shared_ptr<Sidebar> m_sidebar;
     std::vector<SaveRevisionEntry> m_entries;
     uint64_t m_titleId = 0;
     SaveSource m_source = SaveSource::Local;
