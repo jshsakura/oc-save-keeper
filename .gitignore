@@ -8,3 +8,8 @@ dist/
 
 # Sisyphus agent files
 .sisyphus/
+
+# Build outputs
+build-host/
+build/
+dist/
