@@ -38,11 +38,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install packaging tools and fonts
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zip
-
       - name: Build NRO in devkitPro container
         run: |
           test -n "$GITHUB_WORKSPACE"
@@ -53,52 +48,26 @@ jobs:
             devkitpro/devkita64 \
             make DROPBOX_APP_KEY="${DROPBOX_APP_KEY}"
 
-      - name: Package release bundle
-        run: |
-          VERSION="${GITHUB_REF_NAME:-dev}"
-          RELEASE_DIR="dist/oc-save-keeper-${VERSION}"
-
-          mkdir -p "${RELEASE_DIR}/switch/oc-save-keeper"
-          mkdir -p "${RELEASE_DIR}/switch/oc-save-keeper/config"
-          mkdir -p "${RELEASE_DIR}/docs"
-
-          cp oc-save-keeper.nro "${RELEASE_DIR}/switch/oc-save-keeper/oc-save-keeper.nro"
-          if [ -n "${DROPBOX_APP_KEY}" ]; then
-            printf '%s\n' "${DROPBOX_APP_KEY}" > "${RELEASE_DIR}/switch/oc-save-keeper/config/dropbox_app_key.txt"
-          fi
-          cp README.md TESTING_v0.1.0-alpha.1.md "${RELEASE_DIR}/docs/"
-          if ls RELEASE_NOTES_*.md 1> /dev/null 2>&1; then cp RELEASE_NOTES_*.md "${RELEASE_DIR}/docs/"; fi
-          if [ -f FONTS_NOTICE.md ]; then cp FONTS_NOTICE.md "${RELEASE_DIR}/docs/"; fi
-
-          cd dist
-          zip -r "oc-save-keeper-${VERSION}.zip" "oc-save-keeper-${VERSION}"
-
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: oc-save-keeper-${{ github.ref_name || 'dev' }}
-          path: |
-            oc-save-keeper.nro
-            dist/oc-save-keeper-${{ github.ref_name || 'dev' }}.zip
+          name: oc-save-keeper-${{ github.sha }}
+          path: oc-save-keeper.nro
 
       - name: Upload prerelease assets (main)
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Continuous Build (main)
+          name: Continuous Build (${{ github.sha }})
           prerelease: true
           make_latest: false
-          generate_release_notes: true
-          files: |
-            oc-save-keeper.nro
-            dist/oc-save-keeper-${{ github.ref_name }}.zip
+          generate_release_notes: false
+          files: oc-save-keeper.nro
 
       - name: Upload release assets (tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: |
-            oc-save-keeper.nro
-            dist/oc-save-keeper-${{ github.ref_name }}.zip
+          files: oc-save-keeper.nro
