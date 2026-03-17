@@ -827,15 +827,23 @@ async def consume_session(
         raise HTTPException(status_code=500, detail="incomplete session data")
 
     now = int(time.time())
-    await redis_client.hset(
-        key,
-        mapping={
-            "status": "consumed",
-            "auth_code": "",
-            "updated_at": str(now),
-        },
-    )
-    await redis_client.expire(key, 60)
+
+    try:
+        async with redis_client.pipeline() as pipe:
+            pipe.hset(
+                key,
+                mapping={
+                    "status": "consumed",
+                    "auth_code": "",
+                    "updated_at": str(now),
+                },
+            )
+            pipe.expire(key, 60)
+            pipe.delete(state_key(state))
+            await pipe.execute()
+    except RedisError as e:
+        logger.error(f"Failed to consume session: {e}")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     return ConsumeSessionResponse(
         authorization_code=auth_code,
@@ -870,27 +878,24 @@ async def dropbox_callback(
 
     now = int(time.time())
     if not code:
-        await redis_client.hset(
-            key,
-            mapping={
-                "status": "failed",
-                "error": error_description or "authorization denied",
-                "updated_at": str(now),
-            },
-        )
+        hset_mapping = {
+            "status": "failed",
+            "error": error_description or "authorization denied",
+            "updated_at": str(now),
+        }
     else:
-        await redis_client.hset(
-            key,
-            mapping={
-                "status": "approved",
-                "auth_code": code,
-                "error": "",
-                "updated_at": str(now),
-            },
-        )
+        hset_mapping = {
+            "status": "approved",
+            "auth_code": code,
+            "error": "",
+            "updated_at": str(now),
+        }
 
-    await redis_client.expire(key, SESSION_TTL_SECONDS)
-    await redis_client.delete(state_key(state))
+    async with redis_client.pipeline() as pipe:
+        pipe.hset(key, mapping=hset_mapping)
+        pipe.expire(key, SESSION_TTL_SECONDS)
+        pipe.delete(state_key(state))
+        await pipe.execute()
 
     # 언어 감지 (Accept-Language 헤더)
     accept_language = request.headers.get("accept-language", "")
