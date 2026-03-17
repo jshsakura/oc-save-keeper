@@ -341,29 +341,33 @@ async def dropbox_callback(
     
     if is_korean:
         if is_success:
-            title = "Dropbox 연동 완료"
-            message = "인증이 안전하게 완료되었습니다."
-            security_note = "서버에는 토큰이 저장되지 않으며, 모든 인증 정보는 기기에만 남습니다."
-            wait_message = "잠시 후 Nintendo Switch 화면이 자동으로 변경됩니다."
+            title = "연동 완료!"
+            message = "Dropbox 연동이 성공적으로 완료되었습니다."
+            security_note = "인증 정보는 기기에만 안전하게 저장되며, 서버에는 어떠한 데이터도 남지 않습니다."
+            wait_message = "이제 이 브라우저 창을 닫으셔도 좋습니다."
+            status_text = "연결됨"
         else:
-            title = "인증 실패"
-            message = "인증이 거부되었거나 취소되었습니다."
-            security_note = error_description or "인증이 거부되었습니다."
+            title = "연동 실패"
+            message = "인증 과정에서 오류가 발생했습니다."
+            security_note = error_description or "사용자가 인증을 거절했거나 세션이 만료되었습니다."
             wait_message = "Switch 앱으로 돌아가 다시 시도해 주세요."
+            status_text = "오류 발생"
     else:
         if is_success:
-            title = "Dropbox Connected"
-            message = "Authentication completed securely."
-            security_note = "No tokens are stored on the server. All credentials remain on your device only."
-            wait_message = "Your Nintendo Switch screen will update shortly."
+            title = "Connected!"
+            message = "Dropbox has been successfully linked."
+            security_note = "Credentials are stored securely on your device only. No data remains on this server."
+            wait_message = "You can safely close this browser tab now."
+            status_text = "Connected"
         else:
-            title = "Authorization Failed"
-            message = "Authorization was denied or cancelled."
-            security_note = error_description or "Authorization was denied."
+            title = "Connection Failed"
+            message = "An error occurred during authentication."
+            security_note = error_description or "Authorization was denied or the session expired."
             wait_message = "Please return to the Switch app and try again."
+            status_text = "Failed"
 
     status_color = "#a6e3a1" if is_success else "#f38ba8"
-    status_bg = "rgba(166, 227, 161, 0.1)" if is_success else "rgba(243, 139, 168, 0.1)"
+    status_bg = "rgba(166, 227, 161, 0.15)" if is_success else "rgba(243, 139, 168, 0.15)"
     
     html = f"""
 <!doctype html>
@@ -389,7 +393,8 @@ async def dropbox_callback(
         --green: #a6e3a1;
         --red: #f38ba8;
         --blue: #89b4fa;
-        --pink: #f5c2e7;
+        --sapphire: #74c3ec;
+        --surface0: #313244;
       }}
       
       * {{
@@ -398,282 +403,250 @@ async def dropbox_callback(
         padding: 0;
       }}
       
-      html, body {{
-        height: 100%;
-      }}
-      
       body {{
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: linear-gradient(145deg, var(--crust) 0%, var(--base) 50%, var(--mantle) 100%);
+        background-color: var(--crust);
+        background-image: 
+            radial-gradient(at 0% 0%, rgba(137, 180, 250, 0.05) 0px, transparent 50%),
+            radial-gradient(at 100% 100%, rgba(203, 166, 247, 0.05) 0px, transparent 50%);
         color: var(--text);
         min-height: 100vh;
         min-height: 100dvh;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 20px;
-        padding-bottom: max(20px, env(safe-area-inset-bottom));
+        padding: 24px;
         -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
       }}
       
       .container {{
         width: 100%;
-        max-width: 380px;
-        animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        max-width: 400px;
+        animation: fadeIn 0.6s ease-out;
       }}
       
-      @keyframes slideUp {{
-        from {{
-          opacity: 0;
-          transform: translateY(20px);
-        }}
-        to {{
-          opacity: 1;
-          transform: translateY(0);
-        }}
+      @keyframes fadeIn {{
+        from {{ opacity: 0; transform: translateY(10px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
       }}
       
       .card {{
-        background: linear-gradient(180deg, var(--mantle) 0%, rgba(24, 24, 37, 0.95) 100%);
-        border: 1px solid rgba(205, 214, 244, 0.08);
-        border-radius: 24px;
-        padding: 40px 28px;
+        background: var(--mantle);
+        border: 1px solid var(--surface0);
+        border-radius: 32px;
+        padding: 48px 32px;
         text-align: center;
-        box-shadow: 
-          0 4px 6px rgba(0, 0, 0, 0.1),
-          0 20px 40px rgba(0, 0, 0, 0.3),
-          inset 0 1px 0 rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(10px);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        position: relative;
+        overflow: hidden;
+      }}
+      
+      .success-glow {{
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, {status_bg} 0%, transparent 70%);
+        pointer-events: none;
+      }}
+      
+      .icon-wrapper {{
+        position: relative;
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 32px;
+        animation: iconPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }}
+
+      @keyframes iconPop {{
+        from {{ transform: scale(0.6); opacity: 0; }}
+        to {{ transform: scale(1); opacity: 1; }}
       }}
       
       .app-icon {{
-        width: 88px;
-        height: 88px;
-        margin: 0 auto 24px;
-        border-radius: 22px;
+        width: 100%;
+        height: 100%;
+        border-radius: 28px;
         overflow: hidden;
-        box-shadow: 
-          0 8px 24px rgba(0, 0, 0, 0.4),
-          0 0 0 1px rgba(255, 255, 255, 0.1);
-        animation: iconPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+        border: 1px solid var(--surface0);
       }}
-      
+
       .app-icon img {{
         width: 100%;
         height: 100%;
         object-fit: cover;
-        display: block;
       }}
-      
-      @keyframes iconPop {{
-        from {{
-          opacity: 0;
-          transform: scale(0.8);
-        }}
-        to {{
-          opacity: 1;
-          transform: scale(1);
-        }}
-      }}
-      
-      .status-badge {{
-        display: inline-flex;
+
+      .status-badge-overlay {{
+        position: absolute;
+        bottom: -10px;
+        right: -10px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--mantle);
+        border: 3px solid var(--mantle);
+        display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
-        border-radius: 100px;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      }}
+
+      .status-badge-inner {{
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
         background: {status_bg};
-        margin-bottom: 20px;
-        animation: fadeIn 0.4s ease 0.2s both;
-      }}
-      
-      .status-badge svg {{
-        width: 18px;
-        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         color: {status_color};
       }}
       
-      .status-badge span {{
-        font-size: 13px;
-        font-weight: 600;
+      .badge {{
+        display: inline-block;
+        padding: 6px 12px;
+        background: var(--surface0);
+        border-radius: 100px;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
         color: {status_color};
-        letter-spacing: 0.02em;
-      }}
-      
-      @keyframes fadeIn {{
-        from {{ opacity: 0; }}
-        to {{ opacity: 1; }}
+        margin-bottom: 16px;
       }}
       
       h1 {{
-        font-size: 22px;
+        font-size: 26px;
         font-weight: 700;
-        margin-bottom: 8px;
-        color: var(--text);
+        margin-bottom: 12px;
         letter-spacing: -0.02em;
-        animation: fadeIn 0.4s ease 0.25s both;
       }}
       
-      .message {{
-        font-size: 15px;
+      .description {{
+        font-size: 16px;
         color: var(--subtext1);
-        line-height: 1.5;
-        margin-bottom: 24px;
-        animation: fadeIn 0.4s ease 0.3s both;
-      }}
-      
-      .security-card {{
-        background: rgba(180, 190, 254, 0.06);
-        border: 1px solid rgba(180, 190, 254, 0.15);
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 20px;
-        animation: fadeIn 0.4s ease 0.35s both;
-      }}
-      
-      .security-card .icon-row {{
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        margin-bottom: 10px;
-      }}
-      
-      .security-card svg {{
-        width: 16px;
-        height: 16px;
-        color: var(--lavender);
-      }}
-      
-      .security-card .label {{
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--lavender);
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }}
-      
-      .security-card p {{
-        font-size: 13px;
-        color: var(--subtext0);
         line-height: 1.6;
+        margin-bottom: 32px;
       }}
       
-      .wait-notice {{
+      .info-box {{
+        background: rgba(49, 50, 68, 0.4);
+        border: 1px solid var(--surface0);
+        border-radius: 20px;
+        padding: 20px;
+        text-align: left;
+        margin-bottom: 32px;
+      }}
+      
+      .info-box-header {{
         display: flex;
         align-items: center;
-        justify-content: center;
-        gap: 10px;
-        padding: 14px;
-        background: rgba(137, 180, 250, 0.08);
-        border-radius: 10px;
-        animation: fadeIn 0.4s ease 0.4s both;
+        gap: 8px;
+        margin-bottom: 8px;
+        color: var(--sapphire);
+        font-size: 13px;
+        font-weight: 600;
       }}
       
-      .wait-notice .spinner {{
+      .info-box-header svg {{
         width: 16px;
         height: 16px;
-        border: 2px solid var(--overlay0);
-        border-top-color: var(--blue);
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
       }}
       
-      @keyframes spin {{
-        to {{ transform: rotate(360deg); }}
+      .info-box p {{
+        font-size: 14px;
+        color: var(--subtext0);
+        line-height: 1.5;
       }}
       
-      .wait-notice p {{
-        font-size: 13px;
-        color: var(--blue);
-        font-weight: 500;
+      .action-hint {{
+        background: {status_color};
+        color: var(--crust);
+        padding: 16px;
+        border-radius: 16px;
+        font-weight: 700;
+        font-size: 15px;
+        box-shadow: 0 10px 20px {status_bg};
       }}
       
       .footer {{
-        margin-top: 28px;
-        padding-top: 20px;
-        border-top: 1px solid rgba(205, 214, 244, 0.08);
-        animation: fadeIn 0.4s ease 0.45s both;
+        margin-top: 40px;
+        text-align: center;
       }}
       
-      .footer .brand {{
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--lavender);
-        letter-spacing: 0.02em;
-      }}
-      
-      .footer .tagline {{
-        font-size: 12px;
+      .footer p {{
+        font-size: 13px;
         color: var(--overlay0);
-        margin-top: 4px;
       }}
       
-      @media (prefers-reduced-motion: reduce) {{
-        *, *::before, *::after {{
-          animation-duration: 0.01ms !important;
-          animation-iteration-count: 1 !important;
-          transition-duration: 0.01ms !important;
-        }}
+      .footer b {{
+        color: var(--lavender);
       }}
-      
-      @media (max-width: 400px) {{
-        .card {{
-          padding: 32px 20px;
-          border-radius: 20px;
-        }}
-        
-        .app-icon {{
-          width: 72px;
-          height: 72px;
-          border-radius: 18px;
-        }}
-        
-        h1 {{
-          font-size: 20px;
-        }}
-        
-        .message {{
-          font-size: 14px;
-        }}
+
+      /* Checkmark Animation */
+      .checkmark {{
+        width: 28px;
+        height: 28px;
+        stroke-width: 4;
+        stroke: {status_color};
+        stroke-miterlimit: 10;
+        stroke-dasharray: 48;
+        stroke-dashoffset: 48;
+        animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards;
+      }}
+
+      @keyframes stroke {{
+        100% {{ stroke-dashoffset: 0; }}
       }}
     </style>
   </head>
   <body>
     <div class="container">
       <div class="card">
-        <div class="app-icon">
-          <img src="/static/icon.png" alt="oc-save-keeper" />
+        <div class="success-glow"></div>
+        
+        <div class="icon-wrapper">
+          <div class="app-icon">
+            <img src="/static/icon.png" alt="oc-save-keeper" />
+          </div>
+          <div class="status-badge-overlay">
+            <div class="status-badge-inner">
+              {f'''<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                  <path fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>''' if is_success else '''<svg style="width:24px;height:24px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>'''}
+            </div>
+          </div>
         </div>
         
-        <div class="status-badge">
-          {'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Complete</span>' if is_success else '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>Failed</span>'}
-        </div>
-        
+        <div class="badge">{status_text}</div>
         <h1>{title}</h1>
-        <p class="message">{message}</p>
+        <p class="description">{message}</p>
         
-        <div class="security-card">
-          <div class="icon-row">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span class="label">{'보안 안내' if is_korean else 'Security Notice'}</span>
+        <div class="info-box">
+          <div class="info-box-header">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            {'보안 정보' if is_korean else 'Privacy Info'}
           </div>
           <p>{security_note}</p>
         </div>
         
-        <div class="wait-notice">
-          <div class="spinner"></div>
-          <p>{wait_message}</p>
+        <div class="action-hint">
+          {wait_message}
         </div>
-        
-        <div class="footer">
-          <div class="brand">oc-save-keeper</div>
-          <div class="tagline">{'안전한 세이브 백업 & 동기화' if is_korean else 'Safe Save Backup & Sync'}</div>
-        </div>
+      </div>
+      
+      <div class="footer">
+        <p><b>oc-save-keeper</b> bridge service</p>
       </div>
     </div>
   </body>
 </html>
 """
+    return HTMLResponse(html, status_code=200)"""
     return HTMLResponse(html, status_code=200)
