@@ -158,7 +158,7 @@ class HealthResponse(BaseModel):
     redis: Literal["ok"]
 
 
-app = FastAPI(title="oc-save-keeper Dropbox Bridge", version="0.1.0")
+app = FastAPI(title="OC Save Keeper Bridge", version="0.1.0")
 redis_client = Redis.from_url(REDIS_URL, decode_responses=True)
 
 # 정적 파일 서빙 (아이콘 등)
@@ -192,122 +192,428 @@ async def root(request: Request) -> str:
     
     # 다국어 텍스트
     if is_korean:
-        lang, title = "ko", "oc-save-keeper Bridge"
-        desc = "Nintendo Switch용 세이브 백업 앱 <strong>oc-save-keeper</strong>의 OAuth 브릿지 서비스입니다."
-        download_title = "📥 다운로드"
-        install_title = "🚀 설치 방법"
+        lang, title = "ko", "OC Save Keeper Bridge"
+        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다."
+        install_title = "설치 방법"
+        install_icon = "download"
         install_steps = [
             "Release에서 <code>.nro</code> 파일 다운로드",
             "SD카드 <code>/switch/</code> 폴더에 복사",
             "Homebrew Menu에서 실행"
         ]
-        dropbox_title = "🔑 Dropbox 연동"
+        dropbox_title = "Dropbox 연동"
+        dropbox_icon = "link"
         dropbox_steps = [
             "앱에서 <strong>클라우드 동기화</strong> → <strong>Dropbox 로그인</strong> 선택",
             "화면에 표시된 QR코드를 스마트폰으로 스캔",
             "브라우저에서 Dropbox 계정 로그인 및 권한 승인",
             "인증 완료 화면의 코드를 Switch에 입력",
-            "클라우드 동기화 활성화 완료! ✅"
+            "클라우드 동기화 활성화 완료!"
         ]
-        tip = "💡 팁:"
-        tip_text = "QR코드가 안 되면 URL을 직접 입력하세요."
-        api_title = "📡 API Endpoints"
-        warning_title = "⚠️ 보안:"
-        warning_text = "이 서비스는 Rate Limiting 및 공격 탐지 시스템이 작동 중입니다."
-        footer = "Made with ❤️ for Nintendo Switch gamers"
+        api_title = "API Endpoints"
+        api_icon = "terminal"
+        footer = 'Created for Switch gamers by <a href="mailto:support@opencourse.kr" style="color: var(--lavender); text-decoration: none; font-weight: 600;">Husband of Rebekah</a>'
+        status_text = "브릿지 서버 정상 작동 중"
     else:
-        lang, title = "en", "oc-save-keeper Bridge"
-        desc = "OAuth bridge service for <strong>oc-save-keeper</strong>, a Nintendo Switch save backup app."
-        download_title = "📥 Download"
-        install_title = "🚀 Installation"
+        lang, title = "en", "OC Save Keeper Bridge"
+        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app."
+        install_title = "Installation"
+        install_icon = "download"
         install_steps = [
             "Download <code>.nro</code> file from Release",
             "Copy to SD card <code>/switch/</code> folder",
             "Launch from Homebrew Menu"
         ]
-        dropbox_title = "🔑 Dropbox Setup"
+        dropbox_title = "Dropbox Setup"
+        dropbox_icon = "link"
         dropbox_steps = [
             "Select <strong>Cloud Sync</strong> → <strong>Dropbox Login</strong> in app",
             "Scan QR code with your smartphone",
             "Login to Dropbox and authorize in browser",
             "Enter the code shown on Switch",
-            "Cloud sync activated! ✅"
+            "Cloud sync activated!"
         ]
-        tip = "💡 Tip:"
-        tip_text = "If QR doesn't work, enter the URL directly."
-        api_title = "📡 API Endpoints"
-        warning_title = "⚠️ Security:"
-        warning_text = "Rate limiting and attack detection systems are active."
-        footer = "Made with ❤️ for Nintendo Switch gamers"
+        api_title = "API Endpoints"
+        api_icon = "terminal"
+        footer = 'Created for Switch gamers by <a href="mailto:support@opencourse.kr" style="color: var(--lavender); text-decoration: none; font-weight: 600;">Husband of Rebekah</a>'
+        status_text = "Bridge server is running"
     
-    install_list = "\n        ".join(f"<li>{step}</li>" for step in install_steps)
-    dropbox_list = "\n        ".join(f"<li>{step}</li>" for step in dropbox_steps)
+    install_list = "\n          ".join(f"<li>{step}</li>" for step in install_steps)
+    dropbox_list = "\n          ".join(f"<li>{step}</li>" for step in dropbox_steps)
     
     return f"""<!DOCTYPE html>
 <html lang="{lang}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1e1e2e" />
     <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/feather-icons"></script>
     <style>
-        * {{ box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 720px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #eee; min-height: 100vh; }}
-        h1 {{ color: #4ecca3; border-bottom: 2px solid #4ecca3; padding-bottom: 10px; }}
-        h2 {{ color: #4ecca3; margin-top: 30px; }}
-        code {{ background: #0f3460; padding: 2px 8px; border-radius: 4px; font-size: 14px; }}
-        .status {{ display: inline-block; padding: 6px 16px; background: #4ecca3; color: #1a1a2e; border-radius: 20px; font-weight: bold; animation: pulse 2s infinite; }}
-        @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.7; }} }}
-        .endpoint {{ margin: 10px 0; padding: 8px; background: rgba(78, 204, 163, 0.1); border-radius: 6px; }}
-        .method {{ color: #4ecca3; font-weight: bold; min-width: 60px; display: inline-block; }}
-        a {{ color: #4ecca3; text-decoration: none; }}
-        a:hover {{ text-decoration: underline; }}
-        .download-box {{ background: #0f3460; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0; }}
-        .download-btn {{ display: inline-block; padding: 12px 24px; background: #4ecca3; color: #1a1a2e; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 8px; }}
-        .download-btn:hover {{ background: #3db892; }}
-        ol {{ line-height: 1.8; }}
-        li {{ margin: 8px 0; }}
-        .warning {{ background: #ff6b6b33; border-left: 4px solid #ff6b6b; padding: 12px; margin: 10px 0; border-radius: 4px; }}
-        .info {{ background: #4ecca333; border-left: 4px solid #4ecca3; padding: 12px; margin: 10px 0; border-radius: 4px; }}
+      :root {{
+        --base: #1e1e2e;
+        --mantle: #181825;
+        --crust: #11111b;
+        --text: #cdd6f4;
+        --subtext0: #a6adc8;
+        --subtext1: #bac2de;
+        --overlay0: #6c7086;
+        --lavender: #b4befe;
+        --green: #a6e3a1;
+        --red: #f38ba8;
+        --blue: #89b4fa;
+        --sapphire: #74c3ec;
+        --surface0: #313244;
+        --surface1: #45475a;
+      }}
+      
+      * {{
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }}
+      
+      body {{
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: var(--crust);
+        background-image: 
+            radial-gradient(circle at 0% 0%, rgba(137, 180, 250, 0.08) 0%, transparent 40%),
+            radial-gradient(circle at 100% 100%, rgba(203, 166, 247, 0.08) 0%, transparent 40%),
+            radial-gradient(circle at 50% 50%, rgba(180, 190, 254, 0.03) 0%, transparent 60%);
+        color: var(--text);
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 60px 24px;
+        -webkit-font-smoothing: antialiased;
+      }}
+      
+      .container {{
+        width: 100%;
+        max-width: 640px;
+        animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      }}
+      
+      @keyframes slideUp {{
+        from {{ opacity: 0; transform: translateY(30px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
+      }}
+      
+      .card {{
+        background: rgba(24, 24, 37, 0.7);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 40px;
+        padding: 60px 40px;
+        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+        position: relative;
+        overflow: hidden;
+      }}
+
+      .card::before {{
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(180, 190, 254, 0.3), transparent);
+      }}
+      
+      .header {{
+        text-align: center;
+        margin-bottom: 32px;
+      }}
+      
+      .icon-wrapper {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 32px;
+        position: relative;
+        animation: float 6s ease-in-out infinite;
+      }
+
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+      }
+
+      .app-icon {
+        width: 100%;
+        height: 100%;
+        border-radius: 28px;
+        overflow: hidden;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+        border: 1px solid var(--surface1);
+        background: var(--mantle);
+      }
+
+      .app-icon img {{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }}
+
+      .badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: rgba(166, 227, 161, 0.1);
+        border: 1px solid rgba(166, 227, 161, 0.2);
+        border-radius: 100px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--green);
+        margin-bottom: 20px;
+        letter-spacing: 0.02em;
+      }}
+
+      .badge-dot {{
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--green);
+        box-shadow: 0 0 12px var(--green);
+        animation: pulse 2.5s infinite;
+      }}
+
+      @keyframes pulse {{
+        0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(166, 227, 161, 0.5); }}
+        70% {{ transform: scale(1); box-shadow: 0 0 0 10px rgba(166, 227, 161, 0); }}
+        100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(166, 227, 161, 0); }}
+      }}
+      
+      h1 {{
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 16px;
+        color: var(--text);
+        letter-spacing: -0.03em;
+        background: linear-gradient(180deg, #fff 0%, var(--subtext1) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }}
+      
+      .description {{
+        font-size: 17px;
+        color: var(--subtext1);
+        line-height: 1.6;
+        font-weight: 400;
+        max-width: 480px;
+        margin: 0 auto;
+      }}
+      
+      .github-link-container {{
+        text-align: center;
+        margin-bottom: 48px;
+      }}
+      
+      .btn-github {{
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 24px;
+        border-radius: 16px;
+        font-weight: 600;
+        font-size: 15px;
+        text-decoration: none;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(8px);
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }}
+      
+      .btn-github:hover {{
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+      }}
+
+      .btn-github i {{ width: 18px; height: 18px; margin-right: 8px; }}
+      
+      h2 {{
+        font-size: 19px;
+        font-weight: 600;
+        color: var(--lavender);
+        margin: 40px 0 20px;
+        display: flex;
+        align-items: center; gap: 12px;
+      }}
+
+      h2 i {{ width: 20px; height: 20px; stroke-width: 2.5; vertical-align: middle; margin-right: 8px; }}
+      
+      h2::after {{
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, var(--surface1), transparent);
+        margin-left: 8px;
+      }}
+      
+      ol {{
+        list-style: none;
+        counter-reset: steps;
+      }}
+      
+      li {{
+        position: relative;
+        padding-left: 44px;
+        margin-bottom: 20px;
+        color: var(--subtext1);
+        font-size: 15px;
+        line-height: 1.6;
+        transition: color 0.2s ease;
+      }}
+
+      li:hover {{
+        color: var(--text);
+      }}
+      
+      li::before {{
+        counter-increment: steps;
+        content: counter(steps);
+        position: absolute;
+        left: 0;
+        top: -1px;
+        width: 28px;
+        height: 28px;
+        background: var(--surface0);
+        color: var(--lavender);
+        border: 1px solid rgba(180, 190, 254, 0.2);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      }}
+
+      code {{
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+        background: rgba(180, 190, 254, 0.1);
+        color: var(--lavender);
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 13.5px;
+        border: 1px solid rgba(180, 190, 254, 0.1);
+      }}
+      
+      .endpoints {{
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }}
+      
+      .endpoint {{
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 20px;
+        background: rgba(49, 50, 68, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 13px;
+        color: var(--subtext0);
+        transition: all 0.3s ease;
+      }}
+
+      .endpoint:hover {{
+        background: rgba(49, 50, 68, 0.6);
+        border-color: rgba(180, 190, 254, 0.2);
+        color: var(--text);
+      }}
+      
+      .method {{
+        color: var(--sapphire);
+        font-weight: 700;
+        min-width: 50px;
+        font-size: 12px;
+        letter-spacing: 0.05em;
+      }}
+      
+      .method-get {{
+        color: var(--green);
+      }}
+
+      .footer {{
+        margin-top: 50px;
+        text-align: center;
+      }}
+      
+      .footer p {{
+        font-size: 14px;
+        color: var(--overlay0);
+        letter-spacing: 0.01em;
+      }}
+
+      @media (max-width: 480px) {{
+        .card {{ padding: 40px 24px; }}
+        h1 {{ font-size: 26px; }}
+        .btn-github {{ width: 100%; justify-content: center; }}
+      }}
     </style>
-</head>
-<body>
-    <h1>🎮 oc-save-keeper Dropbox Bridge</h1>
-    <p><span class="status">● Running</span></p>
-    <p>{desc}</p>
-    
-    <div class="download-box">
-        <h2 style="margin-top:0">{download_title}</h2>
-        <a href="{RELEASE_URL}" class="download-btn">📦 Latest Release</a>
-        <a href="{GITHUB_URL}" class="download-btn">📂 GitHub</a>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        
+        <div class="header">
+          <div class="icon-wrapper">
+            <div class="app-icon">
+              <img src="/static/icon.png" alt="Icon" />
+            </div>
+          </div>
+          <div class="badge">
+            <div class="badge-dot"></div>
+            {status_text}
+          </div>
+          <h1>{title}</h1>
+          <p class="description">{desc}</p>
+        </div>
+        
+        <div class="github-link-container">
+          <a href="{GITHUB_URL}" class="btn-github">
+            <i data-feather="github"></i>
+            GitHub
+          </a>
+        </div>
+        
+        <h2><i data-feather="{install_icon}"></i> {install_title}</h2>
+        <ol>
+          {install_list}
+        </ol>
+        
+        <h2><i data-feather="{dropbox_icon}"></i> {dropbox_title}</h2>
+        <ol>
+          {dropbox_list}
+        </ol>
+        
+        <h2><i data-feather="{api_icon}"></i> {api_title}</h2>
+        <div class="endpoints">
+          <div class="endpoint"><span class="method">POST</span> /v1/sessions/start</div>
+          <div class="endpoint"><span class="method">POST</span> /v1/sessions/{{id}}/status</div>
+          <div class="endpoint"><span class="method">POST</span> /v1/sessions/{{id}}/consume</div>
+          <div class="endpoint"><span class="method method-get">GET</span> /oauth/dropbox/callback</div>
+          <div class="endpoint"><span class="method method-get">GET</span> /healthz</div>
+        </div>
+        
+      </div>
+      
+      <div class="footer">
+        <p>{footer}</p>
+      </div>
     </div>
-    
-    <h2>{install_title}</h2>
-    <ol>
-        {install_list}
-    </ol>
-    
-    <h2>{dropbox_title}</h2>
-    <ol>
-        {dropbox_list}
-    </ol>
-    
-    <div class="info">
-        <strong>{tip}</strong> {tip_text}
-    </div>
-    
-    <h2>{api_title}</h2>
-    <div class="endpoint"><span class="method">POST</span> <code>/v1/sessions/start</code></div>
-    <div class="endpoint"><span class="method">POST</span> <code>/v1/sessions/{id}/status</code></div>
-    <div class="endpoint"><span class="method">POST</span> <code>/v1/sessions/{id}/consume</code></div>
-    <div class="endpoint"><span class="method">GET</span> <code>/oauth/dropbox/callback</code></div>
-    <div class="endpoint"><span class="method">GET</span> <code>/healthz</code></div>
-    
-    <div class="warning">
-        <strong>{warning_title}</strong> {warning_text}
-    </div>
-    
-    <p style="text-align:center; color:#666; margin-top:40px;">{footer}</p>
-</body>
+    <script>feather.replace();</script>
+  </body>
 </html>"""
 
 
@@ -578,7 +884,7 @@ async def dropbox_callback(
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#1e1e2e" />
-    <title>oc-save-keeper | Dropbox</title>
+    <title>OC Save Keeper | Dropbox</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -813,7 +1119,7 @@ async def dropbox_callback(
         
         <div class="icon-wrapper">
           <div class="app-icon">
-            <img src="/static/icon.png" alt="oc-save-keeper" />
+            <img src="/static/icon.png" alt="OC Save Keeper" />
           </div>
           <div class="status-badge-overlay">
             <div class="status-badge-inner">
@@ -833,7 +1139,7 @@ async def dropbox_callback(
         <div class="info-box">
           <div class="info-box-header">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            {'보안 정보' if is_korean else 'Privacy Info'}
+            {'정보' if is_korean else 'Info'}
           </div>
           <p>{security_note}</p>
         </div>
@@ -844,7 +1150,7 @@ async def dropbox_callback(
       </div>
       
       <div class="footer">
-        <p><b>oc-save-keeper</b> bridge service</p>
+        <p><b>OC Save Keeper</b> bridge service</p>
       </div>
     </div>
   </body>
