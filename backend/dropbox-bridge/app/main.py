@@ -193,7 +193,7 @@ async def root(request: Request) -> str:
     # 다국어 텍스트
     if is_korean:
         lang, title = "ko", "OC Save Keeper Bridge"
-        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox가 OAuth Device Code Grant를 공식 지원하지 않아, Switch에서 폴링 기반 인증을 완료하려면 이 브릿지가 필요합니다.</span>"
+        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox가 OAuth Device Code Grant를 공식 지원하지 않아, Switch에서 폴링 기반 인증을 완료하려면 이 브릿지가 필요합니다. 원한다면 직접 호스팅하여 운용할 수 있습니다.</span>"
         install_title = "설치 방법"
         install_icon = "download"
         install_steps = [
@@ -216,7 +216,7 @@ async def root(request: Request) -> str:
         status_text = "브릿지 서버 정상 작동 중"
     else:
         lang, title = "en", "OC Save Keeper Bridge"
-        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch.</span>"
+        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch. You can also self-host this service.</span>"
         install_title = "Installation"
         install_icon = "download"
         install_steps = [
