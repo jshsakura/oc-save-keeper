@@ -14,18 +14,22 @@ https://example.yourdomain.com/oauth/dropbox/callback
 
 `REDIRECT_BASE_URL` must match the registered domain.
 
-## Flow
+## Flow (Fully Automatic - No Manual Code Entry)
 
 1. Switch calls `POST /v1/sessions/start`.
-2. Bridge returns `authorize_url`, `session_id`, and `poll_token`.
+2. Bridge generates PKCE `code_verifier` + `code_challenge`, returns `authorize_url`, `session_id`, and `poll_token`.
 3. User opens `authorize_url` on phone/PC and approves Dropbox.
-4. Dropbox redirects to bridge callback `/oauth/dropbox/callback`.
-5. Switch polls `POST /v1/sessions/{session_id}/status`.
+4. Dropbox redirects to bridge callback `/oauth/dropbox/callback` with authorization code.
+5. Switch polls `POST /v1/sessions/{session_id}/status` automatically.
 6. On `approved`, Switch calls `POST /v1/sessions/{session_id}/consume`.
-7. Bridge returns `authorization_code` + `code_verifier`.
-8. Switch exchanges code directly with Dropbox token endpoint.
+7. Bridge returns `authorization_code` + `code_verifier` (one-time).
+8. **Switch exchanges code directly with Dropbox token endpoint** → refresh token is created and stored on Switch.
 
-In this model, the bridge does not store Dropbox access/refresh tokens.
+**Key Points:**
+- No manual code copy/paste required - automatic polling completes the flow
+- PKCE key exchange is handled automatically by the bridge
+- **Refresh token is generated on and stored only on Switch**
+- **Bridge never stores access/refresh tokens** - only transient session data
 
 ## Quick Start
 

@@ -189,7 +189,12 @@ The app stores the OAuth session here:
 
 ## Dropbox Bridge (Optional)
 
-For callback-and-poll UX instead of manual code paste, use the Python bridge service.
+For automatic callback-and-poll auth (no manual code entry), use the Python bridge service.
+
+**Benefits:**
+- No manual code copy/paste - automatic polling completes the flow
+- PKCE key exchange handled automatically
+- Refresh token stored only on Switch, never on the bridge
 
 - Service docs: `backend/dropbox-bridge/README.md`
 - Architecture notes: `docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md`
