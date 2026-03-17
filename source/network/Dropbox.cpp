@@ -847,6 +847,7 @@ std::string Dropbox::performRequest(const std::string& url,
                                     const std::string& postData,
                                     const std::string& authHeader,
                                     bool isApiV2) {
+    std::lock_guard<std::mutex> lock(m_curlMutex);
     std::string response;
     
     curl_easy_reset(m_curl);

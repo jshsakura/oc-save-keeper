@@ -5,12 +5,17 @@
 #include "ui/saves/Sidebar.hpp"
 
 #include <memory>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <string>
 
 namespace ui::saves {
 
 class RevisionMenuScreen final : public GridMenuBase {
 public:
     RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uint64_t titleId, SaveSource source, std::string titleLabel);
+    ~RevisionMenuScreen();
 
     const char* shortTitle() const override;
     void update(const Controller& controller, const TouchInfo& touch) override;
@@ -52,6 +57,12 @@ private:
     std::string m_titleLabel;
     int m_index = 0;
     int m_layout = LayoutTypeVertical;
+
+    std::thread m_deleteThread;
+    std::atomic<bool> m_deleteInProgress{false};
+    std::atomic<bool> m_deleteSuccess{false};
+    std::string m_deleteMessage;
+    std::mutex m_deleteMutex;
 };
 
 } // namespace ui::saves

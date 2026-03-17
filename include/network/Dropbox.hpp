@@ -8,6 +8,7 @@
 #include <vector>
 #include <ctime>
 #include <functional>
+#include <mutex>
 #include <curl/curl.h>
 
 #include "utils/Config.hpp"
@@ -106,6 +107,7 @@ private:
     
     // Curl
     CURL* m_curl;
+    std::mutex m_curlMutex;
     
     // Internal
     bool appendListFolderPage(const std::string& response,

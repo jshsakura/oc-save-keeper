@@ -96,6 +96,13 @@ std::vector<AccountProfileBase> Runtime::getAccountList() const {
 void Runtime::setLoading(bool loading, const std::string& message) {
     m_isLoading = loading;
     m_loadingMessage = message;
+    
+    // Clean up cached texture when loading ends
+    if (!loading && m_loadingTexture) {
+        SDL_DestroyTexture(m_loadingTexture);
+        m_loadingTexture = nullptr;
+        m_loadingTextureText.clear();
+    }
 }
 
 void Runtime::forceRender() {
@@ -135,21 +142,33 @@ void Runtime::drawLoadingOverlay() {
     SDL_RenderDrawRect(m_renderer, &box);
     
     if (m_font && !m_loadingMessage.empty()) {
-        SDL_Color white{241, 245, 249, 255};
-        SDL_Surface* surface = TTF_RenderUTF8_Blended(m_font, m_loadingMessage.c_str(), white);
-        if (surface) {
-            SDL_Texture* texture = SDL_CreateTextureFromSurface(m_renderer, surface);
-            if (texture) {
-                SDL_Rect dest{
-                    box.x + (box.w - surface->w) / 2,
-                    box.y + (box.h - surface->h) / 2,
-                    surface->w,
-                    surface->h
-                };
-                SDL_RenderCopy(m_renderer, texture, nullptr, &dest);
-                SDL_DestroyTexture(texture);
+        // Recreate texture only if message changed
+        if (!m_loadingTexture || m_loadingTextureText != m_loadingMessage) {
+            if (m_loadingTexture) {
+                SDL_DestroyTexture(m_loadingTexture);
+                m_loadingTexture = nullptr;
             }
-            SDL_FreeSurface(surface);
+            
+            SDL_Color white{241, 245, 249, 255};
+            SDL_Surface* surface = TTF_RenderUTF8_Blended(m_font, m_loadingMessage.c_str(), white);
+            if (surface) {
+                m_loadingTexture = SDL_CreateTextureFromSurface(m_renderer, surface);
+                m_loadingTextureText = m_loadingMessage;
+                SDL_FreeSurface(surface);
+            }
+        }
+        
+        // Render cached texture
+        if (m_loadingTexture) {
+            int textW = 0, textH = 0;
+            SDL_QueryTexture(m_loadingTexture, nullptr, nullptr, &textW, &textH);
+            SDL_Rect dest{
+                box.x + (box.w - textW) / 2,
+                box.y + (box.h - textH) / 2,
+                textW,
+                textH
+            };
+            SDL_RenderCopy(m_renderer, m_loadingTexture, nullptr, &dest);
         }
     }
     

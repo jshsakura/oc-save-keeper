@@ -7,6 +7,7 @@
 #include <vector>
 
 struct SDL_Renderer;
+struct SDL_Texture;
 struct _TTF_Font;
 typedef struct _TTF_Font TTF_Font;
 
@@ -57,6 +58,10 @@ private:
     std::string m_lastNotification{};
     bool m_isLoading = false;
     std::string m_loadingMessage;
+    
+    // Cached loading texture to avoid per-frame allocation
+    SDL_Texture* m_loadingTexture = nullptr;
+    std::string m_loadingTextureText;
 };
 
 } // namespace ui::saves

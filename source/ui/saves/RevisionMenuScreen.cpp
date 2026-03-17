@@ -50,6 +50,22 @@ int RevisionMenuScreen::visibleCount() const {
 }
 
 void RevisionMenuScreen::update(const Controller& controller, const TouchInfo& touch) {
+    // Check for async delete completion
+    if (m_deleteThread.joinable() && !m_deleteInProgress) {
+        m_deleteThread.join();
+        Runtime::instance().setLoading(false);
+        
+        std::lock_guard<std::mutex> lock(m_deleteMutex);
+        if (m_deleteSuccess) {
+            Runtime::instance().notify(utils::Language::instance().get("sync.delete_success"));
+            reload();
+        } else {
+            Runtime::instance().pushError(m_deleteMessage.empty() 
+                ? utils::Language::instance().get("sync.delete_failed") 
+                : m_deleteMessage);
+        }
+    }
+
     if (m_sidebar) {
         m_sidebar->update(controller, touch);
         if (m_sidebar->shouldPop()) {
@@ -145,34 +161,51 @@ void RevisionMenuScreen::deleteSelected() {
         return;
     }
 
+    // Already running? Don't start another
+    if (m_deleteInProgress) {
+        LOG_WARNING("deleteSelected: already in progress");
+        return;
+    }
+
     const auto& entry = m_entries[m_index];
     LOG_INFO("deleteSelected: creating sidebar for entry %s", entry.label.c_str());
 
-    // Show confirmation sidebar instead of immediate deletion
     m_sidebar = std::make_shared<Sidebar>(lang.get("ui.confirm_delete"), Sidebar::Side::Right);
     
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this, entry]() {
         const auto& lang = utils::Language::instance();
         this->m_sidebar.reset();
         
+        // Initialize state
+        m_deleteInProgress = true;
+        m_deleteSuccess = false;
+        m_deleteMessage.clear();
+        
+        // Show loading (main thread) - NO forceRender!
         Runtime::instance().setLoading(true, lang.get("sync.deleting"));
-        Runtime::instance().forceRender();
-
-        auto result = m_backend->deleteRevision(m_titleId, entry.id, m_source);
-
-        Runtime::instance().setLoading(false);
-
-        if (result.ok) {
-            Runtime::instance().notify(lang.get("sync.delete_success"));
-            reload();
-        } else {
-            Runtime::instance().pushError(result.message.empty() ? lang.get("sync.delete_failed") : result.message);
-        }
+        
+        // Spawn worker thread
+        m_deleteThread = std::thread([this, titleId = m_titleId, entryId = entry.id, source = m_source]() {
+            auto result = m_backend->deleteRevision(titleId, entryId, source);
+            
+            std::lock_guard<std::mutex> lock(m_deleteMutex);
+            m_deleteSuccess = result.ok;
+            m_deleteMessage = result.message;
+            m_deleteInProgress = false;
+        });
+        
+        // Main thread returns immediately (non-blocking)
     }, false, lang.get("ui.confirm_delete_hint"));
 
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
         this->m_sidebar.reset();
     }, true);
+}
+
+RevisionMenuScreen::~RevisionMenuScreen() {
+    if (m_deleteThread.joinable()) {
+        m_deleteThread.join();
+    }
 }
 
 } // namespace ui::saves
