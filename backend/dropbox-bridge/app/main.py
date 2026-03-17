@@ -331,20 +331,20 @@ async def root(request: Request) -> str:
         margin-bottom: 32px;
       }}
       
-      .icon-wrapper {
+      .icon-wrapper {{
         width: 120px;
         height: 120px;
         margin: 0 auto 32px;
         position: relative;
         animation: float 6s ease-in-out infinite;
-      }
+      }}
 
-      @keyframes float {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-      }
+      @keyframes float {{
+        0%, 100% {{ transform: translateY(0); }}
+        50% {{ transform: translateY(-10px); }}
+      }}
 
-      .app-icon {
+      .app-icon {{
         width: 100%;
         height: 100%;
         border-radius: 28px;
@@ -352,7 +352,7 @@ async def root(request: Request) -> str:
         box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
         border: 1px solid var(--surface1);
         background: var(--mantle);
-      }
+      }}
 
       .app-icon img {{
         width: 100%;
