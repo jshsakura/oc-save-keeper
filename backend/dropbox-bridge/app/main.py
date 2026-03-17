@@ -29,6 +29,8 @@ def get_env(name: str, default: str = "") -> str:
 APP_KEY = get_env("DROPBOX_APP_KEY")
 REDIRECT_BASE_URL = get_env("REDIRECT_BASE_URL", "https://example.yourdomain.com")
 POLL_TOKEN_SECRET = get_env("POLL_TOKEN_SECRET")
+RELEASE_URL = get_env("RELEASE_URL", "https://github.com/jshsakura/oc-save-keeper/releases/tag/latest")
+GITHUB_URL = get_env("GITHUB_URL", "https://github.com/jshsakura/oc-save-keeper")
 
 # 보안 강화: 파일에서 시크릿 읽기 지원 (Docker Secrets 스타일)
 SECRET_FILE_PATH = "/run/secrets/poll_token_secret"
@@ -69,6 +71,45 @@ async def check_rate_limit(redis: Redis, client_ip: str, action: str, limit: int
         await redis.expire(key, window)
     if current > limit:
         raise HTTPException(status_code=429, detail="Too many requests. Slow down.")
+
+
+async def detect_attack(redis: Redis, client_ip: str) -> bool:
+    """
+    공격 탐지: 의심스러운 패턴 감지
+    - 1분 내 100회 이상 요청 = DDoS 의심
+    - 1시간 내 차단 횟수 누적
+    """
+    # 분당 요청 수 체크
+    minute_key = f"attack:minute:{client_ip}"
+    minute_count = await redis.incr(minute_key)
+    if minute_count == 1:
+        await redis.expire(minute_key, 60)
+    
+    # 1분에 100회 이상 = 공격 의심
+    if minute_count > 100:
+        block_key = f"attack:blocked:{client_ip}"
+        await redis.setex(block_key, 3600, "1")  # 1시간 차단
+        return True
+    
+    # 이미 차단된 IP인지 확인
+    block_key = f"attack:blocked:{client_ip}"
+    if await redis.exists(block_key):
+        return True
+    
+    return False
+
+
+async def log_suspicious(redis: Redis, client_ip: str, action: str, reason: str):
+    """의심스러운 활동 로깅"""
+    import json
+    log_entry = json.dumps({
+        "ip": client_ip,
+        "action": action,
+        "reason": reason,
+        "timestamp": int(time.time())
+    })
+    await redis.lpush("security:logs", log_entry)
+    await redis.ltrim("security:logs", 0, 999)  # 최근 1000개만 유지
 
 
 def session_key(session_id: str) -> str:
@@ -142,10 +183,157 @@ async def healthz() -> HealthResponse:
     return HealthResponse(status="ok", redis="ok")
 
 
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request) -> str:
+    """서비스 가동 중 페이지 (다국어 지원)"""
+    # Accept-Language 헤더로 언어 감지
+    accept_lang = request.headers.get("accept-language", "")
+    is_korean = "ko" in accept_lang.lower()
+    
+    # 다국어 텍스트
+    if is_korean:
+        lang, title = "ko", "oc-save-keeper Bridge"
+        desc = "Nintendo Switch용 세이브 백업 앱 <strong>oc-save-keeper</strong>의 OAuth 브릿지 서비스입니다."
+        download_title = "📥 다운로드"
+        install_title = "🚀 설치 방법"
+        install_steps = [
+            "Release에서 <code>.nro</code> 파일 다운로드",
+            "SD카드 <code>/switch/</code> 폴더에 복사",
+            "Homebrew Menu에서 실행"
+        ]
+        dropbox_title = "🔑 Dropbox 연동"
+        dropbox_steps = [
+            "앱에서 <strong>클라우드 동기화</strong> → <strong>Dropbox 로그인</strong> 선택",
+            "화면에 표시된 QR코드를 스마트폰으로 스캔",
+            "브라우저에서 Dropbox 계정 로그인 및 권한 승인",
+            "인증 완료 화면의 코드를 Switch에 입력",
+            "클라우드 동기화 활성화 완료! ✅"
+        ]
+        tip = "💡 팁:"
+        tip_text = "QR코드가 안 되면 URL을 직접 입력하세요."
+        api_title = "📡 API Endpoints"
+        warning_title = "⚠️ 보안:"
+        warning_text = "이 서비스는 Rate Limiting 및 공격 탐지 시스템이 작동 중입니다."
+        footer = "Made with ❤️ for Nintendo Switch gamers"
+    else:
+        lang, title = "en", "oc-save-keeper Bridge"
+        desc = "OAuth bridge service for <strong>oc-save-keeper</strong>, a Nintendo Switch save backup app."
+        download_title = "📥 Download"
+        install_title = "🚀 Installation"
+        install_steps = [
+            "Download <code>.nro</code> file from Release",
+            "Copy to SD card <code>/switch/</code> folder",
+            "Launch from Homebrew Menu"
+        ]
+        dropbox_title = "🔑 Dropbox Setup"
+        dropbox_steps = [
+            "Select <strong>Cloud Sync</strong> → <strong>Dropbox Login</strong> in app",
+            "Scan QR code with your smartphone",
+            "Login to Dropbox and authorize in browser",
+            "Enter the code shown on Switch",
+            "Cloud sync activated! ✅"
+        ]
+        tip = "💡 Tip:"
+        tip_text = "If QR doesn't work, enter the URL directly."
+        api_title = "📡 API Endpoints"
+        warning_title = "⚠️ Security:"
+        warning_text = "Rate limiting and attack detection systems are active."
+        footer = "Made with ❤️ for Nintendo Switch gamers"
+    
+    install_list = "\n        ".join(f"<li>{step}</li>" for step in install_steps)
+    dropbox_list = "\n        ".join(f"<li>{step}</li>" for step in dropbox_steps)
+    
+    return f"""<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <style>
+        * {{ box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 720px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #eee; min-height: 100vh; }}
+        h1 {{ color: #4ecca3; border-bottom: 2px solid #4ecca3; padding-bottom: 10px; }}
+        h2 {{ color: #4ecca3; margin-top: 30px; }}
+        code {{ background: #0f3460; padding: 2px 8px; border-radius: 4px; font-size: 14px; }}
+        .status {{ display: inline-block; padding: 6px 16px; background: #4ecca3; color: #1a1a2e; border-radius: 20px; font-weight: bold; animation: pulse 2s infinite; }}
+        @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.7; }} }}
+        .endpoint {{ margin: 10px 0; padding: 8px; background: rgba(78, 204, 163, 0.1); border-radius: 6px; }}
+        .method {{ color: #4ecca3; font-weight: bold; min-width: 60px; display: inline-block; }}
+        a {{ color: #4ecca3; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+        .download-box {{ background: #0f3460; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0; }}
+        .download-btn {{ display: inline-block; padding: 12px 24px; background: #4ecca3; color: #1a1a2e; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 8px; }}
+        .download-btn:hover {{ background: #3db892; }}
+        ol {{ line-height: 1.8; }}
+        li {{ margin: 8px 0; }}
+        .warning {{ background: #ff6b6b33; border-left: 4px solid #ff6b6b; padding: 12px; margin: 10px 0; border-radius: 4px; }}
+        .info {{ background: #4ecca333; border-left: 4px solid #4ecca3; padding: 12px; margin: 10px 0; border-radius: 4px; }}
+    </style>
+</head>
+<body>
+    <h1>🎮 oc-save-keeper Dropbox Bridge</h1>
+    <p><span class="status">● Running</span></p>
+    <p>{desc}</p>
+    
+    <div class="download-box">
+        <h2 style="margin-top:0">{download_title}</h2>
+        <a href="{RELEASE_URL}" class="download-btn">📦 Latest Release</a>
+        <a href="{GITHUB_URL}" class="download-btn">📂 GitHub</a>
+    </div>
+    
+    <h2>{install_title}</h2>
+    <ol>
+        {install_list}
+    </ol>
+    
+    <h2>{dropbox_title}</h2>
+    <ol>
+        {dropbox_list}
+    </ol>
+    
+    <div class="info">
+        <strong>{tip}</strong> {tip_text}
+    </div>
+    
+    <h2>{api_title}</h2>
+    <div class="endpoint"><span class="method">POST</span> <code>/v1/sessions/start</code></div>
+    <div class="endpoint"><span class="method">POST</span> <code>/v1/sessions/{id}/status</code></div>
+    <div class="endpoint"><span class="method">POST</span> <code>/v1/sessions/{id}/consume</code></div>
+    <div class="endpoint"><span class="method">GET</span> <code>/oauth/dropbox/callback</code></div>
+    <div class="endpoint"><span class="method">GET</span> <code>/healthz</code></div>
+    
+    <div class="warning">
+        <strong>{warning_title}</strong> {warning_text}
+    </div>
+    
+    <p style="text-align:center; color:#666; margin-top:40px;">{footer}</p>
+</body>
+</html>"""
+
+
+@app.get("/robots.txt")
+async def robots() -> str:
+    """봇 차단"""
+    return "User-agent: *\nDisallow: /"
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    """favicon은 static/icon.png로 리다이렉트"""
+    return RedirectResponse(url="/static/icon.png")
+
+
 @app.post("/v1/sessions/start", response_model=StartSessionResponse)
 async def start_session(payload: StartSessionRequest, request: Request) -> StartSessionResponse:
+    client_ip = request.client.host
+    
+    # 공격 탐지
+    if await detect_attack(redis_client, client_ip):
+        await log_suspicious(redis_client, client_ip, "start_session", "blocked_by_attack_detection")
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     # 세션 시작 시에도 너무 잦은 요청은 차단
-    await check_rate_limit(redis_client, request.client.host, "start_session", limit=5, window=60)
+    await check_rate_limit(redis_client, client_ip, "start_session", limit=5, window=60)
     
     session_id = secrets.token_urlsafe(18)
     state = secrets.token_urlsafe(18)
@@ -212,8 +400,15 @@ async def get_status(
     payload: SessionStatusRequest,
     request: Request,
 ) -> SessionStatusResponse:
+    client_ip = request.client.host
+    
+    # 공격 탐지
+    if await detect_attack(redis_client, client_ip):
+        await log_suspicious(redis_client, client_ip, "status", "blocked_by_attack_detection")
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     # 무차별 대입 공격 방지
-    await check_rate_limit(redis_client, request.client.host, "status")
+    await check_rate_limit(redis_client, client_ip, "status")
     
     key = session_key(session_id)
     if not await redis_client.exists(key):
@@ -237,8 +432,15 @@ async def consume_session(
     payload: ConsumeSessionRequest,
     request: Request,
 ) -> ConsumeSessionResponse:
+    client_ip = request.client.host
+    
+    # 공격 탐지
+    if await detect_attack(redis_client, client_ip):
+        await log_suspicious(redis_client, client_ip, "consume", "blocked_by_attack_detection")
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     # 가장 중요한 지점: 엄격한 Rate Limit (5분 내 5회 실패 시 차단)
-    await check_rate_limit(redis_client, request.client.host, "consume", limit=5, window=300)
+    await check_rate_limit(redis_client, client_ip, "consume", limit=5, window=300)
     
     key = session_key(session_id)
     if not await redis_client.exists(key):
@@ -648,5 +850,4 @@ async def dropbox_callback(
   </body>
 </html>
 """
-    return HTMLResponse(html, status_code=200)"""
     return HTMLResponse(html, status_code=200)
