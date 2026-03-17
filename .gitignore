@@ -13,3 +13,4 @@ dist/
 build-host/
 build/
 dist/
+backend/dropbox-bridge/app/__pycache__/

@@ -191,10 +191,12 @@ The app stores the OAuth session here:
 
 For automatic callback-and-poll auth (no manual code entry), use the Python bridge service.
 
-**Benefits:**
+**Features:**
 - No manual code copy/paste - automatic polling completes the flow
 - PKCE key exchange handled automatically
 - Refresh token stored only on Switch, never on the bridge
+
+*Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch.*
 
 - Service docs: `backend/dropbox-bridge/README.md`
 - Architecture notes: `docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md`

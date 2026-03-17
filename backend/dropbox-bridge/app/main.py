@@ -193,7 +193,7 @@ async def root(request: Request) -> str:
     # 다국어 텍스트
     if is_korean:
         lang, title = "ko", "OC Save Keeper Bridge"
-        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다."
+        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox가 OAuth Device Code Grant를 공식 지원하지 않아, Switch에서 폴링 기반 인증을 완료하려면 이 브릿지가 필요합니다.</span>"
         install_title = "설치 방법"
         install_icon = "download"
         install_steps = [
@@ -207,7 +207,7 @@ async def root(request: Request) -> str:
             "앱에서 <strong>클라우드 동기화</strong> → <strong>Dropbox 로그인</strong> 선택",
             "화면에 표시된 QR코드를 스마트폰으로 스캔",
             "브라우저에서 Dropbox 계정 로그인 및 권한 승인",
-            "인증 완료 화면의 코드를 Switch에 입력",
+            "자동으로 인증 완료! 별도 코드 입력 불필요",
             "클라우드 동기화 활성화 완료!"
         ]
         api_title = "API Endpoints"
@@ -216,7 +216,7 @@ async def root(request: Request) -> str:
         status_text = "브릿지 서버 정상 작동 중"
     else:
         lang, title = "en", "OC Save Keeper Bridge"
-        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app."
+        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch.</span>"
         install_title = "Installation"
         install_icon = "download"
         install_steps = [
@@ -230,7 +230,7 @@ async def root(request: Request) -> str:
             "Select <strong>Cloud Sync</strong> → <strong>Dropbox Login</strong> in app",
             "Scan QR code with your smartphone",
             "Login to Dropbox and authorize in browser",
-            "Enter the code shown on Switch",
+            "Auth completes automatically - no code entry needed",
             "Cloud sync activated!"
         ]
         api_title = "API Endpoints"
