@@ -673,9 +673,37 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
 }
 
 bool SaveManager::deleteBackup(const std::string& backupPath) {
-    const bool deleted = fs::deleteDirectory(backupPath);
-    remove(getBackupMetadataPath(backupPath).c_str());
-    remove((backupPath + ".zip").c_str());
+    LOG_INFO("deleteBackup: path=%s", backupPath.c_str());
+
+    struct stat st;
+    if (stat(backupPath.c_str(), &st) != 0) {
+        LOG_ERROR("deleteBackup: stat failed, path does not exist");
+        return false;
+    }
+
+    bool deleted = false;
+
+    if (S_ISDIR(st.st_mode)) {
+        LOG_INFO("deleteBackup: deleting directory recursively");
+        deleted = fs::deleteDirectory(backupPath);
+        if (!deleted) {
+            LOG_ERROR("deleteBackup: deleteDirectory failed");
+        }
+    } else {
+        LOG_INFO("deleteBackup: deleting file");
+        deleted = (std::remove(backupPath.c_str()) == 0);
+        if (!deleted) {
+            LOG_ERROR("deleteBackup: remove failed, errno=%d", errno);
+        }
+    }
+
+    const std::string metaPath = getBackupMetadataPath(backupPath);
+    if (stat(metaPath.c_str(), &st) == 0) {
+        LOG_INFO("deleteBackup: removing metadata %s", metaPath.c_str());
+        std::remove(metaPath.c_str());
+    }
+
+    LOG_INFO("deleteBackup: result=%s", deleted ? "success" : "failed");
     return deleted;
 }
 

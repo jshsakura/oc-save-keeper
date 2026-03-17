@@ -12,6 +12,15 @@
 
 namespace ui::saves {
 
+struct DeleteTaskData {
+    uint64_t titleId = 0;
+    std::string entryId;
+    std::string entryPath;
+    std::string entryLabel;
+    SaveSource source = SaveSource::Local;
+    bool isSystem = false;
+};
+
 class RevisionMenuScreen final : public GridMenuBase {
 public:
     RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uint64_t titleId, SaveSource source, std::string titleLabel);
@@ -57,12 +66,14 @@ private:
     std::string m_titleLabel;
     int m_index = 0;
     int m_layout = LayoutTypeVertical;
+    bool m_isSystem = false;
 
     std::thread m_deleteThread;
     std::atomic<bool> m_deleteInProgress{false};
     std::atomic<bool> m_deleteSuccess{false};
     std::string m_deleteMessage;
     std::mutex m_deleteMutex;
+    std::shared_ptr<DeleteTaskData> m_deleteData;
 };
 
 } // namespace ui::saves

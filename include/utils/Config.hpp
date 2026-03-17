@@ -74,6 +74,8 @@ public:
             json_object_new_string("ko"));
         json_object_object_add(m_root, "backup_on_exit", 
             json_object_new_boolean(false));
+        json_object_object_add(m_root, "hold_to_delete", 
+            json_object_new_boolean(true));
         
         save(path);
     }
@@ -99,6 +101,10 @@ public:
         return getBool("backup_on_exit", false);
     }
     
+    bool getHoldToDelete() const {
+        return getBool("hold_to_delete", true);
+    }
+    
     // Setters
     void setDropboxEnabled(bool enabled) {
         setBool("dropbox_enabled", enabled);
@@ -118,6 +124,10 @@ public:
     
     void setBackupOnExit(bool enabled) {
         setBool("backup_on_exit", enabled);
+    }
+    
+    void setHoldToDelete(bool enabled) {
+        setBool("hold_to_delete", enabled);
     }
     
 private:

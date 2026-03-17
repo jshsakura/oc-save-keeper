@@ -4,6 +4,7 @@
 #include "network/Dropbox.hpp"
 #include "ui/saves/Runtime.hpp"
 #include "utils/Language.hpp"
+#include "utils/Logger.hpp"
 #include "utils/Paths.hpp"
 
 #include <algorithm>
@@ -369,25 +370,85 @@ SaveActionResult SaveBackendAdapter::refresh(uint64_t titleId) {
 }
 
 SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std::string& revisionId, SaveSource source) {
+    LOG_INFO("deleteRevision: titleId=%016lX revisionId=%s source=%d", titleId, revisionId.c_str(), static_cast<int>(source));
+    
+    if (revisionId.empty()) {
+        LOG_ERROR("deleteRevision: empty revisionId");
+        return {false, "Invalid backup selection"};
+    }
+    
     auto* title = m_saveManager.getTitleById(titleId);
     if (!title) {
+        LOG_ERROR("deleteRevision: unknown title");
         return {false, "Unknown title"};
     }
 
+    if (title->actualSaveType == core::SaveType::System) {
+        LOG_ERROR("deleteRevision: system saves cannot be deleted");
+        return {false, "System saves cannot be deleted"};
+    }
+
     if (source == SaveSource::Local) {
-        // revisionId is the file path for local
+        const std::string backupBase = "/switch/oc-save-keeper/backups/";
+        if (revisionId.find(backupBase) != 0) {
+            LOG_ERROR("deleteRevision: invalid local path (outside backup directory): %s", revisionId.c_str());
+            return {false, "Invalid backup path"};
+        }
+        
+        if (revisionId == backupBase || revisionId.back() == '/') {
+            LOG_ERROR("deleteRevision: cannot delete backup root");
+            return {false, "Cannot delete backup root"};
+        }
+        
+        LOG_INFO("deleteRevision: deleting local backup");
         const bool ok = m_saveManager.deleteBackup(revisionId);
         if (ok) g_remoteCacheValid = false;
+        LOG_INFO("deleteRevision: local delete result=%d", ok);
         return { ok, ok ? "Local backup deleted" : "Delete failed" };
     } else {
-        // revisionId is the Dropbox path for cloud .zip
+        LOG_INFO("deleteRevision: deleting cloud backup");
         if (!m_dropbox.isAuthenticated()) {
+            LOG_ERROR("deleteRevision: Dropbox not authenticated");
             return {false, "Dropbox is not connected"};
         }
 
-        const std::string metaPath = revisionId.substr(0, revisionId.size() - 4) + ".meta";
-        const bool ok = m_dropbox.deleteFile(revisionId) && m_dropbox.deleteFile(metaPath);
+        char titleIdStr[20];
+        std::snprintf(titleIdStr, sizeof(titleIdStr), "%016lX", titleId);
+        const std::string expectedPrefix = std::string("/titles/") + titleIdStr + "/revisions/";
+        
+        if (revisionId.find(expectedPrefix) != 0) {
+            LOG_ERROR("deleteRevision: invalid cloud path (outside title revisions): %s", revisionId.c_str());
+            return {false, "Invalid cloud backup path"};
+        }
+
+        std::string metaPath, zipPath;
+        if (revisionId.size() > 5 && revisionId.substr(revisionId.size() - 5) == ".meta") {
+            metaPath = revisionId;
+            zipPath = revisionId.substr(0, revisionId.size() - 5) + ".zip";
+        } else if (revisionId.size() > 4 && revisionId.substr(revisionId.size() - 4) == ".zip") {
+            zipPath = revisionId;
+            metaPath = revisionId.substr(0, revisionId.size() - 4) + ".meta";
+        } else {
+            LOG_ERROR("deleteRevision: unexpected revisionId format: %s", revisionId.c_str());
+            return {false, "Invalid backup file format"};
+        }
+
+        LOG_INFO("deleteRevision: deleting zip=%s meta=%s", zipPath.c_str(), metaPath.c_str());
+        
+        bool zipOk = m_dropbox.deleteFile(zipPath);
+        if (!zipOk) {
+            LOG_ERROR("deleteRevision: failed to delete zip file");
+        }
+        
+        bool metaOk = m_dropbox.deleteFile(metaPath);
+        if (!metaOk) {
+            LOG_WARNING("deleteRevision: failed to delete meta file");
+        }
+        
+        const bool ok = zipOk || metaOk;
+        
         if (ok) g_remoteCacheValid = false;
+        LOG_INFO("deleteRevision: cloud delete result=%d", ok);
         return { ok, ok ? "Cloud backup deleted" : "Delete failed" };
     }
 }

@@ -161,44 +161,72 @@ void RevisionMenuScreen::deleteSelected() {
         return;
     }
 
-    // Already running? Don't start another
     if (m_deleteInProgress) {
         LOG_WARNING("deleteSelected: already in progress");
         return;
     }
 
+    if (m_index < 0 || m_index >= static_cast<int>(m_entries.size())) {
+        LOG_ERROR("deleteSelected: invalid index %d (size=%zu)", m_index, m_entries.size());
+        return;
+    }
+
     const auto& entry = m_entries[m_index];
-    LOG_INFO("deleteSelected: creating sidebar for entry %s", entry.label.c_str());
+    LOG_INFO("deleteSelected: creating sidebar for entry %s (id=%s)", entry.label.c_str(), entry.id.c_str());
+
+    m_deleteData = std::make_shared<DeleteTaskData>();
+    m_deleteData->titleId = m_titleId;
+    m_deleteData->entryId = entry.id;
+    m_deleteData->entryPath = entry.path;
+    m_deleteData->entryLabel = entry.label;
+    m_deleteData->source = m_source;
+    m_deleteData->isSystem = m_isSystem;
 
     m_sidebar = std::make_shared<Sidebar>(lang.get("ui.confirm_delete"), Sidebar::Side::Right);
     
-    m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this, entry]() {
+    const bool holdRequired = true;
+    const std::string yesHint = holdRequired ? lang.get("ui.hold_to_confirm") : lang.get("ui.confirm_delete_hint");
+    
+    m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this]() {
+        LOG_INFO("deleteSelected: YES clicked");
         const auto& lang = utils::Language::instance();
         this->m_sidebar.reset();
         
-        // Initialize state
+        if (!m_deleteData) {
+            LOG_ERROR("deleteSelected: m_deleteData is null");
+            Runtime::instance().pushError(lang.get("sync.delete_failed"));
+            return;
+        }
+        
+        LOG_INFO("deleteSelected: entryId=%s", m_deleteData->entryId.c_str());
+        
         m_deleteInProgress = true;
         m_deleteSuccess = false;
         m_deleteMessage.clear();
         
-        // Show loading (main thread) - NO forceRender!
         Runtime::instance().setLoading(true, lang.get("sync.deleting"));
         
-        // Spawn worker thread
-        m_deleteThread = std::thread([this, titleId = m_titleId, entryId = entry.id, source = m_source]() {
-            auto result = m_backend->deleteRevision(titleId, entryId, source);
+        auto dataPtr = m_deleteData;
+        auto backendPtr = m_backend;
+        
+        m_deleteThread = std::thread([this, dataPtr, backendPtr]() {
+            LOG_INFO("deleteSelected: worker started");
+            LOG_INFO("deleteSelected: entryId=%s len=%zu", dataPtr->entryId.c_str(), dataPtr->entryId.size());
+            
+            auto result = backendPtr->deleteRevision(dataPtr->titleId, dataPtr->entryId, dataPtr->source);
+            LOG_INFO("deleteSelected: result ok=%d msg=%s", result.ok, result.message.c_str());
             
             std::lock_guard<std::mutex> lock(m_deleteMutex);
             m_deleteSuccess = result.ok;
             m_deleteMessage = result.message;
             m_deleteInProgress = false;
         });
-        
-        // Main thread returns immediately (non-blocking)
-    }, false, lang.get("ui.confirm_delete_hint"));
+    }, false, yesHint, holdRequired);
 
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
+        LOG_INFO("deleteSelected: NO clicked");
         this->m_sidebar.reset();
+        m_deleteData.reset();
     }, true);
 }
 

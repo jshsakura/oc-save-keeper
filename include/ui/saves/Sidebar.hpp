@@ -33,6 +33,12 @@ public:
         m_enabled = enabled;
     }
 
+    // Hold-to-confirm support
+    virtual bool isHoldable() const { return false; }
+    virtual float holdProgress() const { return 0.0f; }
+    virtual void updateHoldState(bool pressed, bool held, bool released) { (void)pressed; (void)held; (void)released; }
+    virtual void resetHold() {}
+
 protected:
     std::string m_title;
     std::string m_info;
@@ -43,13 +49,25 @@ class SidebarEntryCallback final : public SidebarEntryBase {
 public:
     using Callback = std::function<void()>;
 
-    SidebarEntryCallback(const std::string& title, Callback callback, bool popOnClick = false, const std::string& info = "");
+    SidebarEntryCallback(const std::string& title, Callback callback, bool popOnClick = false, const std::string& info = "", bool holdRequired = false);
 
     void activate();
+
+    // Hold-to-confirm support
+    bool isHoldable() const override { return m_holdRequired; }
+    float holdProgress() const override { return m_holdProgress; }
+    void updateHoldState(bool pressed, bool held, bool released) override;
+    void resetHold() override;
+
+    void setHoldRequired(bool required) { m_holdRequired = required; }
 
 private:
     Callback m_callback;
     bool m_popOnClick = false;
+    bool m_holdRequired = false;
+    bool m_triggerGuard = false;
+    float m_holdProgress = 0.0f;
+    uint64_t m_holdStartTime = 0;
 };
 
 class Sidebar final : public Widget {

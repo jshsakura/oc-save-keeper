@@ -131,6 +131,7 @@
     "ui.user_changed": "선택 대상을 변경했습니다.",
     "ui.confirm_delete": "백업 삭제 확인",
     "ui.confirm_delete_hint": "이 백업을 영구적으로 삭제하시겠습니까?",
+    "ui.hold_to_confirm": "A 버튼을 길게 눌러 삭제",
     "ui.no_user": "사용자 없음",
     "ui.no_save_entries": "표시할 세이브가 없습니다.",
     "ui.no_revision_entries": "표시할 이력이 없습니다.",
