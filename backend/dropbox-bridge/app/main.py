@@ -69,12 +69,16 @@ async def check_rate_limit(redis: Redis, client_ip: str, action: str, limit: int
     """
     Redis 기반 단순 Rate Limit: 60초(window) 내에 10회(limit) 초과 시 차단
     """
-    key = f"ratelimit:{action}:{client_ip}"
-    current = await redis.incr(key)
-    if current == 1:
-        await redis.expire(key, window)
-    if current > limit:
-        raise HTTPException(status_code=429, detail="Too many requests. Slow down.")
+    try:
+        key = f"ratelimit:{action}:{client_ip}"
+        current = await redis.incr(key)
+        if current == 1:
+            await redis.expire(key, window)
+        if current > limit:
+            raise HTTPException(status_code=429, detail="Too many requests. Slow down.")
+    except RedisError as e:
+        logger.error(f"Rate limit Redis error: {e}")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
 
 async def detect_attack(redis: Redis, client_ip: str) -> bool:
@@ -83,37 +87,45 @@ async def detect_attack(redis: Redis, client_ip: str) -> bool:
     - 1분 내 100회 이상 요청 = DDoS 의심
     - 1시간 내 차단 횟수 누적
     """
-    # 분당 요청 수 체크
-    minute_key = f"attack:minute:{client_ip}"
-    minute_count = await redis.incr(minute_key)
-    if minute_count == 1:
-        await redis.expire(minute_key, 60)
-    
-    # 1분에 100회 이상 = 공격 의심
-    if minute_count > 100:
+    try:
+        # 분당 요청 수 체크
+        minute_key = f"attack:minute:{client_ip}"
+        minute_count = await redis.incr(minute_key)
+        if minute_count == 1:
+            await redis.expire(minute_key, 60)
+        
+        # 1분에 100회 이상 = 공격 의심
+        if minute_count > 100:
+            block_key = f"attack:blocked:{client_ip}"
+            await redis.setex(block_key, 3600, "1")  # 1시간 차단
+            return True
+        
+        # 이미 차단된 IP인지 확인
         block_key = f"attack:blocked:{client_ip}"
-        await redis.setex(block_key, 3600, "1")  # 1시간 차단
-        return True
-    
-    # 이미 차단된 IP인지 확인
-    block_key = f"attack:blocked:{client_ip}"
-    if await redis.exists(block_key):
-        return True
-    
-    return False
+        if await redis.exists(block_key):
+            return True
+        
+        return False
+    except RedisError as e:
+        logger.error(f"Attack detection Redis error: {e}")
+        return False  # Fail-open for availability
 
 
 async def log_suspicious(redis: Redis, client_ip: str, action: str, reason: str):
     """의심스러운 활동 로깅"""
-    import json
-    log_entry = json.dumps({
-        "ip": client_ip,
-        "action": action,
-        "reason": reason,
-        "timestamp": int(time.time())
-    })
-    await redis.lpush("security:logs", log_entry)
-    await redis.ltrim("security:logs", 0, 999)  # 최근 1000개만 유지
+    try:
+        import json
+        log_entry = json.dumps({
+            "ip": client_ip,
+            "action": action,
+            "reason": reason,
+            "timestamp": int(time.time())
+        })
+        await redis.lpush("security:logs", log_entry)
+        await redis.ltrim("security:logs", 0, 999)  # 최근 1000개만 유지
+    except RedisError as e:
+        logger.error(f"Failed to log suspicious activity: {e}")
+        # Do not crash, just log
 
 
 def session_key(session_id: str) -> str:
@@ -206,8 +218,15 @@ async def rickroll_unsecured_http(request: Request, call_next):
 
 @app.get("/healthz", response_model=HealthResponse)
 async def healthz() -> HealthResponse:
-    await redis_client.ping()
-    return HealthResponse(status="ok", redis="ok")
+    try:
+        await redis_client.ping()
+        return HealthResponse(status="ok", redis="ok")
+    except RedisError as e:
+        logger.warning(f"Redis unavailable: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "redis": "unavailable"}
+        )
 
 
 @app.get("/", response_class=HTMLResponse)
