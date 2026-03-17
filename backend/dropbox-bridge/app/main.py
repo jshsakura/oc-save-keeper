@@ -698,23 +698,29 @@ async def start_session(payload: StartSessionRequest, request: Request) -> Start
     poll_token_hash = hash_poll_token(poll_token)
     redirect_uri = f"{REDIRECT_BASE_URL}/oauth/dropbox/callback"
 
-    await redis_client.hset(
-        key,
-        mapping={
-            "status": "pending",
-            "state": state,
-            "poll_token_hash": poll_token_hash,
-            "code_verifier": code_verifier,
-            "auth_code": "",
-            "error": "",
-            "device_id": payload.device_id or "",
-            "created_at": str(now),
-            "updated_at": str(now),
-            "redirect_uri": redirect_uri,
-        },
-    )
-    await redis_client.expire(key, SESSION_TTL_SECONDS)
-    await redis_client.set(state_key(state), session_id, ex=STATE_TTL_SECONDS)
+    try:
+        async with redis_client.pipeline() as pipe:
+            pipe.hset(
+                key,
+                mapping={
+                    "status": "pending",
+                    "state": state,
+                    "poll_token_hash": poll_token_hash,
+                    "code_verifier": code_verifier,
+                    "auth_code": "",
+                    "error": "",
+                    "device_id": payload.device_id or "",
+                    "created_at": str(now),
+                    "updated_at": str(now),
+                    "redirect_uri": redirect_uri,
+                },
+            )
+            pipe.expire(key, SESSION_TTL_SECONDS)
+            pipe.set(state_key(state), session_id, ex=STATE_TTL_SECONDS)
+            await pipe.execute()
+    except RedisError as e:
+        logger.error(f"Failed to create session: {e}")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     authorize_url = (
         f"{DROPBOX_AUTHORIZE_URL}?"
