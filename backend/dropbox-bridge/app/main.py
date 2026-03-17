@@ -1,17 +1,21 @@
 import base64
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 import time
+from contextlib import asynccontextmanager
 from typing import Literal
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 
 DROPBOX_AUTHORIZE_URL = "https://www.dropbox.com/oauth2/authorize"
@@ -154,12 +158,35 @@ class ConsumeSessionResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    status: Literal["ok"]
-    redis: Literal["ok"]
+    status: Literal["ok", "degraded"]
+    redis: Literal["ok", "unavailable"]
+
+
+# 로깅 설정
+logger = logging.getLogger("bridge")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+
+async def safe_redis_call(coro, fallback=None, error_msg="Redis error"):
+    """Redis 호출을 안전하게 래핑"""
+    try:
+        return await coro
+    except RedisError as e:
+        logger.error(f"{error_msg}: {e}")
+        if fallback is not None:
+            return fallback
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
 
 app = FastAPI(title="OC Save Keeper Bridge", version="0.1.0")
-redis_client = Redis.from_url(REDIS_URL, decode_responses=True)
+redis_client = Redis.from_url(
+    REDIS_URL,
+    decode_responses=True,
+    socket_timeout=5,
+    socket_connect_timeout=5,
+    retry_on_timeout=True,
+    max_connections=50
+)
 
 # 정적 파일 서빙 (아이콘 등)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")

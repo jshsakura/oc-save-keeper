@@ -141,6 +141,7 @@
     "ui.device": "기기",
     "ui.source": "출처",
     "ui.size": "크기",
+    "ui.user": "사용자",
     "ui.empty": "없음",
     "ui.cloud_ready": "드롭박스",
     "ui.cloud_need_connect": "연결 필요",

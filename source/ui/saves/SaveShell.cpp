@@ -613,9 +613,10 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
     fillRect(m_renderer, listRect, color(9, 15, 26, 245));
 
     renderText(tr("ui.revision", "Revision"), 32, 110, m_fontSmall, color(100, 116, 139));
-    renderText(tr("ui.device", "Device"), 420, 110, m_fontSmall, color(100, 116, 139));
-    renderText(tr("ui.source", "Source"), 720, 110, m_fontSmall, color(100, 116, 139));
-    renderText(tr("ui.size", "Size"), 1110, 110, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.user", "User"), 380, 110, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.device", "Device"), 620, 110, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.source", "Source"), 900, 110, m_fontSmall, color(100, 116, 139));
+    renderText(tr("ui.size", "Size"), 1080, 110, m_fontSmall, color(100, 116, 139));
 
     for (int i = firstVisible; i < lastVisible; ++i) {
         const auto& entry = entries[i];
@@ -628,18 +629,19 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
             drawFocus(m_renderer, row);
         }
 
-        // Source Badge - Much wider to accommodate '현재 기기'
-        SDL_Rect sourceBadge{row.x + 700, row.y + 12, 180, 26};
-        fillRect(m_renderer, sourceBadge, entry.source == SaveSource::Cloud ? color(8, 47, 73) : color(20, 83, 45));
-        strokeRect(m_renderer, sourceBadge, entry.source == SaveSource::Cloud ? color(56, 189, 248) : color(74, 222, 128));
-
         char sizeBuf[32];
         std::snprintf(sizeBuf, sizeof(sizeBuf), "%.1f MB", entry.size / (1024.0 * 1024.0));
 
-        renderText(fitText(m_fontMedium, entry.label, 380), row.x + 16, row.y + 12, m_fontMedium, color(241, 245, 249));
-        renderText(fitText(m_fontSmall, entry.deviceLabel.empty() ? tr("history.unknown_device", "Unknown device") : entry.deviceLabel, 260), row.x + 400, row.y + 16, m_fontSmall, color(148, 163, 184));
-        renderTextCentered(fitText(m_fontSmall, entry.sourceLabel.empty() ? tr("history.unknown_source", "Unknown source") : entry.sourceLabel, 170), sourceBadge, m_fontSmall, color(241, 245, 249));
-        renderText(sizeBuf, row.x + 1080, row.y + 16, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontMedium, entry.label, 340), row.x + 16, row.y + 12, m_fontMedium, color(241, 245, 249));
+        renderText(fitText(m_fontSmall, entry.userLabel.empty() ? tr("history.unknown_user", "Unknown user") : entry.userLabel, 200), row.x + 360, row.y + 16, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontSmall, entry.deviceLabel.empty() ? tr("history.unknown_device", "Unknown device") : entry.deviceLabel, 240), row.x + 600, row.y + 16, m_fontSmall, color(148, 163, 184));
+
+        // Source Badge
+        SDL_Rect sourceBadge{row.x + 880, row.y + 12, 140, 26};
+        fillRect(m_renderer, sourceBadge, entry.source == SaveSource::Cloud ? color(8, 47, 73) : color(20, 83, 45));
+        strokeRect(m_renderer, sourceBadge, entry.source == SaveSource::Cloud ? color(56, 189, 248) : color(74, 222, 128));
+        renderTextCentered(fitText(m_fontSmall, entry.sourceLabel.empty() ? tr("history.unknown_source", "Unknown source") : entry.sourceLabel, 130), sourceBadge, m_fontSmall, color(241, 245, 249));
+        renderText(sizeBuf, row.x + 1060, row.y + 16, m_fontSmall, color(148, 163, 184));
         SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
         SDL_RenderDrawLine(m_renderer, row.x, row.y + row.h + 11, row.x + row.w, row.y + row.h + 11);
     }

@@ -141,6 +141,7 @@
     "ui.device": "Device",
     "ui.source": "Source",
     "ui.size": "Size",
+    "ui.user": "User",
     "ui.empty": "Empty",
     "ui.cloud_ready": "Cloud",
     "ui.cloud_need_connect": "Connect",
