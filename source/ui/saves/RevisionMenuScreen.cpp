@@ -124,32 +124,75 @@ void RevisionMenuScreen::reload() {
 }
 
 void RevisionMenuScreen::restoreSelected() {
+    LOG_INFO("restoreSelected() called");
     const auto& lang = utils::Language::instance();
     
     if (m_entries.empty()) {
+        LOG_WARNING("restoreSelected: no entries");
         Runtime::instance().notify(lang.get("ui.no_revision_entries"));
         return;
     }
 
-    Runtime::instance().setLoading(true, lang.get("sync.restoring"));
-    Runtime::instance().forceRender();
+    if (m_index < 0 || m_index >= static_cast<int>(m_entries.size())) {
+        LOG_ERROR("restoreSelected: invalid index %d (size=%zu)", m_index, m_entries.size());
+        return;
+    }
 
     const auto& entry = m_entries[m_index];
-    SaveActionResult result;
+    LOG_INFO("restoreSelected: creating sidebar for entry %s (id=%s)", entry.label.c_str(), entry.id.c_str());
+
+    m_restoreData = std::make_shared<RestoreTaskData>();
+    m_restoreData->titleId = m_titleId;
+    m_restoreData->entryId = entry.id;
+    m_restoreData->entryPath = entry.path;
+    m_restoreData->entryLabel = entry.label;
+    m_restoreData->source = m_source;
+
+    m_sidebar = std::make_shared<Sidebar>(lang.get("ui.confirm_restore"), Sidebar::Side::Right);
     
-    if (m_source == SaveSource::Cloud) {
-        result = m_backend->download(m_titleId, entry.path);
-    } else {
-        result = m_backend->restore(m_titleId, entry.id, m_source);
-    }
+    const bool holdRequired = true;
+    const std::string yesHint = holdRequired ? lang.get("ui.hold_to_confirm") : lang.get("ui.confirm_restore_hint");
+    
+    m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this]() {
+        LOG_INFO("restoreSelected: YES clicked");
+        const auto& lang = utils::Language::instance();
+        this->m_sidebar.reset();
+        
+        if (!m_restoreData) {
+            LOG_ERROR("restoreSelected: m_restoreData is null");
+            Runtime::instance().pushError(lang.get("sync.restore_failed"));
+            return;
+        }
+        
+        LOG_INFO("restoreSelected: entryId=%s", m_restoreData->entryId.c_str());
+        
+        Runtime::instance().setLoading(true, lang.get("sync.restoring"));
+        Runtime::instance().forceRender();
+        
+        SaveActionResult result;
+        
+        if (m_restoreData->source == SaveSource::Cloud) {
+            result = m_backend->download(m_restoreData->titleId, m_restoreData->entryPath);
+        } else {
+            result = m_backend->restore(m_restoreData->titleId, m_restoreData->entryId, m_restoreData->source);
+        }
+        
+        Runtime::instance().setLoading(false);
+        
+        if (result.ok) {
+            Runtime::instance().notify(lang.get("sync.restore_success"));
+        } else {
+            Runtime::instance().pushError(result.message.empty() ? lang.get("sync.restore_failed") : result.message);
+        }
+        
+        m_restoreData.reset();
+    }, false, yesHint, holdRequired);
 
-    Runtime::instance().setLoading(false);
-
-    if (result.ok) {
-        Runtime::instance().notify(lang.get("sync.restore_success"));
-    } else {
-        Runtime::instance().pushError(result.message.empty() ? lang.get("sync.restore_failed") : result.message);
-    }
+    m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
+        LOG_INFO("restoreSelected: NO clicked");
+        this->m_sidebar.reset();
+        m_restoreData.reset();
+    }, true);
 }
 
 void RevisionMenuScreen::deleteSelected() {

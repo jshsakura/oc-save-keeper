@@ -40,16 +40,24 @@ void SidebarEntryCallback::activate() {
 }
 
 void SidebarEntryCallback::updateHoldState(bool pressed, bool held, bool released) {
-    if (!m_holdRequired || !m_enabled) {
+    if (!m_enabled) {
         return;
     }
     
     m_triggerGuard = m_triggerGuard || (pressed && !m_triggerGuard);
     
-    const bool holdTriggered = m_triggerGuard && pressed;
-    const bool holdSustained = m_triggerGuard && held;
+    const bool noHoldTrigger = m_triggerGuard && pressed && !m_holdRequired;
+    const bool holdTriggered = m_triggerGuard && pressed && m_holdRequired;
+    const bool holdSustained = m_triggerGuard && held && m_holdRequired;
     
-    if (holdTriggered) {
+    if (noHoldTrigger) {
+        if (m_callback) {
+            m_callback();
+        }
+        if (m_popOnClick) {
+            setPop();
+        }
+    } else if (holdTriggered) {
         const auto now = std::chrono::steady_clock::now().time_since_epoch();
         m_holdStartTime = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(now).count()
@@ -63,8 +71,10 @@ void SidebarEntryCallback::updateHoldState(bool pressed, bool held, bool release
         constexpr uint64_t holdDuration = 3000;
         m_holdProgress = std::min(static_cast<float>(elapsed) / static_cast<float>(holdDuration), 1.0f);
         
-        if (elapsed >= holdDuration && m_callback) {
-            m_callback();
+        if (elapsed >= holdDuration) {
+            if (m_callback) {
+                m_callback();
+            }
             if (m_popOnClick) {
                 setPop();
             }

@@ -21,6 +21,14 @@ struct DeleteTaskData {
     bool isSystem = false;
 };
 
+struct RestoreTaskData {
+    uint64_t titleId = 0;
+    std::string entryId;
+    std::string entryPath;
+    std::string entryLabel;
+    SaveSource source = SaveSource::Local;
+};
+
 class RevisionMenuScreen final : public GridMenuBase {
 public:
     RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uint64_t titleId, SaveSource source, std::string titleLabel);
@@ -74,6 +82,8 @@ private:
     std::string m_deleteMessage;
     std::mutex m_deleteMutex;
     std::shared_ptr<DeleteTaskData> m_deleteData;
+    
+    std::shared_ptr<RestoreTaskData> m_restoreData;
 };
 
 } // namespace ui::saves
