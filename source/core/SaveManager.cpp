@@ -776,7 +776,7 @@ bool SaveManager::restoreFromTrash(const std::string& trashPath) {
     const std::string originalName = (underscorePos != std::string::npos) ? entryName.substr(0, underscorePos) : entryName;
     const std::string restorePath = backupBase + "/" + originalName + "_restored";
 
-    if (!fs::copyDirectory(trashPath, restorePath)) {
+    if (!fs::copyDirectoryWithProgress(trashPath, restorePath)) {
         LOG_ERROR("restoreFromTrash: failed to copy from trash");
         return false;
     }

@@ -12,6 +12,7 @@ inline constexpr const char* CACHE_USER_ICONS = "/switch/oc-save-keeper/cache/us
 inline constexpr const char* BACKUPS = "/switch/oc-save-keeper/backups";
 inline constexpr const char* TEMP = "/switch/oc-save-keeper/temp";
 inline constexpr const char* LOGS = "/switch/oc-save-keeper/logs";
+inline constexpr const char* TRASH = "/switch/oc-save-keeper/trash";
 
 inline constexpr const char* SETTINGS_JSON = "/switch/oc-save-keeper/config/settings.json";
 inline constexpr const char* DROPBOX_AUTH_JSON = "/switch/oc-save-keeper/config/dropbox_auth.json";
@@ -34,6 +35,7 @@ inline void ensureBaseDirectories() {
     mkdir(BACKUPS, 0777);
     mkdir(TEMP, 0777);
     mkdir(LOGS, 0777);
+    mkdir(TRASH, 0777);
 }
 
 } // namespace utils::paths
