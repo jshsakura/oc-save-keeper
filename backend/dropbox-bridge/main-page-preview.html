@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1e1e2e" />
+    <title>OC Save Keeper Bridge - Preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/feather-icons"></script>
+    <style>
+      :root {
+        --base: #1e1e2e;
+        --mantle: #181825;
+        --crust: #11111b;
+        --text: #cdd6f4;
+        --subtext0: #a6adc8;
+        --subtext1: #bac2de;
+        --overlay0: #6c7086;
+        --lavender: #b4befe;
+        --green: #a6e3a1;
+        --red: #f38ba8;
+        --blue: #89b4fa;
+        --sapphire: #74c3ec;
+        --surface0: #313244;
+        --surface1: #45475a;
+      }
+      
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: var(--crust);
+        background-image: 
+            radial-gradient(circle at 0% 0%, rgba(137, 180, 250, 0.08) 0%, transparent 40%),
+            radial-gradient(circle at 100% 100%, rgba(203, 166, 247, 0.08) 0%, transparent 40%),
+            radial-gradient(circle at 50% 50%, rgba(180, 190, 254, 0.03) 0%, transparent 60%);
+        color: var(--text);
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 60px 24px;
+        -webkit-font-smoothing: antialiased;
+      }
+      
+      .container {
+        width: 100%;
+        max-width: 640px;
+        animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      
+      @keyframes slideUp {
+        from { opacity: 0; transform: translateY(30px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      .card {
+        background: rgba(24, 24, 37, 0.7);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 40px;
+        padding: 56px 48px;
+        box-shadow: 0 40px 80px rgba(0, 0, 0, 0.4);
+      }
+      
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+      }
+      
+      .icon-wrapper {
+        position: relative;
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+      }
+      
+      .app-icon {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, var(--blue), var(--lavender));
+        border-radius: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 12px 30px rgba(137, 180, 250, 0.25);
+      }
+      
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: rgba(166, 227, 161, 0.1);
+        border: 1px solid rgba(166, 227, 161, 0.2);
+        border-radius: 100px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--green);
+        margin-bottom: 20px;
+      }
+      
+      .badge-dot {
+        width: 8px;
+        height: 8px;
+        background: var(--green);
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(0.8); }
+      }
+      
+      h1 {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        margin-bottom: 12px;
+      }
+      
+      .description {
+        font-size: 17px;
+        color: var(--subtext1);
+        line-height: 1.6;
+        font-weight: 400;
+        max-width: 480px;
+        margin: 0 auto;
+      }
+      
+      .info-box {
+        background: rgba(49, 50, 68, 0.6);
+        border: 1px solid var(--surface1);
+        border-radius: 20px;
+        padding: 20px;
+        text-align: left;
+        margin: 24px 0;
+      }
+      
+      .info-box p {
+        font-size: 14px;
+        color: var(--subtext0);
+        line-height: 1.6;
+        margin-bottom: 12px;
+      }
+      
+      .info-box .self-host {
+        font-size: 13px;
+        color: var(--overlay0);
+        margin-bottom: 16px;
+      }
+      
+      .github-link {
+        text-align: center;
+        margin-top: 16px;
+      }
+      
+      .btn-github {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 14px;
+        text-decoration: none;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      
+      .btn-github:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.25);
+      }
+
+      .btn-github i { width: 16px; height: 16px; }
+      
+      h2 {
+        font-size: 19px;
+        font-weight: 600;
+        color: var(--lavender);
+        margin: 40px 0 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      h2 i { width: 20px; height: 20px; stroke-width: 2.5; vertical-align: middle; margin-right: 8px; }
+      
+      h2::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, var(--surface1), transparent);
+        margin-left: 8px;
+      }
+      
+      ol {
+        list-style: none;
+        counter-reset: steps;
+      }
+      
+      li {
+        position: relative;
+        padding-left: 44px;
+        margin-bottom: 20px;
+        color: var(--subtext1);
+        font-size: 15px;
+        line-height: 1.6;
+        transition: color 0.2s ease;
+      }
+
+      li:hover { color: var(--text); }
+      
+      li::before {
+        counter-increment: steps;
+        content: counter(steps);
+        position: absolute;
+        left: 0;
+        top: -1px;
+        width: 28px;
+        height: 28px;
+        background: var(--surface0);
+        color: var(--lavender);
+        border: 1px solid rgba(180, 190, 254, 0.2);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      }
+
+      code {
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+        background: rgba(180, 190, 254, 0.1);
+        color: var(--lavender);
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 13.5px;
+        border: 1px solid rgba(180, 190, 254, 0.1);
+      }
+
+      .footer {
+        margin-top: 50px;
+        text-align: center;
+      }
+      
+      .footer p {
+        font-size: 14px;
+        color: var(--overlay0);
+        letter-spacing: 0.01em;
+      }
+
+      .footer a {
+        color: var(--lavender);
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      @media (max-width: 480px) {
+        .card { padding: 40px 24px; }
+        h1 { font-size: 26px; }
+        .btn-github { width: 100%; justify-content: center; }
+      }
+      
+      .divider {
+        margin: 60px 0;
+        border: none;
+        border-top: 1px solid var(--surface0);
+      }
+      
+      .lang-label {
+        text-align: center;
+        color: var(--overlay0);
+        font-size: 14px;
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Korean Version -->
+    <p class="lang-label">🇰🇷 한국어 버전</p>
+    <div class="container">
+      <div class="card">
+        
+        <div class="header">
+          <div class="icon-wrapper">
+            <div class="app-icon">
+              <img src="/static/icon.png" alt="Icon" />
+            </div>
+          </div>
+          <div class="badge">
+            <div class="badge-dot"></div>
+            브릿지 서버 정상 작동 중
+          </div>
+          <h1>OC Save Keeper Bridge</h1>
+          <p class="description">세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다.</p>
+        </div>
+        
+        <div class="info-box">
+          <p><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:8px;color:var(--sapphire);"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Dropbox가 OAuth Device Code Grant를 공식 지원하지 않아, Switch에서 폴링 기반 인증을 완료하려면 이 브릿지가 필요합니다.</p>
+          <p class="self-host">원한다면 직접 호스팅하여 운용할 수 있습니다.</p>
+          <div class="github-link">
+            <a href="#" class="btn-github">
+              <i data-feather="github"></i>
+              GitHub
+            </a>
+          </div>
+        </div>
+        
+        <h2><i data-feather="download"></i> 설치 방법</h2>
+        <ol>
+          <li>Release에서 <code>.nro</code> 파일 다운로드</li>
+          <li>SD카드 <code>/switch/</code> 폴더에 복사</li>
+          <li>Homebrew Menu에서 실행</li>
+        </ol>
+        
+        <h2><i data-feather="link"></i> Dropbox 연동</h2>
+        <ol>
+          <li>앱에서 <strong>클라우드 동기화</strong> → <strong>Dropbox 로그인</strong> 선택</li>
+          <li>화면에 표시된 QR코드를 스마트폰으로 스캔</li>
+          <li>브라우저에서 Dropbox 계정 로그인 및 권한 승인</li>
+          <li>자동으로 인증 완료! 별도 코드 입력 불필요</li>
+          <li>클라우드 동기화 활성화 완료!</li>
+        </ol>
+        
+      </div>
+      
+      <div class="footer">
+        <p>Created for Switch gamers by <a href="mailto:support@opencourse.kr">Husband of Rebekah</a></p>
+      </div>
+    </div>
+    
+    <hr class="divider">
+    
+    <!-- English Version -->
+    <p class="lang-label">🇺🇸 English Version</p>
+    <div class="container">
+      <div class="card">
+        
+        <div class="header">
+          <div class="icon-wrapper">
+            <div class="app-icon">
+              <img src="/static/icon.png" alt="Icon" />
+            </div>
+          </div>
+          <div class="badge">
+            <div class="badge-dot"></div>
+            Bridge server is running
+          </div>
+          <h1>OC Save Keeper Bridge</h1>
+          <p class="description">OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app.</p>
+        </div>
+        
+        <div class="info-box">
+          <p><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;vertical-align:middle;margin-right:8px;color:var(--sapphire);"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch.</p>
+          <p class="self-host">You can also self-host this service.</p>
+          <div class="github-link">
+            <a href="#" class="btn-github">
+              <i data-feather="github"></i>
+              GitHub
+            </a>
+          </div>
+        </div>
+        
+        <h2><i data-feather="download"></i> Installation</h2>
+        <ol>
+          <li>Download <code>.nro</code> file from Release</li>
+          <li>Copy to SD card <code>/switch/</code> folder</li>
+          <li>Launch from Homebrew Menu</li>
+        </ol>
+        
+        <h2><i data-feather="link"></i> Dropbox Setup</h2>
+        <ol>
+          <li>Select <strong>Cloud Sync</strong> → <strong>Dropbox Login</strong> in app</li>
+          <li>Scan QR code with your smartphone</li>
+          <li>Login to Dropbox and authorize in browser</li>
+          <li>Auth completes automatically - no code entry needed</li>
+          <li>Cloud sync activated!</li>
+        </ol>
+        
+      </div>
+      
+      <div class="footer">
+        <p>Created for Switch gamers by <a href="mailto:support@opencourse.kr">Husband of Rebekah</a></p>
+      </div>
+    </div>
+    <script>feather.replace();</script>
+  </body>
+</html>
