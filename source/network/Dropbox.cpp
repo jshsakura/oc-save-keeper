@@ -32,7 +32,7 @@ static constexpr const char* DROPBOX_LIST_FOLDER = "https://api.dropboxapi.com/2
 static constexpr const char* DROPBOX_LIST_FOLDER_CONTINUE = "https://api.dropboxapi.com/2/files/list_folder/continue";
 static constexpr const char* DROPBOX_REDIRECT_URI = "https://localhost/oc-save-keeper/callback";
 #ifndef DROPBOX_BRIDGE_BASE
-#define DROPBOX_BRIDGE_BASE "https://example.yourdomain.com"
+#define DROPBOX_BRIDGE_BASE ""
 #endif
 static constexpr const char* DROPBOX_BRIDGE_BASE_STR = DROPBOX_BRIDGE_BASE;
 static constexpr const char* DROPBOX_AUTH_FILE = utils::paths::DROPBOX_AUTH_JSON;

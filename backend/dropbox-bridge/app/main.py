@@ -31,8 +31,7 @@ def get_env(name: str, default: str = "") -> str:
 
 
 APP_KEY = get_env("DROPBOX_APP_KEY")
-DROPBOX_BRIDGE_BASE = get_env("DROPBOX_BRIDGE_BASE", get_env("REDIRECT_BASE_URL", "https://example.yourdomain.com"))
-REDIRECT_BASE_URL = DROPBOX_BRIDGE_BASE  # Keep as alias if needed, or just use DROPBOX_BRIDGE_BASE below
+DROPBOX_BRIDGE_BASE = get_env("DROPBOX_BRIDGE_BASE")
 POLL_TOKEN_SECRET = get_env("POLL_TOKEN_SECRET")
 RELEASE_URL = get_env("RELEASE_URL", "https://github.com/jshsakura/oc-save-keeper/releases/tag/latest")
 GITHUB_URL = get_env("GITHUB_URL", "https://github.com/jshsakura/oc-save-keeper")
@@ -47,6 +46,8 @@ REDIS_URL = get_env("REDIS_URL", "redis://redis:6379/0")
 
 if not APP_KEY:
     raise RuntimeError("DROPBOX_APP_KEY must be set")
+if not DROPBOX_BRIDGE_BASE:
+    raise RuntimeError("DROPBOX_BRIDGE_BASE must be set")
 if not POLL_TOKEN_SECRET:
     raise RuntimeError("POLL_TOKEN_SECRET must be set")
 

@@ -10,7 +10,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DROPBOX_APP_KEY=${DROPBOX_APP_KEY}
       - POLL_TOKEN_SECRET=${POLL_TOKEN_SECRET}
-      - DROPBOX_BRIDGE_BASE=${DROPBOX_BRIDGE_BASE:-https://example.yourdomain.com}
+      - DROPBOX_BRIDGE_BASE=${DROPBOX_BRIDGE_BASE}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     depends_on:
       - redis
