@@ -156,6 +156,7 @@ bool Dropbox::checkAuthentication() {
 }
 
 bool Dropbox::startBridgeSession(DropboxBridgeSession& outSession) {
+    LOG_INFO("Dropbox: Starting bridge session. Base URL: %s", DROPBOX_BRIDGE_BASE_STR);
     const std::string url = std::string(DROPBOX_BRIDGE_BASE_STR) + "/v1/sessions/start";
     const std::string postData = "{\"device_id\":\"switch\"}";
     

@@ -69,16 +69,7 @@ std::string readLineFromFile(const char* path) {
     return buffer;
 }
 
-bool writeLineToFile(const char* path, const std::string& value) {
-    FILE* file = fopen(path, "w");
-    if (!file) {
-        return false;
-    }
 
-    const bool success = fprintf(file, "%s\n", value.c_str()) > 0;
-    fclose(file);
-    return success;
-}
 
 bool writeBinaryFile(const char* path, const void* data, size_t size) {
     FILE* file = fopen(path, "wb");
@@ -696,7 +687,7 @@ bool SaveManager::moveToTrash(const std::string& backupPath) {
     }
 
     BackupMetadata meta;
-    bool hasMeta = readBackupMetadata(backupPath, meta);
+    (void)readBackupMetadata(backupPath, meta);
     uint64_t titleId = meta.titleId;
     if (titleId == 0) {
         const size_t slash = backupPath.find_last_of('/');
@@ -749,7 +740,7 @@ bool SaveManager::restoreFromTrash(const std::string& trashPath) {
     }
 
     BackupMetadata meta;
-    bool hasMeta = readBackupMetadata(trashPath, meta);
+    (void)readBackupMetadata(trashPath, meta);
     uint64_t titleId = meta.titleId;
     
     if (titleId == 0) {
