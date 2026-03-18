@@ -703,6 +703,8 @@ async def start_session(payload: StartSessionRequest, request: Request) -> Start
 
     key = session_key(session_id)
     poll_token_hash = hash_poll_token(poll_token)
+    
+    # Use the verified DROPBOX_BRIDGE_BASE directly
     redirect_uri = f"{DROPBOX_BRIDGE_BASE}/oauth/dropbox/callback"
 
     try:
