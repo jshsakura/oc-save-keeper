@@ -174,5 +174,17 @@
     "auth.confirm_cancel": "Auth in progress. Are you sure you want to cancel?",
     "auth.qr_hint": "Scan to sign in",
     "auth.qr_failed": "QR Code Failed",
-    "auth.waiting_bridge": "Waiting for bridge..."
+    "auth.waiting_bridge": "Waiting for bridge...",
+
+    "safety.trash_success": "Moved to trash",
+    "safety.trash_restored": "Restored from trash",
+    "safety.empty_trash": "Empty Trash",
+    "safety.empty_trash_confirm": "Permanently delete all items in trash?",
+    "safety.empty_trash_success": "Trash emptied",
+    "safety.logging_enabled": "Logging enabled",
+    "safety.logging_disabled": "Logging disabled",
+    "safety.trash_title": "Trash",
+    "safety.restore_from_trash": "Restore from Trash",
+
+    "history.auto_backup": "Auto Backup"
 }

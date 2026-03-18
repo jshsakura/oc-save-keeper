@@ -673,46 +673,211 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
 }
 
 bool SaveManager::deleteBackup(const std::string& backupPath) {
-    LOG_INFO("deleteBackup: path=%s", backupPath.c_str());
+    return moveToTrash(backupPath);
+}
+
+std::string SaveManager::getTrashPath() const {
+    return utils::paths::TRASH;
+}
+
+std::string SaveManager::getTrashPath(TitleInfo* title) const {
+    char path[256];
+    snprintf(path, sizeof(path), "%s/%016lX", utils::paths::TRASH, title ? title->titleId : 0);
+    return path;
+}
+
+bool SaveManager::moveToTrash(const std::string& backupPath) {
+    LOG_INFO("moveToTrash: path=%s", backupPath.c_str());
 
     struct stat st;
     if (stat(backupPath.c_str(), &st) != 0) {
-        LOG_ERROR("deleteBackup: stat failed, path does not exist");
+        LOG_ERROR("moveToTrash: backup path does not exist");
         return false;
     }
 
-    bool deleted = false;
+    BackupMetadata meta;
+    bool hasMeta = readBackupMetadata(backupPath, meta);
+    uint64_t titleId = meta.titleId;
+    if (titleId == 0) {
+        const size_t slash = backupPath.find_last_of('/');
+        const size_t prevSlash = (slash != std::string::npos) ? backupPath.find_last_of('/', slash - 1) : std::string::npos;
+        if (prevSlash != std::string::npos && slash != std::string::npos) {
+            const std::string titleIdStr = backupPath.substr(prevSlash + 1, slash - prevSlash - 1);
+            titleId = std::stoull(titleIdStr, nullptr, 16);
+        }
+    }
 
-    if (S_ISDIR(st.st_mode)) {
-        LOG_INFO("deleteBackup: deleting directory recursively");
-        deleted = fs::deleteDirectory(backupPath);
-        if (!deleted) {
-            LOG_ERROR("deleteBackup: deleteDirectory failed");
-        }
-    } else {
-        LOG_INFO("deleteBackup: deleting file");
-        deleted = (std::remove(backupPath.c_str()) == 0);
-        if (!deleted) {
-            LOG_ERROR("deleteBackup: remove failed, errno=%d", errno);
-        }
+    TitleInfo* title = getTitleById(titleId);
+    const std::string trashBase = getTrashPath(title);
+    mkdir(utils::paths::TRASH, 0777);
+    mkdir(trashBase.c_str(), 0777);
+
+    const std::string timestamp = std::to_string(static_cast<long long>(time(nullptr)));
+    const size_t nameStart = backupPath.find_last_of('/');
+    const std::string backupName = (nameStart != std::string::npos) ? backupPath.substr(nameStart + 1) : backupPath;
+    const std::string trashEntryName = backupName + "_" + timestamp;
+    const std::string trashEntryPath = trashBase + "/" + trashEntryName;
+
+    if (std::rename(backupPath.c_str(), trashEntryPath.c_str()) != 0) {
+        LOG_ERROR("moveToTrash: failed to move backup to trash, errno=%d", errno);
+        return false;
     }
 
     const std::string metaPath = getBackupMetadataPath(backupPath);
     if (stat(metaPath.c_str(), &st) == 0) {
-        LOG_INFO("deleteBackup: removing metadata %s", metaPath.c_str());
-        std::remove(metaPath.c_str());
+        const std::string trashMetaPath = getBackupMetadataPath(trashEntryPath);
+        std::rename(metaPath.c_str(), trashMetaPath.c_str());
     }
 
     const std::string zipPath = backupPath + ".zip";
     if (stat(zipPath.c_str(), &st) == 0) {
-        LOG_INFO("deleteBackup: removing zip %s", zipPath.c_str());
-        if (std::remove(zipPath.c_str()) != 0) {
-            LOG_WARNING("deleteBackup: failed to remove zip, errno=%d", errno);
+        const std::string trashZipPath = trashEntryPath + ".zip";
+        std::rename(zipPath.c_str(), trashZipPath.c_str());
+    }
+
+    LOG_INFO("moveToTrash: success, moved to %s", trashEntryPath.c_str());
+    return true;
+}
+
+bool SaveManager::restoreFromTrash(const std::string& trashPath) {
+    LOG_INFO("restoreFromTrash: path=%s", trashPath.c_str());
+
+    struct stat st;
+    if (stat(trashPath.c_str(), &st) != 0) {
+        LOG_ERROR("restoreFromTrash: trash entry does not exist");
+        return false;
+    }
+
+    BackupMetadata meta;
+    bool hasMeta = readBackupMetadata(trashPath, meta);
+    uint64_t titleId = meta.titleId;
+    
+    if (titleId == 0) {
+        const size_t slash = trashPath.find_last_of('/');
+        const size_t prevSlash = (slash != std::string::npos) ? trashPath.find_last_of('/', slash - 1) : std::string::npos;
+        if (prevSlash != std::string::npos && slash != std::string::npos) {
+            const std::string titleIdStr = trashPath.substr(prevSlash + 1, slash - prevSlash - 1);
+            titleId = std::stoull(titleIdStr, nullptr, 16);
         }
     }
 
-    LOG_INFO("deleteBackup: result=%s", deleted ? "success" : "failed");
-    return deleted;
+    TitleInfo* title = getTitleById(titleId);
+    if (!title) {
+        LOG_ERROR("restoreFromTrash: title not found for ID %016lX", titleId);
+        return false;
+    }
+
+    const std::string backupBase = getBackupPath(title);
+    mkdir(backupBase.c_str(), 0777);
+
+    const size_t nameStart = trashPath.find_last_of('/');
+    const std::string entryName = (nameStart != std::string::npos) ? trashPath.substr(nameStart + 1) : trashPath;
+    const size_t underscorePos = entryName.find_last_of('_');
+    const std::string originalName = (underscorePos != std::string::npos) ? entryName.substr(0, underscorePos) : entryName;
+    const std::string restorePath = backupBase + "/" + originalName + "_restored";
+
+    if (!fs::copyDirectory(trashPath, restorePath)) {
+        LOG_ERROR("restoreFromTrash: failed to copy from trash");
+        return false;
+    }
+
+    const std::string trashMetaPath = getBackupMetadataPath(trashPath);
+    if (stat(trashMetaPath.c_str(), &st) == 0) {
+        BackupMetadata restoredMeta = meta;
+        restoredMeta.backupName = originalName + "_restored";
+        restoredMeta.source = "restored_from_trash";
+        writeBackupMetadataFile(getBackupMetadataPath(restorePath), restoredMeta);
+    }
+
+    fs::deleteDirectory(trashPath);
+    const std::string trashMetaDel = getBackupMetadataPath(trashPath);
+    std::remove(trashMetaDel.c_str());
+    const std::string trashZipDel = trashPath + ".zip";
+    std::remove(trashZipDel.c_str());
+
+    LOG_INFO("restoreFromTrash: success, restored to %s", restorePath.c_str());
+    return true;
+}
+
+bool SaveManager::emptyTrash() {
+    LOG_INFO("emptyTrash: clearing all trash contents");
+    
+    const std::string trashPath = getTrashPath();
+    DIR* dir = opendir(trashPath.c_str());
+    if (!dir) {
+        LOG_INFO("emptyTrash: trash directory empty or does not exist");
+        return true;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_name[0] == '.') continue;
+        
+        char entryPath[512];
+        snprintf(entryPath, sizeof(entryPath), "%s/%s", trashPath.c_str(), entry->d_name);
+        
+        struct stat st;
+        if (stat(entryPath, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                fs::deleteDirectory(entryPath);
+            } else {
+                std::remove(entryPath);
+            }
+        }
+    }
+    closedir(dir);
+
+    LOG_INFO("emptyTrash: completed");
+    return true;
+}
+
+std::vector<BackupVersion> SaveManager::listTrash(TitleInfo* title) {
+    std::vector<BackupVersion> versions;
+    
+    const std::string trashPath = title ? getTrashPath(title) : getTrashPath();
+    DIR* dir = opendir(trashPath.c_str());
+    if (!dir) return versions;
+    
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_type == DT_DIR && entry->d_name[0] != '.') {
+            BackupVersion ver;
+            ver.name = entry->d_name;
+            ver.path = trashPath + "/" + entry->d_name;
+            ver.isTrashed = true;
+            ver.isCloudSynced = false;
+            ver.size = 0;
+            
+            struct stat st;
+            if (stat(ver.path.c_str(), &st) == 0) {
+                ver.timestamp = st.st_mtime;
+                ver.size = fs::getDirectorySize(ver.path);
+            }
+
+            BackupMetadata meta;
+            if (readBackupMetadata(ver.path, meta)) {
+                ver.deviceId = meta.deviceId;
+                ver.deviceLabel = meta.deviceLabel;
+                ver.userId = meta.userId;
+                ver.userName = meta.userName;
+                ver.source = meta.source;
+                if (meta.createdAt != 0) {
+                    ver.timestamp = meta.createdAt;
+                }
+            }
+            
+            versions.push_back(ver);
+        }
+    }
+    
+    closedir(dir);
+    
+    std::sort(versions.begin(), versions.end(), 
+        [](const BackupVersion& a, const BackupVersion& b) {
+            return a.timestamp > b.timestamp;
+        });
+    
+    return versions;
 }
 
 bool SaveManager::mountSave(TitleInfo* title) {

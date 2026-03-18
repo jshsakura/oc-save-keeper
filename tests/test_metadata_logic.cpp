@@ -20,6 +20,14 @@ core::BackupMetadata makeMeta() {
     meta.createdAt = static_cast<std::time_t>(1710000000);
     meta.devicePriority = 200;
     meta.size = 123456;
+    meta.isAutoBackup = false;
+    return meta;
+}
+
+core::BackupMetadata makeAutoBackupMeta() {
+    core::BackupMetadata meta = makeMeta();
+    meta.backupName = "auto_pre_restore_20260311_100000";
+    meta.isAutoBackup = true;
     return meta;
 }
 
@@ -76,4 +84,46 @@ TEST_CASE("Metadata logic accepts backup_name-only metadata") {
     REQUIRE(core::parseBackupMetadata(text, parsed));
     REQUIRE_EQ(parsed.titleId, static_cast<uint64_t>(0));
     REQUIRE_EQ(parsed.backupName, std::string("legacy-slot"));
+}
+
+TEST_CASE("Metadata logic round-trips is_auto_backup flag") {
+    const core::BackupMetadata input = makeAutoBackupMeta();
+    const std::string text = core::serializeBackupMetadata(input);
+
+    core::BackupMetadata parsed;
+    REQUIRE(core::parseBackupMetadata(text, parsed));
+    REQUIRE_EQ(parsed.isAutoBackup, true);
+}
+
+TEST_CASE("Metadata logic defaults is_auto_backup to false") {
+    const std::string text =
+        "title_id=42\n"
+        "backup_name=manual-backup\n";
+
+    core::BackupMetadata parsed;
+    REQUIRE(core::parseBackupMetadata(text, parsed));
+    REQUIRE_EQ(parsed.isAutoBackup, false);
+}
+
+TEST_CASE("Metadata logic parses is_auto_backup from both formats") {
+    {
+        const std::string text = "backup_name=test\nis_auto_backup=1\n";
+        core::BackupMetadata parsed;
+        REQUIRE(core::parseBackupMetadata(text, parsed));
+        REQUIRE_EQ(parsed.isAutoBackup, true);
+    }
+
+    {
+        const std::string text = "backup_name=test\nisAutoBackup=true\n";
+        core::BackupMetadata parsed;
+        REQUIRE(core::parseBackupMetadata(text, parsed));
+        REQUIRE_EQ(parsed.isAutoBackup, true);
+    }
+
+    {
+        const std::string text = "backup_name=test\nis_auto_backup=0\n";
+        core::BackupMetadata parsed;
+        REQUIRE(core::parseBackupMetadata(text, parsed));
+        REQUIRE_EQ(parsed.isAutoBackup, false);
+    }
 }

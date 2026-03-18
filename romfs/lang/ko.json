@@ -174,5 +174,17 @@
     "auth.confirm_cancel": "인증이 진행 중입니다. 정말로 중단하고 닫으시겠습니까?",
     "auth.qr_hint": "스캔하여 로그인",
     "auth.qr_failed": "QR 생성 실패",
-    "auth.waiting_bridge": "서버 응답 대기 중..."
+    "auth.waiting_bridge": "서버 응답 대기 중...",
+
+    "safety.trash_success": "휴지통으로 이동했습니다",
+    "safety.trash_restored": "휴지통에서 복원했습니다",
+    "safety.empty_trash": "휴지통 비우기",
+    "safety.empty_trash_confirm": "휴지통의 모든 항목을 영구 삭제하시겠습니까?",
+    "safety.empty_trash_success": "휴지통을 비웠습니다",
+    "safety.logging_enabled": "로깅 활성화됨",
+    "safety.logging_disabled": "로깅 비활성화됨",
+    "safety.trash_title": "휴지통",
+    "safety.restore_from_trash": "휴지통에서 복원",
+
+    "history.auto_backup": "자동 백업"
 }

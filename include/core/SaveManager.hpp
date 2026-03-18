@@ -76,6 +76,8 @@ struct BackupVersion {
     std::time_t timestamp = 0;
     int64_t size = 0;
     bool isCloudSynced = false;
+    bool isAutoBackup = false;      // Mark if this was auto-created before restore
+    bool isTrashed = false;         // Mark if this is in trash bin
 };
 
 struct BackupMetadata {
@@ -91,6 +93,7 @@ struct BackupMetadata {
     std::time_t createdAt = 0;
     int devicePriority = 100;
     int64_t size = 0;
+    bool isAutoBackup = false;
 };
 
 struct SyncDecision {
@@ -122,6 +125,14 @@ public:
     bool backupSave(TitleInfo* title, const std::string& backupName);
     bool restoreSave(TitleInfo* title, const std::string& backupPath);
     bool deleteBackup(const std::string& backupPath);
+    
+    // Trash bin operations
+    bool moveToTrash(const std::string& backupPath);
+    bool restoreFromTrash(const std::string& trashPath);
+    bool emptyTrash();
+    std::vector<BackupVersion> listTrash(TitleInfo* title);
+    std::string getTrashPath(TitleInfo* title) const;
+    std::string getTrashPath() const;
     
     // Version management
     std::vector<BackupVersion> getBackupVersions(TitleInfo* title);
