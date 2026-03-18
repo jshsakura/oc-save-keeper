@@ -674,6 +674,8 @@ void SaveShell::renderSidebar(const Sidebar& sidebar) {
         SDL_Rect row{panel.x + 32, panel.y + 126 + i * 82, panel.w - 64, 70};
         const bool isSelected = i == sidebar.index();
         const bool isEnabled = item->isEnabled() && !isLoading;
+        const float holdProgress = item->holdProgress();
+        const bool isHolding = holdProgress > 0.0f && isSelected;
 
         SDL_Color rowColor = isSelected ? color(19, 42, 79) : color(17, 24, 39);
         SDL_Color borderColor = isSelected ? color(56, 189, 248) : color(51, 65, 85);
@@ -685,15 +687,38 @@ void SaveShell::renderSidebar(const Sidebar& sidebar) {
             borderColor = color(30, 41, 59);
         }
 
+        if (isHolding) {
+            const uint8_t intensity = static_cast<uint8_t>(40 + holdProgress * 40);
+            rowColor = color(intensity, 15, 15);
+            borderColor = color(235, 64, 52);
+            textColor = color(251, 191, 36);
+            infoColor = color(180, 130, 50);
+        }
+
         fillRect(m_renderer, row, rowColor);
         strokeRect(m_renderer, row, borderColor);
-        if (isSelected && isEnabled) {
+        if (isSelected && isEnabled && !isHolding) {
             drawFocus(m_renderer, row);
         }
 
         renderText(item->title(), row.x + 20, row.y + 18, m_fontMedium, textColor);
         if (!item->info().empty()) {
             renderText(fitText(m_fontSmall, item->info(), panel.w - 100), row.x + 20, row.y + 44, m_fontSmall, infoColor);
+        }
+
+        if (isHolding) {
+            const int progressWidth = static_cast<int>((row.w - 8) * holdProgress);
+            SDL_Rect progressBar{row.x + 4, row.y + row.h - 6, progressWidth, 4};
+            fillRect(m_renderer, progressBar, color(235, 64, 52));
+            
+            if (holdProgress < 0.5f) {
+                renderText(tr("ui.hold_to_confirm", "Hold to confirm..."), row.x + 20, row.y + 44, m_fontSmall, color(251, 191, 36));
+            } else {
+                int remaining = static_cast<int>((1.0f - holdProgress) * 3.0f);
+                if (remaining < 1) remaining = 1;
+                std::string countdown = std::to_string(remaining) + "s...";
+                renderText(countdown, row.x + 20, row.y + 44, m_fontSmall, color(251, 191, 36));
+            }
         }
     }
     

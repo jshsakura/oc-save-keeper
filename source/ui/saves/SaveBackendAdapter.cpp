@@ -246,63 +246,66 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
 }
 
 SaveActionResult SaveBackendAdapter::backup(uint64_t titleId) {
+    auto& lang = utils::Language::instance();
     auto* title = m_saveManager.getTitleById(titleId);
     if (!title) {
-        return {false, "Unknown title"};
+        return {false, lang.get("error.unknown_title")};
     }
 
     const bool ok = m_saveManager.createVersionedBackup(title);
     if (ok) g_remoteCacheValid = false;
     return {
         ok,
-        ok ? "Backup created" : "Backup failed"
+        ok ? lang.get("sync.success") : lang.get("sync.restore_failed")
     };
 }
 
 SaveActionResult SaveBackendAdapter::restore(uint64_t titleId, const std::string& revisionId, SaveSource source) {
+    auto& lang = utils::Language::instance();
     auto* title = m_saveManager.getTitleById(titleId);
     if (!title) {
-        return {false, "Unknown title"};
+        return {false, lang.get("error.unknown_title")};
     }
 
     if (source != SaveSource::Local) {
-        return {false, "Cloud restore must be downloaded first"};
+        return {false, lang.get("error.cloud_restore_download_first")};
     }
 
     const bool ok = m_saveManager.restoreSave(title, revisionId);
     if (ok) g_remoteCacheValid = false;
     return {
         ok,
-        ok ? "Restore completed" : "Restore failed"
+        ok ? lang.get("sync.restore_success") : lang.get("sync.restore_failed")
     };
 }
 
 SaveActionResult SaveBackendAdapter::upload(uint64_t titleId) {
+    auto& lang = utils::Language::instance();
     auto* title = m_saveManager.getTitleById(titleId);
     if (!title) {
-        return {false, "Unknown title"};
+        return {false, lang.get("error.unknown_title")};
     }
     if (!m_dropbox.isAuthenticated()) {
-        return {false, "Dropbox is not connected"};
+        return {false, lang.get("error.not_authenticated")};
     }
 
-    Runtime::instance().notify("Creating local backup...");
+    Runtime::instance().notify(lang.get("sync.creating_local"));
 
     if (!m_saveManager.createVersionedBackup(title)) {
-        return {false, "Local backup failed"};
+        return {false, lang.get("error.local_backup_failed")};
     }
 
     const auto versions = m_saveManager.getBackupVersions(title);
     if (versions.empty()) {
-        return {false, "No backup version created"};
+        return {false, lang.get("error.no_backup_version")};
     }
 
     const std::string archivePath = m_saveManager.exportBackupArchive(title, versions.front().path);
     if (archivePath.empty()) {
-        return {false, "Archive export failed"};
+        return {false, lang.get("error.archive_export_failed")};
     }
 
-    Runtime::instance().notify("Uploading to cloud...");
+    Runtime::instance().notify(lang.get("sync.uploading_dropbox"));
 
     const std::string localMetaPath = versions.front().path + ".meta";
     const std::string latestArchivePath = "/" + m_saveManager.getCloudPath(title);
@@ -321,95 +324,98 @@ SaveActionResult SaveBackendAdapter::upload(uint64_t titleId) {
     if (ok) g_remoteCacheValid = false;
     return {
         ok,
-        ok ? "Upload completed" : "Upload failed"
+        ok ? lang.get("sync.upload_completed") : lang.get("sync.upload_failed")
     };
 }
 
 SaveActionResult SaveBackendAdapter::download(uint64_t titleId, const std::string& revisionId) {
+    auto& lang = utils::Language::instance();
     auto* title = m_saveManager.getTitleById(titleId);
     if (!title) {
-        return {false, "Unknown title"};
+        return {false, lang.get("error.unknown_title")};
     }
     if (!m_dropbox.isAuthenticated()) {
-        return {false, "Dropbox is not connected"};
+        return {false, lang.get("error.not_authenticated")};
     }
 
     utils::paths::ensureBaseDirectories();
     const std::string tempArchive = makeTempArchivePath(titleId);
     if (!m_dropbox.downloadFile(revisionId, tempArchive)) {
-        return {false, "Download failed"};
+        return {false, lang.get("error.download_failed")};
     }
 
     std::string reason;
-    const bool ok = m_saveManager.importBackupArchive(title, tempArchive, &reason, true);  // skipConflictCheck - user explicitly chose cloud restore
+    const bool ok = m_saveManager.importBackupArchive(title, tempArchive, &reason, true);
     std::remove(tempArchive.c_str());
 
     if (ok) g_remoteCacheValid = false;
     if (!ok) {
-        return {false, reason.empty() ? "Import failed" : reason};
+        return {false, reason.empty() ? lang.get("error.download_failed") : reason};
     }
 
     return {
         true,
-        reason.empty() ? "Download completed" : reason
+        reason.empty() ? lang.get("sync.upload_completed") : reason
     };
 }
 
 SaveActionResult SaveBackendAdapter::refresh(uint64_t titleId) {
+    auto& lang = utils::Language::instance();
     auto* title = m_saveManager.getTitleById(titleId);
     if (!title) {
-        return {false, "Unknown title"};
+        return {false, lang.get("error.unknown_title")};
     }
 
     g_remoteCacheValid = false;
     const auto versions = m_saveManager.getBackupVersions(title);
     return {
         true,
-        versions.empty() ? "No local backups found" : "Refresh completed"
+        versions.empty() ? lang.get("history.no_backup") : lang.get("ui.refresh_completed")
     };
 }
 
 SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std::string& revisionId, SaveSource source) {
+    auto& lang = utils::Language::instance();
     LOG_INFO("deleteRevision: titleId=%016lX revisionId=%s source=%d", titleId, revisionId.c_str(), static_cast<int>(source));
     
     if (revisionId.empty()) {
         LOG_ERROR("deleteRevision: empty revisionId");
-        return {false, "Invalid backup selection"};
+        return {false, lang.get("error.invalid_backup_selection")};
     }
     
     auto* title = m_saveManager.getTitleById(titleId);
     if (!title) {
         LOG_ERROR("deleteRevision: unknown title");
-        return {false, "Unknown title"};
+        return {false, lang.get("error.unknown_title")};
     }
 
     if (title->actualSaveType == core::SaveType::System) {
         LOG_ERROR("deleteRevision: system saves cannot be deleted");
-        return {false, "System saves cannot be deleted"};
+        return {false, lang.get("error.system_saves_undeletable")};
     }
 
     if (source == SaveSource::Local) {
         const std::string backupBase = "/switch/oc-save-keeper/backups/";
         if (revisionId.find(backupBase) != 0) {
             LOG_ERROR("deleteRevision: invalid local path (outside backup directory): %s", revisionId.c_str());
-            return {false, "Invalid backup path"};
+            return {false, lang.get("error.invalid_backup_path")};
         }
         
         if (revisionId == backupBase || revisionId.back() == '/') {
             LOG_ERROR("deleteRevision: cannot delete backup root");
-            return {false, "Cannot delete backup root"};
+            return {false, lang.get("error.cannot_delete_root")};
         }
         
         LOG_INFO("deleteRevision: deleting local backup");
         const bool ok = m_saveManager.deleteBackup(revisionId);
         if (ok) g_remoteCacheValid = false;
         LOG_INFO("deleteRevision: local delete result=%d", ok);
-        return { ok, ok ? "Local backup deleted" : "Delete failed" };
+        return { ok, ok ? lang.get("sync.delete_success") : lang.get("sync.delete_failed") };
     } else {
         LOG_INFO("deleteRevision: deleting cloud backup");
         if (!m_dropbox.isAuthenticated()) {
             LOG_ERROR("deleteRevision: Dropbox not authenticated");
-            return {false, "Dropbox is not connected"};
+            return {false, lang.get("error.not_authenticated")};
         }
 
         char titleIdStr[20];
@@ -418,7 +424,7 @@ SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std:
         
         if (revisionId.find(expectedPrefix) != 0) {
             LOG_ERROR("deleteRevision: invalid cloud path (outside title revisions): %s", revisionId.c_str());
-            return {false, "Invalid cloud backup path"};
+            return {false, lang.get("error.invalid_cloud_path")};
         }
 
         std::string metaPath, zipPath;
@@ -430,7 +436,7 @@ SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std:
             metaPath = revisionId.substr(0, revisionId.size() - 4) + ".meta";
         } else {
             LOG_ERROR("deleteRevision: unexpected revisionId format: %s", revisionId.c_str());
-            return {false, "Invalid backup file format"};
+            return {false, lang.get("error.invalid_backup_format")};
         }
 
         LOG_INFO("deleteRevision: deleting zip=%s meta=%s", zipPath.c_str(), metaPath.c_str());
@@ -449,7 +455,7 @@ SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std:
         
         if (ok) g_remoteCacheValid = false;
         LOG_INFO("deleteRevision: cloud delete result=%d", ok);
-        return { ok, ok ? "Cloud backup deleted" : "Delete failed" };
+        return { ok, ok ? lang.get("sync.delete_success") : lang.get("sync.delete_failed") };
     }
 }
 

@@ -8,6 +8,7 @@
 #include "core/SyncLogic.hpp"
 #include "fs/FileUtil.hpp"
 #include "fs/ScopedSaveMount.hpp"
+#include "utils/Language.hpp"
 #include "utils/Paths.hpp"
 #include "utils/SettingsStore.hpp"
 #include "zip/ZipArchive.hpp"
@@ -1081,7 +1082,7 @@ bool SaveManager::readMetadataFile(const std::string& metadataPath, BackupMetada
 
 SyncDecision SaveManager::evaluateIncomingMetadata(TitleInfo* title, const BackupMetadata& incomingMeta) const {
     if (!title) {
-        return {false, "No title selected"};
+        return {false, utils::Language::instance().get("error.no_title_selected")};
     }
 
     // Compare against the newest local snapshot that actually has metadata.
