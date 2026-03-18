@@ -655,6 +655,7 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
 }
 
 void SaveShell::renderSidebar(const Sidebar& sidebar) {
+    const bool isLoading = Runtime::instance().isLoading();
     const int sidebarW = 576; // 45% of 1280
     SDL_Rect panel{1280 - sidebarW, 96, sidebarW, 580};
     fillRect(m_renderer, panel, color(17, 24, 39, 250));
@@ -672,7 +673,7 @@ void SaveShell::renderSidebar(const Sidebar& sidebar) {
         const auto& item = items[i];
         SDL_Rect row{panel.x + 32, panel.y + 126 + i * 82, panel.w - 64, 70};
         const bool isSelected = i == sidebar.index();
-        const bool isEnabled = item->isEnabled();
+        const bool isEnabled = item->isEnabled() && !isLoading;
 
         SDL_Color rowColor = isSelected ? color(19, 42, 79) : color(17, 24, 39);
         SDL_Color borderColor = isSelected ? color(56, 189, 248) : color(51, 65, 85);

@@ -125,6 +125,13 @@ void RevisionMenuScreen::reload() {
 
 void RevisionMenuScreen::restoreSelected() {
     LOG_INFO("restoreSelected() called");
+
+    // Guard: 이미 sidebar가 열려있으면 무시
+    if (m_sidebar) {
+        LOG_WARNING("restoreSelected: sidebar already open");
+        return;
+    }
+
     const auto& lang = utils::Language::instance();
     
     if (m_entries.empty()) {
@@ -197,6 +204,13 @@ void RevisionMenuScreen::restoreSelected() {
 
 void RevisionMenuScreen::deleteSelected() {
     LOG_INFO("deleteSelected() called");
+
+    // Guard: 이미 sidebar가 열려있으면 무시
+    if (m_sidebar) {
+        LOG_WARNING("deleteSelected: sidebar already open");
+        return;
+    }
+
     const auto& lang = utils::Language::instance();
     
     if (m_entries.empty()) {
@@ -243,9 +257,12 @@ void RevisionMenuScreen::deleteSelected() {
         
         LOG_INFO("deleteSelected: entryId=%s", m_deleteData->entryId.c_str());
         
-        m_deleteInProgress = true;
-        m_deleteSuccess = false;
-        m_deleteMessage.clear();
+        {
+            std::lock_guard<std::mutex> lock(m_deleteMutex);
+            m_deleteInProgress = true;
+            m_deleteSuccess = false;
+            m_deleteMessage.clear();
+        }
         
         Runtime::instance().setLoading(true, lang.get("sync.deleting"));
         
