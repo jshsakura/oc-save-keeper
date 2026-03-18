@@ -48,7 +48,7 @@ jobs:
             -v "${GITHUB_WORKSPACE}:/work" \
             -w /work \
             devkitpro/devkita64 \
-            make DROPBOX_APP_KEY="${DROPBOX_APP_KEY}" DROPBOX_BRIDGE_BASE="${DROPBOX_BRIDGE_BASE}"
+            bash -c "make clean && make DROPBOX_APP_KEY=\"${DROPBOX_APP_KEY}\" DROPBOX_BRIDGE_BASE=\"${DROPBOX_BRIDGE_BASE}\""
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
