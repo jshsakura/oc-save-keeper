@@ -186,18 +186,31 @@ bool Dropbox::startBridgeSession(DropboxBridgeSession& outSession) {
 }
 
 std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
-    if (!session.active) return "expired";
+    if (!session.active) {
+        LOG_ERROR("Dropbox: pollBridgeSession called with inactive session");
+        return "expired";
+    }
 
     const std::string url = session.pollUrl.empty() 
         ? std::string(DROPBOX_BRIDGE_BASE_STR) + "/v1/sessions/" + session.sessionId + "/status"
         : session.pollUrl;
     const std::string postData = "{\"poll_token\":\"" + session.pollToken + "\"}";
 
+    LOG_DEBUG("Dropbox: Polling session status - URL: %s", url.c_str());
     std::string response = performRequest(url, postData, "Content-Type: application/json", false);
-    if (response.empty()) return "failed";
+    
+    if (response.empty()) {
+        LOG_ERROR("Dropbox: Empty response from session status endpoint");
+        return "failed";
+    }
+    
+    LOG_DEBUG("Dropbox: Session status response: %s", response.c_str());
 
     ScopedJson scopedRoot(json_tokener_parse(response.c_str()));
-    if (!scopedRoot) return "failed";
+    if (!scopedRoot) {
+        LOG_ERROR("Dropbox: Failed to parse session status JSON: %s", response.c_str());
+        return "failed";
+    }
     json_object* root = scopedRoot.get();
 
     std::string status = "failed";
@@ -205,6 +218,8 @@ std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
     if (json_object_object_get_ex(root, "status", &statusObj)) {
         status = json_object_get_string(statusObj);
     }
+    
+    LOG_DEBUG("Dropbox: Session status = %s", status.c_str());
 
     return status;
 }
