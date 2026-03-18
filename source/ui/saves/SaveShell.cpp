@@ -926,7 +926,8 @@ void SaveShell::refreshCurrentScreen() {
         Runtime::instance().push(std::make_shared<RevisionMenuScreen>(m_backend,
                                                                       screen->entries().empty() ? 0 : screen->entries().front().source == SaveSource::Cloud ? 0 : 0,
                                                                       SaveSource::Local,
-                                                                      screen->titleLabel()));
+                                                                      screen->titleLabel(),
+                                                                      false));
     }
 }
 

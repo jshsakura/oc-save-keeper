@@ -703,6 +703,14 @@ bool SaveManager::deleteBackup(const std::string& backupPath) {
         std::remove(metaPath.c_str());
     }
 
+    const std::string zipPath = backupPath + ".zip";
+    if (stat(zipPath.c_str(), &st) == 0) {
+        LOG_INFO("deleteBackup: removing zip %s", zipPath.c_str());
+        if (std::remove(zipPath.c_str()) != 0) {
+            LOG_WARNING("deleteBackup: failed to remove zip, errno=%d", errno);
+        }
+    }
+
     LOG_INFO("deleteBackup: result=%s", deleted ? "success" : "failed");
     return deleted;
 }

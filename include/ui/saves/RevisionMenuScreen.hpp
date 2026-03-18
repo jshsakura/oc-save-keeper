@@ -31,7 +31,7 @@ struct RestoreTaskData {
 
 class RevisionMenuScreen final : public GridMenuBase {
 public:
-    RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uint64_t titleId, SaveSource source, std::string titleLabel);
+    RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uint64_t titleId, SaveSource source, std::string titleLabel, bool isSystem = false);
     ~RevisionMenuScreen();
 
     const char* shortTitle() const override;

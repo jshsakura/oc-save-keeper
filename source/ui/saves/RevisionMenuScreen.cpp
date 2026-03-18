@@ -6,12 +6,13 @@
 
 namespace ui::saves {
 
-RevisionMenuScreen::RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uint64_t titleId, SaveSource source, std::string titleLabel)
+RevisionMenuScreen::RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uint64_t titleId, SaveSource source, std::string titleLabel, bool isSystem)
     : GridMenuBase(source == SaveSource::Cloud ? "Cloud Saves" : "Backup History", MenuFlagNone)
     , m_backend(std::move(backend))
     , m_titleId(titleId)
     , m_source(source)
-    , m_titleLabel(std::move(titleLabel)) {
+    , m_titleLabel(std::move(titleLabel))
+    , m_isSystem(isSystem) {
     const auto& lang = utils::Language::instance();
     onLayoutChange(m_list, m_layout);
     reload();
@@ -58,6 +59,7 @@ void RevisionMenuScreen::update(const Controller& controller, const TouchInfo& t
         std::lock_guard<std::mutex> lock(m_deleteMutex);
         if (m_deleteSuccess) {
             Runtime::instance().notify(utils::Language::instance().get("sync.delete_success"));
+            m_deleteData.reset();
             reload();
         } else {
             Runtime::instance().pushError(m_deleteMessage.empty() 
@@ -292,7 +294,7 @@ void RevisionMenuScreen::deleteSelected() {
 
 RevisionMenuScreen::~RevisionMenuScreen() {
     if (m_deleteThread.joinable()) {
-        m_deleteThread.join();
+        m_deleteThread.detach();
     }
 }
 

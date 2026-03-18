@@ -177,7 +177,7 @@ void SaveMenuScreen::openHistory(SaveSource source) {
     }
 
     const auto& entry = m_entries[m_index];
-    Runtime::instance().push(std::make_shared<RevisionMenuScreen>(m_backend, entry.titleId, source, entry.name));
+    Runtime::instance().push(std::make_shared<RevisionMenuScreen>(m_backend, entry.titleId, source, entry.name, entry.isSystem));
 }
 
 } // namespace ui::saves
