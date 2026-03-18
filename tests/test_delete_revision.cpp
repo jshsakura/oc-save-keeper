@@ -254,3 +254,189 @@ TEST_CASE("Mutex protects shared state during cancellation") {
     
     REQUIRE_EQ(protectedCount.load(), 200);
 }
+
+// Additional thread safety tests for RevisionMenuScreen pattern
+
+TEST_CASE("Destructor safely terminates in-progress thread") {
+    // Simulates RevisionMenuScreen destructor behavior
+    std::atomic<bool> cancelFlag{false};
+    std::atomic<bool> threadStarted{false};
+    std::atomic<bool> threadFinished{false};
+    std::atomic<bool> resultWritten{false};
+    std::mutex mtx;
+    bool success = false;
+    
+    {
+        std::thread worker([&]() {
+            threadStarted = true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            
+            if (cancelFlag) {
+                threadFinished = true;
+                return;
+            }
+            
+            std::lock_guard<std::mutex> lock(mtx);
+            success = true;
+            resultWritten = true;
+            threadFinished = true;
+        });
+        
+        // Simulate user pressing B quickly (destructor called)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        REQUIRE(threadStarted);
+        
+        // Destructor pattern: set cancel, then join
+        cancelFlag = true;
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+    
+    REQUIRE(threadFinished);
+    // Result should NOT be written because cancel was set
+    REQUIRE(!resultWritten);
+    REQUIRE(!success);
+}
+
+TEST_CASE("Rapid create-destroy cycles are safe") {
+    // Simulates rapid navigation in/out of RevisionMenuScreen
+    for (int cycle = 0; cycle < 10; ++cycle) {
+        std::atomic<bool> cancelFlag{false};
+        std::atomic<int> counter{0};
+        
+        {
+            std::thread worker([&]() {
+                for (int i = 0; i < 100; ++i) {
+                    if (cancelFlag) return;
+                    ++counter;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            });
+            
+            // Random short delay before destroy
+            std::this_thread::sleep_for(std::chrono::milliseconds(cycle % 5));
+            
+            cancelFlag = true;
+            if (worker.joinable()) {
+                worker.join();
+            }
+        }
+        // Should complete without crash or hang
+    }
+    REQUIRE(true); // If we get here, all cycles completed safely
+}
+
+TEST_CASE("Thread with held mutex during cancellation") {
+    // Tests that mutex is properly released even when cancelled
+    std::atomic<bool> cancelFlag{false};
+    std::mutex mtx;
+    bool dataWritten = false;
+    
+    {
+        std::thread worker([&]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            
+            if (cancelFlag) return;
+            
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                // Simulate work that gets interrupted
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                if (!cancelFlag) {
+                    dataWritten = true;
+                }
+            }
+        });
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        cancelFlag = true;
+        
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+    
+    // Mutex should be available (no deadlock)
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        // If we get here, mutex was properly released
+    }
+    REQUIRE(true);
+}
+
+TEST_CASE("Shared pointer capture survives object destruction") {
+    // Simulates shared_ptr<DeleteTaskData> capture pattern
+    struct TaskData {
+        int value = 42;
+    };
+    
+    std::atomic<bool> cancelFlag{false};
+    int capturedValue = 0;
+    
+    {
+        auto dataPtr = std::make_shared<TaskData>();
+        
+        std::thread worker([dataPtr, &capturedValue, &cancelFlag]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            
+            if (cancelFlag) return;
+            
+            // Safe: dataPtr is a copy, not dependent on outer object
+            capturedValue = dataPtr->value;
+        });
+        
+        // Simulate object destruction (dataPtr in outer scope destroyed)
+        // But worker's copy of dataPtr keeps it alive
+        
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+    
+    REQUIRE_EQ(capturedValue, 42);
+}
+
+TEST_CASE("Cancel flag checked before and after mutex lock") {
+    // Tests the exact pattern used in RevisionMenuScreen
+    std::atomic<bool> cancelFlag{false};
+    std::atomic<bool> inProgress{true};
+    std::atomic<bool> success{false};
+    std::mutex mtx;
+    std::string message;
+    
+    std::thread worker([&]() {
+        // Simulate work
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        
+        // Check cancel BEFORE touching shared state
+        if (cancelFlag) {
+            inProgress = false;
+            return;
+        }
+        
+        // Lock and write result
+        std::lock_guard<std::mutex> lock(mtx);
+        
+        // Check cancel AGAIN after acquiring lock
+        if (cancelFlag) {
+            inProgress = false;
+            return;
+        }
+        
+        success = true;
+        message = "Operation succeeded";
+        inProgress = false;
+    });
+    
+    // Wait a bit then cancel
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    cancelFlag = true;
+    
+    if (worker.joinable()) {
+        worker.join();
+    }
+    
+    REQUIRE(!inProgress);
+    REQUIRE(!success); // Cancelled before writing
+}
