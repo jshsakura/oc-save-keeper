@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
-      DROPBOX_BRIDGE_BASE: ${{ secrets.DROPBOX_BRIDGE_BASE || secrets.REDIRECT_BASE_URL }}
+      DROPBOX_BRIDGE_BASE: ${{ secrets.DROPBOX_BRIDGE_BASE }}
 
     steps:
       - name: Checkout
