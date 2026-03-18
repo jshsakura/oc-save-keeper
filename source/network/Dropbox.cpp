@@ -30,7 +30,10 @@ static constexpr const char* DROPBOX_CONTENT = "https://content.dropboxapi.com/2
 static constexpr const char* DROPBOX_LIST_FOLDER = "https://api.dropboxapi.com/2/files/list_folder";
 static constexpr const char* DROPBOX_LIST_FOLDER_CONTINUE = "https://api.dropboxapi.com/2/files/list_folder/continue";
 static constexpr const char* DROPBOX_REDIRECT_URI = "https://localhost/oc-save-keeper/callback";
-static constexpr const char* DROPBOX_BRIDGE_BASE = "https://example.yourdomain.com";
+#ifndef DROPBOX_BRIDGE_BASE
+#define DROPBOX_BRIDGE_BASE "https://example.yourdomain.com"
+#endif
+static constexpr const char* DROPBOX_BRIDGE_BASE_STR = DROPBOX_BRIDGE_BASE;
 static constexpr const char* DROPBOX_AUTH_FILE = utils::paths::DROPBOX_AUTH_JSON;
 static constexpr const char* DROPBOX_LEGACY_TOKEN_FILE = utils::paths::DROPBOX_LEGACY_TOKEN;
 static constexpr const char* DROPBOX_APP_KEY_FILE = utils::paths::DROPBOX_APP_KEY_TXT;
@@ -152,7 +155,7 @@ bool Dropbox::checkAuthentication() {
 }
 
 bool Dropbox::startBridgeSession(DropboxBridgeSession& outSession) {
-    const std::string url = std::string(DROPBOX_BRIDGE_BASE) + "/v1/sessions/start";
+    const std::string url = std::string(DROPBOX_BRIDGE_BASE_STR) + "/v1/sessions/start";
     const std::string postData = "{\"device_id\":\"switch\"}";
     
     std::string response = performRequest(url, postData, "Content-Type: application/json", false);
@@ -186,7 +189,7 @@ std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
     if (!session.active) return "expired";
 
     const std::string url = session.pollUrl.empty() 
-        ? std::string(DROPBOX_BRIDGE_BASE) + "/v1/sessions/" + session.sessionId + "/status"
+        ? std::string(DROPBOX_BRIDGE_BASE_STR) + "/v1/sessions/" + session.sessionId + "/status"
         : session.pollUrl;
     const std::string postData = "{\"poll_token\":\"" + session.pollToken + "\"}";
 
@@ -209,7 +212,7 @@ std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
 bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
     if (!session.active) return false;
 
-    const std::string url = std::string(DROPBOX_BRIDGE_BASE) + "/v1/sessions/" + session.sessionId + "/consume";
+    const std::string url = std::string(DROPBOX_BRIDGE_BASE_STR) + "/v1/sessions/" + session.sessionId + "/consume";
     const std::string postData = "{\"poll_token\":\"" + session.pollToken + "\"}";
 
     std::string response = performRequest(url, postData, "Content-Type: application/json", false);
