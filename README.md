@@ -210,7 +210,7 @@ https://example.yourdomain.com/oauth/dropbox/callback
 Then set:
 
 ```text
-REDIRECT_BASE_URL=https://example.yourdomain.com
+DROPBOX_BRIDGE_BASE=https://example.yourdomain.com
 ```
 
 ## How Sync Decisions Work

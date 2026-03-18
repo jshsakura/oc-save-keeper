@@ -12,7 +12,7 @@ If your production domain is `example.yourdomain.com`, register this exact redir
 https://example.yourdomain.com/oauth/dropbox/callback
 ```
 
-`REDIRECT_BASE_URL` must match the registered domain.
+`DROPBOX_BRIDGE_BASE` must match the registered domain.
 
 ## Flow (Fully Automatic - No Manual Code Entry)
 
@@ -47,7 +47,7 @@ curl http://localhost:8080/healthz
 ## Environment Variables
 
 - `DROPBOX_APP_KEY`: Dropbox app key.
-- `REDIRECT_BASE_URL`: external HTTPS URL, example `https://example.yourdomain.com`.
+- `DROPBOX_BRIDGE_BASE`: external HTTPS URL, example `https://example.yourdomain.com`.
 - `POLL_TOKEN_SECRET`: random secret for poll token HMAC hashing.
 - `REDIS_URL`: redis connection string.
 - `STATE_TTL_SECONDS`: state mapping TTL.

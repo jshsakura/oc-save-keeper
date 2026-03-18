@@ -87,7 +87,7 @@ $(BUILD):
 else
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
-	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile DROPBOX_APP_KEY="$(DROPBOX_APP_KEY)"
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile DROPBOX_APP_KEY="$(DROPBOX_APP_KEY)" DROPBOX_BRIDGE_BASE="$(DROPBOX_BRIDGE_BASE)"
 endif
 test: $(TEST_BIN)
 	@$(TEST_BIN)

@@ -81,7 +81,7 @@ https://example.yourdomain.com/oauth/dropbox/callback
 4. 브리지 환경 변수 설정:
 
 ```text
-REDIRECT_BASE_URL=https://example.yourdomain.com
+DROPBOX_BRIDGE_BASE=https://example.yourdomain.com
 DROPBOX_APP_KEY=<your_app_key>
 POLL_TOKEN_SECRET=<long_random_secret>
 ```

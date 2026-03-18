@@ -209,7 +209,7 @@ https://example.yourdomain.com/oauth/dropbox/callback
 그 다음 설정:
 
 ```text
-REDIRECT_BASE_URL=https://example.yourdomain.com
+DROPBOX_BRIDGE_BASE=https://example.yourdomain.com
 ```
 
 ## 동기화 판단 방식

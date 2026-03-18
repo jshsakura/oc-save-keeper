@@ -31,7 +31,8 @@ def get_env(name: str, default: str = "") -> str:
 
 
 APP_KEY = get_env("DROPBOX_APP_KEY")
-REDIRECT_BASE_URL = get_env("REDIRECT_BASE_URL", "https://example.yourdomain.com")
+DROPBOX_BRIDGE_BASE = get_env("DROPBOX_BRIDGE_BASE", get_env("REDIRECT_BASE_URL", "https://example.yourdomain.com"))
+REDIRECT_BASE_URL = DROPBOX_BRIDGE_BASE  # Keep as alias if needed, or just use DROPBOX_BRIDGE_BASE below
 POLL_TOKEN_SECRET = get_env("POLL_TOKEN_SECRET")
 RELEASE_URL = get_env("RELEASE_URL", "https://github.com/jshsakura/oc-save-keeper/releases/tag/latest")
 GITHUB_URL = get_env("GITHUB_URL", "https://github.com/jshsakura/oc-save-keeper")
@@ -48,6 +49,11 @@ if not APP_KEY:
     raise RuntimeError("DROPBOX_APP_KEY must be set")
 if not POLL_TOKEN_SECRET:
     raise RuntimeError("POLL_TOKEN_SECRET must be set")
+
+
+# Ensure DROPBOX_BRIDGE_BASE is used everywhere
+redirect_uri = f"{DROPBOX_BRIDGE_BASE}/oauth/dropbox/callback"
+poll_url = f"{DROPBOX_BRIDGE_BASE}/v1/sessions/{{session_id}}/status"
 
 
 def code_challenge_s256(verifier: str) -> str:
@@ -696,7 +702,7 @@ async def start_session(payload: StartSessionRequest, request: Request) -> Start
 
     key = session_key(session_id)
     poll_token_hash = hash_poll_token(poll_token)
-    redirect_uri = f"{REDIRECT_BASE_URL}/oauth/dropbox/callback"
+    redirect_uri = f"{DROPBOX_BRIDGE_BASE}/oauth/dropbox/callback"
 
     try:
         async with redis_client.pipeline() as pipe:
@@ -737,7 +743,7 @@ async def start_session(payload: StartSessionRequest, request: Request) -> Start
         )
     )
 
-    poll_url = f"{REDIRECT_BASE_URL}/v1/sessions/{session_id}/status"
+    poll_url = f"{DROPBOX_BRIDGE_BASE}/v1/sessions/{session_id}/status"
     return StartSessionResponse(
         session_id=session_id,
         poll_token=poll_token,
