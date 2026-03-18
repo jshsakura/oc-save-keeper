@@ -1188,30 +1188,28 @@ void SaveShell::renderDropboxOverlay() {
     // Header - Use Blue for the title to match icon
     renderText(tr("auth.title", "Dropbox Setup"), panel.x + 24, panel.y + 31, m_fontLarge, CAT_BLUE);
     
-    // Status Bar
+    // Status Bar - Only show for Errors or Success, hide during normal flow to avoid redundancy
     SDL_Rect statusRect{panel.x + 24, panel.y + 80, panel.w - 48, 44};
-    fillRect(m_renderer, statusRect, CAT_CRUST); // Deepest black for status bar
-    strokeRect(m_renderer, statusRect, CAT_SURFACE0);
+    bool showStatus = (m_dropboxState == DropboxAuthState::Failed || m_dropboxState == DropboxAuthState::Expired);
     
-    SDL_Color statusColor = CAT_SAPPHIRE; // Default to sapphire blue
-    if (m_dropboxState == DropboxAuthState::Success) statusColor = CAT_GREEN;
-    if (m_dropboxState == DropboxAuthState::Failed || m_dropboxState == DropboxAuthState::Expired) statusColor = CAT_RED;
-    
-    renderTextCentered(fitText(m_fontSmall, m_statusMessage, statusRect.w - 16),
-                       statusRect,
-                       m_fontSmall,
-                       statusColor);
+    if (showStatus) {
+        fillRect(m_renderer, statusRect, CAT_CRUST);
+        strokeRect(m_renderer, statusRect, CAT_SURFACE0);
+        renderTextCentered(fitText(m_fontSmall, m_statusMessage, statusRect.w - 16),
+                           statusRect, m_fontSmall, CAT_RED);
+    }
 
     if (m_dropboxState == DropboxAuthState::Success) {
-        // --- SUCCESS VIEW ---
-        // Removed broken checkmark icon per user request.
-        // The status message above already indicates success.
-
-        SDL_Rect infoRect{panel.x + 48, panel.y + 160, panel.w - 96, 120};
+        // --- SUCCESS VIEW: Large, centered, clean ---
+        SDL_Rect successRect{panel.x, panel.y + 120, panel.w, 180};
+        renderTextCentered(tr("auth.status_success", "Successfully connected to Dropbox!"), 
+                           successRect, m_fontLarge, CAT_GREEN);
+        
+        SDL_Rect descRect{panel.x + 48, panel.y + 200, panel.w - 96, 60};
         renderTextCentered(tr("auth.finish_description", "Dropbox is now ready to use."), 
-                           infoRect, m_fontMedium, CAT_TEXT);
+                           descRect, m_fontMedium, CAT_TEXT);
 
-        SDL_Rect closeBtn{panel.x + 80, panel.y + 340, panel.w - 160, 60};
+        SDL_Rect closeBtn{panel.x + (panel.w - 400) / 2, panel.y + 340, 400, 60};
 
         const bool selected = m_overlayIndex == 0;
         fillRect(m_renderer, closeBtn, selected ? CAT_BLUE : CAT_SURFACE0); // Blue when selected
@@ -1233,10 +1231,13 @@ void SaveShell::renderDropboxOverlay() {
         renderText(dotsStr, panel.x + 640, panel.y + 235, m_fontMedium, CAT_SAPPHIRE);
 
     } else if (m_dropboxState == DropboxAuthState::ConfirmLogout || m_dropboxState == DropboxAuthState::ConfirmCancel) {
+        // --- CONFIRMATION VIEW ---
+        renderTextCentered(m_statusMessage, SDL_Rect{panel.x, panel.y + 120, panel.w, 80}, m_fontMedium, CAT_TEXT);
+        
         const char* options[2] = { "ui.yes", "ui.no" };
         const char* fallbacks[2] = { "Yes", "No" };
         for (int i = 0; i < 2; ++i) {
-            SDL_Rect row{panel.x + 80, panel.y + 220 + i * 80, panel.w - 160, 60};
+            SDL_Rect row{panel.x + (panel.w - 400) / 2, panel.y + 220 + i * 80, 400, 60};
             const bool selected = i == m_overlayIndex;
             fillRect(m_renderer, row, selected ? CAT_BLUE : CAT_SURFACE0);
             strokeRect(m_renderer, row, selected ? CAT_SKY : CAT_SURFACE1);
@@ -1246,10 +1247,14 @@ void SaveShell::renderDropboxOverlay() {
             renderTextCentered(tr(options[i], fallbacks[i]), row, m_fontMedium, textColor);
         }
     } else if (m_dropbox.isAuthenticated()) {
+        // --- AUTHENTICATED OPTIONS ---
+        renderTextCentered(tr("auth.status_authenticated", "You are already connected to Dropbox."), 
+                           SDL_Rect{panel.x, panel.y + 120, panel.w, 60}, m_fontMedium, CAT_GREEN);
+
         const char* options[2] = { "detail.back", "ui.logout" };
         const char* fallbacks[2] = { "Close", "Logout" };
         for (int i = 0; i < 2; ++i) {
-            SDL_Rect row{panel.x + 80, panel.y + 220 + i * 80, panel.w - 160, 60};
+            SDL_Rect row{panel.x + (panel.w - 400) / 2, panel.y + 220 + i * 80, 400, 60};
             const bool selected = i == m_overlayIndex;
             fillRect(m_renderer, row, selected ? (i == 1 ? CAT_RED : CAT_BLUE) : CAT_SURFACE0);
             strokeRect(m_renderer, row, selected ? (i == 1 ? CAT_MAROON : CAT_SKY) : CAT_SURFACE1);
@@ -1262,16 +1267,16 @@ void SaveShell::renderDropboxOverlay() {
         // Layout: QR on the left, Instructions/Vertical buttons on the right
         const int qrBox = 300;
         const int qrX = panel.x + 32;
-        const int qrY = panel.y + 150;
+        const int qrY = panel.y + 130;
         const int textX = qrX + qrBox + 40;
-        const int textY = panel.y + 150;
+        const int textY = panel.y + 130;
         const int textW = panel.w - (qrBox + 104);
 
-        // --- LEFT SIDE: QR or Dummy ---
+        // --- LEFT SIDE: QR or Placeholder ---
         if (m_dropboxState == DropboxAuthState::WaitingForScan && m_authQrCode.size > 0) {
             SDL_Rect qrArea{qrX, qrY, qrBox, qrBox};
             fillRect(m_renderer, qrArea, {255, 255, 255, 255});
-            strokeRect(m_renderer, qrArea, CAT_BLUE); // Blue border for QR
+            strokeRect(m_renderer, qrArea, CAT_BLUE);
 
             const int quietZone = 2;
             const int matrixSize = m_authQrCode.size + quietZone * 2;
@@ -1304,14 +1309,13 @@ void SaveShell::renderDropboxOverlay() {
             }
         }
 
-        // --- RIGHT SIDE: Actions and Instructions ---
+        // --- RIGHT SIDE: Unified Instruction Area ---
         if (m_dropboxState == DropboxAuthState::Idle || m_dropboxState == DropboxAuthState::Failed || m_dropboxState == DropboxAuthState::Expired) {
             renderText(tr("auth.steps_title", "How It Works"), textX, textY, m_fontMedium, CAT_BLUE);
             renderText(tr("auth.waiting_link_hint", "Start by generating the sign-in link."), textX, textY + 45, m_fontSmall, CAT_TEXT);
-            renderText(tr("auth.waiting_link_hint2", "Press the button below to begin."), textX, textY + 70, m_fontSmall, CAT_SUBTEXT0);
             
-            SDL_Rect startBtn{textX, textY + 115, textW, 56};
-            SDL_Rect closeBtn{textX, textY + 185, textW, 56};
+            SDL_Rect startBtn{textX, textY + 100, textW, 64};
+            SDL_Rect closeBtn{textX, textY + 180, textW, 64};
             
             const bool startSelected = m_overlayIndex == 0;
             const bool closeSelected = m_overlayIndex == 1;
@@ -1328,27 +1332,25 @@ void SaveShell::renderDropboxOverlay() {
             if (closeSelected) drawFocus(m_renderer, closeBtn);
             renderTextCentered(tr("ui.cancel", "Cancel"), closeBtn, m_fontMedium, closeSelected ? CAT_BASE : CAT_RED);
             
-            renderText(tr("ui.auth_footer_new", "Use your phone to scan and approve the connection."), textX, textY + 265, m_fontSmall, CAT_OVERLAY0);
+            renderText(tr("ui.auth_footer_new", "Use your phone to scan and approve the connection."), textX, textY + 270, m_fontSmall, CAT_OVERLAY0);
         } else if (m_dropboxState == DropboxAuthState::WaitingForScan) {
-            renderText(tr("auth.steps_title", "How It Works"), textX, textY, m_fontMedium, CAT_BLUE);
-            renderText(tr("auth.status_waiting_scan", "Scan the QR code with your phone to login."), textX, textY + 45, m_fontSmall, CAT_TEXT);
-            renderText(tr("auth.step2_short", "Open the link on your phone or PC,"), textX, textY + 80, m_fontSmall, CAT_SUBTEXT0);
-            renderText(tr("auth.step2_cont", "then finish sign-in and approval there."), textX, textY + 103, m_fontSmall, CAT_SUBTEXT0);
-            renderText(tr("auth.step4_short", "Once approved, connection completes"), textX, textY + 140, m_fontSmall, CAT_SUBTEXT0);
-            renderText(tr("auth.step4_cont", "automatically on this device."), textX, textY + 163, m_fontSmall, CAT_SUBTEXT0);
+            renderText(tr("auth.status_waiting_scan", "Scan the QR code to login."), textX, textY, m_fontMedium, CAT_BLUE);
             
-            SDL_Rect tipBox{textX, textY + 205, textW, 50};
+            renderText(tr("auth.step2_short", "Open the link on your phone,"), textX, textY + 50, m_fontSmall, CAT_TEXT);
+            renderText(tr("auth.step2_cont", "then sign-in and approve there."), textX, textY + 75, m_fontSmall, CAT_TEXT);
+            renderText(tr("auth.step4_short", "Once approved, connection completes"), textX, textY + 115, m_fontSmall, CAT_SUBTEXT0);
+            renderText(tr("auth.step4_cont", "automatically on this device."), textX, textY + 140, m_fontSmall, CAT_SUBTEXT0);
+            
+            SDL_Rect tipBox{textX, textY + 185, textW, 50};
             fillRect(m_renderer, tipBox, CAT_CRUST);
-            renderText(tr("auth.tip", "One-time PKCE setup, then the saved refresh token is reused."), tipBox.x + 12, tipBox.y + 14, m_fontSmall, CAT_SAPPHIRE);
+            renderTextCentered(tr("auth.tip", "One-time PKCE setup, then the saved refresh token is reused."), tipBox, m_fontSmall, CAT_SAPPHIRE);
             
-            SDL_Rect closeBtn{textX, textY + 265, textW, 48};
+            SDL_Rect closeBtn{textX, textY + 250, textW, 56};
             const bool closeSelected = m_overlayIndex == 0;
             fillRect(m_renderer, closeBtn, closeSelected ? CAT_RED : CAT_SURFACE0);
             strokeRect(m_renderer, closeBtn, closeSelected ? CAT_MAROON : CAT_SURFACE1);
             if (closeSelected) drawFocus(m_renderer, closeBtn);
             renderTextCentered(tr("detail.back", "Close"), closeBtn, m_fontMedium, closeSelected ? CAT_BASE : CAT_RED);
-        } else {
-            renderTextCentered(m_statusMessage, SDL_Rect{textX, textY + 80, textW, 40}, m_fontMedium, CAT_TEXT);
         }
     }
 

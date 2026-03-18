@@ -79,6 +79,7 @@ private:
     std::thread m_deleteThread;
     std::atomic<bool> m_deleteInProgress{false};
     std::atomic<bool> m_deleteSuccess{false};
+    std::atomic<bool> m_cancelDelete{false};
     std::string m_deleteMessage;
     std::mutex m_deleteMutex;
     std::shared_ptr<DeleteTaskData> m_deleteData;

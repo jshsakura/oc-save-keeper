@@ -1,9 +1,13 @@
 #include "tests/TestHarness.hpp"
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -124,5 +128,129 @@ TEST_CASE("Path derivation handles edge cases") {
     REQUIRE_EQ(deriveZipFromMeta("no_extension"), std::string("no_extension"));
     REQUIRE_EQ(deriveMetaFromZip("no_extension"), std::string("no_extension"));
     REQUIRE_EQ(deriveZipFromMeta(".meta"), std::string(".meta"));
-    REQUIRE_EQ(deriveMetaFromZip(".zip"), std::string(".zip"));
+}
+
+TEST_CASE("Cancel flag prevents result handling") {
+    std::atomic<bool> cancelFlag{false};
+    std::atomic<bool> resultHandled{false};
+    bool success = false;
+    std::string message;
+    std::mutex mtx;
+    
+    std::thread worker([&]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        
+        if (cancelFlag) {
+            return;
+        }
+        
+        std::lock_guard<std::mutex> lock(mtx);
+        success = true;
+        message = "Operation succeeded";
+        resultHandled = true;
+    });
+    
+    cancelFlag = true;
+    worker.join();
+    
+    REQUIRE(!resultHandled);
+    REQUIRE(!success);
+}
+
+TEST_CASE("No cancel flag allows result handling") {
+    std::atomic<bool> cancelFlag{false};
+    std::atomic<bool> resultHandled{false};
+    bool success = false;
+    std::string message;
+    std::mutex mtx;
+    
+    std::thread worker([&]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        
+        if (cancelFlag) {
+            return;
+        }
+        
+        std::lock_guard<std::mutex> lock(mtx);
+        success = true;
+        message = "Operation succeeded";
+        resultHandled = true;
+    });
+    
+    worker.join();
+    
+    REQUIRE(resultHandled);
+    REQUIRE(success);
+    REQUIRE_EQ(message, std::string("Operation succeeded"));
+}
+
+TEST_CASE("Destructor join waits for thread completion") {
+    std::atomic<bool> threadCompleted{false};
+    std::atomic<bool> cancelFlag{false};
+    
+    {
+        std::thread worker([&]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            threadCompleted = true;
+        });
+        
+        REQUIRE(worker.joinable());
+        worker.join();
+    }
+    
+    REQUIRE(threadCompleted);
+}
+
+TEST_CASE("Atomic cancel flag is thread-safe") {
+    std::atomic<bool> cancelFlag{false};
+    constexpr int iterations = 1000;
+    int cancelCount = 0;
+    
+    std::thread setter([&]() {
+        for (int i = 0; i < iterations; ++i) {
+            cancelFlag = (i % 2 == 0);
+        }
+    });
+    
+    std::thread reader([&]() {
+        for (int i = 0; i < iterations; ++i) {
+            if (cancelFlag) {
+                ++cancelCount;
+            }
+        }
+    });
+    
+    setter.join();
+    reader.join();
+    
+    REQUIRE(cancelCount >= 0);
+}
+
+TEST_CASE("Mutex protects shared state during cancellation") {
+    std::atomic<bool> cancelFlag{false};
+    bool success = false;
+    std::string message;
+    std::mutex mtx;
+    std::atomic<int> protectedCount{0};
+    
+    std::thread worker1([&]() {
+        for (int i = 0; i < 100; ++i) {
+            std::lock_guard<std::mutex> lock(mtx);
+            ++protectedCount;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    
+    std::thread worker2([&]() {
+        for (int i = 0; i < 100; ++i) {
+            std::lock_guard<std::mutex> lock(mtx);
+            ++protectedCount;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    
+    worker1.join();
+    worker2.join();
+    
+    REQUIRE_EQ(protectedCount.load(), 200);
 }

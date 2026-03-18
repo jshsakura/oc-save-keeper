@@ -263,6 +263,7 @@ void RevisionMenuScreen::deleteSelected() {
             std::lock_guard<std::mutex> lock(m_deleteMutex);
             m_deleteInProgress = true;
             m_deleteSuccess = false;
+            m_cancelDelete = false;
             m_deleteMessage.clear();
         }
         
@@ -277,6 +278,11 @@ void RevisionMenuScreen::deleteSelected() {
             
             auto result = backendPtr->deleteRevision(dataPtr->titleId, dataPtr->entryId, dataPtr->source);
             LOG_INFO("deleteSelected: result ok=%d msg=%s", result.ok, result.message.c_str());
+            
+            if (m_cancelDelete) {
+                LOG_INFO("deleteSelected: cancelled, skipping result handling");
+                return;
+            }
             
             std::lock_guard<std::mutex> lock(m_deleteMutex);
             m_deleteSuccess = result.ok;
@@ -293,8 +299,9 @@ void RevisionMenuScreen::deleteSelected() {
 }
 
 RevisionMenuScreen::~RevisionMenuScreen() {
+    m_cancelDelete = true;
     if (m_deleteThread.joinable()) {
-        m_deleteThread.detach();
+        m_deleteThread.join();
     }
 }
 
