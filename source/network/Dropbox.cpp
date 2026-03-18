@@ -1,6 +1,7 @@
 /**
  * oc-save-keeper - Dropbox sync client
  * Dropbox implementation - Phone-friendly OAuth
+ * Bridge URL configured via DROPBOX_BRIDGE_BASE env var
  */
 #include "network/Dropbox.hpp"
 #include "network/DropboxUtil.hpp"
