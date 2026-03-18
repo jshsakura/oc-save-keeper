@@ -168,6 +168,7 @@
     "auth.status_connecting": "Please wait a moment...",
     "auth.status_failed": "Session expired or failed. Please try again.",
     "auth.status_success": "Successfully connected to Dropbox!",
+    "auth.finish_description": "Dropbox is now ready to use.",
     "auth.close_and_finish": "Close and Finish",
     "auth.status_consume_failed": "Failed to exchange tokens. Please try again.",
     "auth.confirm_logout": "Are you sure you want to disconnect from Dropbox?",

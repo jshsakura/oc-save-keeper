@@ -1204,14 +1204,15 @@ void SaveShell::renderDropboxOverlay() {
 
     if (m_dropboxState == DropboxAuthState::Success) {
         // --- SUCCESS VIEW ---
-        const int iconSize = 100;
-        SDL_Rect iconRect{panel.x + (panel.w - iconSize) / 2, panel.y + 160, iconSize, iconSize};
-        
-        // Success checkmark with blue shadow/glow
-        fillRect(m_renderer, iconRect, CAT_GREEN);
-        renderTextCentered("✓", iconRect, m_fontLarge, CAT_BASE);
+        // Removed broken checkmark icon per user request.
+        // The status message above already indicates success.
+
+        SDL_Rect infoRect{panel.x + 48, panel.y + 160, panel.w - 96, 120};
+        renderTextCentered(tr("auth.finish_description", "Dropbox is now ready to use."), 
+                           infoRect, m_fontMedium, CAT_TEXT);
 
         SDL_Rect closeBtn{panel.x + 80, panel.y + 340, panel.w - 160, 60};
+
         const bool selected = m_overlayIndex == 0;
         fillRect(m_renderer, closeBtn, selected ? CAT_BLUE : CAT_SURFACE0); // Blue when selected
         strokeRect(m_renderer, closeBtn, selected ? CAT_SKY : CAT_SURFACE1);

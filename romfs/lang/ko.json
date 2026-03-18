@@ -168,6 +168,7 @@
     "auth.status_connecting": "잠시만 기다려 주세요...",
     "auth.status_failed": "세션이 만료되었거나 실패했습니다. 다시 시도해 주세요.",
     "auth.status_success": "Dropbox에 성공적으로 연결되었습니다!",
+    "auth.finish_description": "드롭박스 연결이 완료되었습니다. 이제 자유롭게 이용하실 수 있습니다.",
     "auth.close_and_finish": "완료하고 닫기",
     "auth.status_consume_failed": "토큰 교환에 실패했습니다. 다시 시도해 주세요.",
     "auth.confirm_logout": "정말 Dropbox 연결을 해제하시겠습니까?",
