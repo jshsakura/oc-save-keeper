@@ -19,8 +19,8 @@ extern "C" {
 
 namespace zip {
 
-// Buffer size for ZIP operations
-constexpr size_t ZIP_BUFFER_SIZE = 0x10000; // 64KB
+constexpr size_t ZIP_BUFFER_SIZE = 0x10000;
+constexpr size_t MAX_ZIP_ENTRIES = 10000;
 
 ZipArchive::ZipArchive()
     : m_zip(nullptr)
