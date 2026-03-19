@@ -7,9 +7,25 @@
 #include <json-c/json.h>
 
 #include "utils/Paths.hpp"
-#include "fs/FileUtil.hpp"
 
 namespace utils {
+
+namespace detail {
+struct ScopedFile {
+    FILE* fp = nullptr;
+    explicit ScopedFile(FILE* f = nullptr) : fp(f) {}
+    ~ScopedFile() { if (fp) fclose(fp); }
+    ScopedFile(const ScopedFile&) = delete;
+    ScopedFile& operator=(const ScopedFile&) = delete;
+    ScopedFile(ScopedFile&& o) noexcept : fp(o.fp) { o.fp = nullptr; }
+    ScopedFile& operator=(ScopedFile&& o) noexcept {
+        if (this != &o) { if (fp) fclose(fp); fp = o.fp; o.fp = nullptr; }
+        return *this;
+    }
+    FILE* get() const { return fp; }
+    operator bool() const { return fp != nullptr; }
+};
+} // namespace detail
 
 struct ScopedJson {
     json_object* obj = nullptr;
@@ -80,7 +96,7 @@ private:
     static json_object* loadRoot() {
         utils::paths::ensureBaseDirectories();
 
-        fs::ScopedFile file(std::fopen(utils::paths::SETTINGS_JSON, "r"));
+        detail::ScopedFile file(std::fopen(utils::paths::SETTINGS_JSON, "r"));
         if (!file) {
             return nullptr;
         }
@@ -108,7 +124,7 @@ private:
     static bool saveRoot(json_object* root) {
         utils::paths::ensureBaseDirectories();
 
-        fs::ScopedFile file(std::fopen(utils::paths::SETTINGS_JSON, "w"));
+        detail::ScopedFile file(std::fopen(utils::paths::SETTINGS_JSON, "w"));
         if (!file) {
             if (root) {
                 json_object_put(root);
