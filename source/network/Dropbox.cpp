@@ -934,7 +934,7 @@ bool Dropbox::appendListFolderPage(const std::string& response,
 
         files.push_back(std::move(file));
         if (files.size() >= MAX_DROPBOX_FILES) {
-            LOG_WARN("Dropbox file limit reached (%zu), stopping pagination", MAX_DROPBOX_FILES);
+            LOG_WARNING("Dropbox file limit reached (%zu), stopping pagination", MAX_DROPBOX_FILES);
             if (outHasMore) *outHasMore = false;
             break;
         }

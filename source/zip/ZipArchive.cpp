@@ -345,7 +345,7 @@ std::vector<std::string> ZipArchive::listFiles() {
     do {
         // Memory safety: limit entries to prevent unbounded growth
         if (files.size() >= MAX_ZIP_ENTRIES) {
-            LOG_WARN("ZipArchive: reached MAX_ZIP_ENTRIES limit (%zu)", MAX_ZIP_ENTRIES);
+            LOG_WARNING("ZipArchive: reached MAX_ZIP_ENTRIES limit (%zu)", MAX_ZIP_ENTRIES);
             break;
         }
         char filename[512];
