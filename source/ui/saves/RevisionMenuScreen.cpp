@@ -158,9 +158,8 @@ void RevisionMenuScreen::restoreSelected() {
     m_restoreData->source = m_source;
 
     m_sidebar = std::make_shared<Sidebar>(lang.get("ui.confirm_restore"), Sidebar::Side::Right);
-    
-    const bool holdRequired = true;
-    const std::string yesHint = holdRequired ? lang.get("ui.hold_to_confirm") : lang.get("ui.confirm_restore_hint");
+    m_sidebar->setInitialIndex(1);
+    const std::string yesHint = lang.get("ui.confirm_restore_hint");
     
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this]() {
         LOG_INFO("restoreSelected: YES clicked");
@@ -195,7 +194,7 @@ void RevisionMenuScreen::restoreSelected() {
         }
         
         m_restoreData.reset();
-    }, false, yesHint, holdRequired);
+    }, false, yesHint);
 
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
         LOG_INFO("restoreSelected: NO clicked");
@@ -242,9 +241,8 @@ void RevisionMenuScreen::deleteSelected() {
     m_deleteData->isSystem = m_isSystem;
 
     m_sidebar = std::make_shared<Sidebar>(lang.get("ui.confirm_delete"), Sidebar::Side::Right);
-    
-    const bool holdRequired = true;
-    const std::string yesHint = holdRequired ? lang.get("ui.hold_to_confirm") : lang.get("ui.confirm_delete_hint");
+    m_sidebar->setInitialIndex(1);
+    const std::string yesHint = lang.get("ui.confirm_delete_hint");
     
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this]() {
         LOG_INFO("deleteSelected: YES clicked");
@@ -289,7 +287,7 @@ void RevisionMenuScreen::deleteSelected() {
             m_deleteMessage = result.message;
             m_deleteInProgress = false;
         });
-    }, false, yesHint, holdRequired);
+    }, false, yesHint);
 
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
         LOG_INFO("deleteSelected: NO clicked");

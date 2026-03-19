@@ -3,7 +3,11 @@
 #include "ui/saves/List.hpp"
 #include "ui/saves/Widget.hpp"
 
+#include <functional>
+#include <cstddef>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace ui::saves {
@@ -33,12 +37,6 @@ public:
         m_enabled = enabled;
     }
 
-    // Hold-to-confirm support
-    virtual bool isHoldable() const { return false; }
-    virtual float holdProgress() const { return 0.0f; }
-    virtual void updateHoldState(bool pressed, bool held, bool released) { (void)pressed; (void)held; (void)released; }
-    virtual void resetHold() {}
-
 protected:
     std::string m_title;
     std::string m_info;
@@ -49,25 +47,13 @@ class SidebarEntryCallback final : public SidebarEntryBase {
 public:
     using Callback = std::function<void()>;
 
-    SidebarEntryCallback(const std::string& title, Callback callback, bool popOnClick = false, const std::string& info = "", bool holdRequired = false);
+    SidebarEntryCallback(const std::string& title, Callback callback, bool popOnClick = false, const std::string& info = "");
 
     void activate();
-
-    // Hold-to-confirm support
-    bool isHoldable() const override { return m_holdRequired; }
-    float holdProgress() const override { return m_holdProgress; }
-    void updateHoldState(bool pressed, bool held, bool released) override;
-    void resetHold() override;
-
-    void setHoldRequired(bool required) { m_holdRequired = required; }
 
 private:
     Callback m_callback;
     bool m_popOnClick = false;
-    bool m_holdRequired = false;
-    bool m_triggerGuard = false;
-    float m_holdProgress = 0.0f;
-    uint64_t m_holdStartTime = 0;
 };
 
 class Sidebar final : public Widget {
@@ -97,6 +83,25 @@ public:
         return m_title;
     }
 
+    static int resolveInitialIndex(int requestedIndex, std::size_t itemCount) {
+        if (itemCount == 0) {
+            return 0;
+        }
+
+        if (requestedIndex < 0) {
+            return 0;
+        }
+
+        const std::size_t safeIndex = static_cast<std::size_t>(requestedIndex);
+        if (safeIndex >= itemCount) {
+            return static_cast<int>(itemCount - 1);
+        }
+
+        return requestedIndex;
+    }
+
+    void setInitialIndex(int index);
+
     int index() const {
         return m_index;
     }
@@ -112,6 +117,7 @@ private:
     Side m_side = Side::Right;
     std::vector<std::unique_ptr<SidebarEntryBase>> m_items;
     std::unique_ptr<List> m_list;
+    int m_initialIndex = 0;
     int m_index = 0;
     std::string m_statusMessage;
 };
