@@ -120,7 +120,6 @@ backend/dropbox-bridge/   # 선택적 OAuth 브리지 서비스
 docs/                     # 문서
   ├── backend/            # 백엔드 아키텍처 문서
   └── frontend/           # 프론트엔드 UI 문서
-BUILD.md                  # 빌드 가이드 (한국어)
 RELEASE_NOTES_*.md        # 릴리즈 노트
 ```
 
@@ -333,19 +332,51 @@ device_priority.txt  -> 100
 - 기기 간 복원은 지원되지만 복원 전 소스 기기 라벨을 확인해야 함
 - 이 프로젝트는 아직 알파 단계이므로 중요하지 않은 세이브로 복원 동작을 주의 깊게 테스트해야 함
 
-## 빌드
+## 소스에서 빌드
 
-devkitPro 컨테이너로 빌드:
+### 빌드 환경
+
+이 프로젝트는 Nintendo Switch 타겟으로 devkitPro가 필요합니다. 로컬에 devkitPro가 없으면 Docker 이미지를 사용하세요.
+
+**Docker (권장):**
 
 ```bash
 docker run --rm -v "$PWD":/work -w /work devkitpro/devkita64 make
 ```
 
-출력:
+**로컬 devkitPro:**
+
+```bash
+make
+```
+
+### Dropbox App Key로 빌드
+
+방법 1: `.env` 파일 (로컬 개발 권장):
+
+```bash
+echo "DROPBOX_APP_KEY=your_app_key" > .env
+make
+```
+
+방법 2: 명령줄 인자:
+
+```bash
+make DROPBOX_APP_KEY="your_app_key"
+```
+
+GitHub Actions에서는 저장소 시크릿 `DROPBOX_APP_KEY`를 설정하세요.
+
+### 빌드 결과물
 
 ```text
 oc-save-keeper.nro
 ```
+
+### 개발 노트
+
+- **Include 의존성**: `SaveShell.hpp` 수정 시 `network/Dropbox.hpp`를 포함해야 `DropboxBridgeSession` 타입을 인식할 수 있습니다.
+- **다국어**: 새 UI 문구 추가 시 `romfs/lang/ko.json`과 `romfs/lang/en.json`을 모두 업데이트하세요.
 
 ## 테스트
 
@@ -389,7 +420,6 @@ GitHub Actions가 자동으로 릴리즈 패키지를 빌드합니다.
 
 | 문서 | 설명 |
 |------|------|
-| [BUILD.md](BUILD.md) | 빌드 가이드 (한국어) |
 | [docs/TESTING.md](docs/TESTING.md) | 테스트 가이드 및 체크리스트 |
 | [docs/TDD.md](docs/TDD.md) | TDD 워크플로우 가이드 |
 | [docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md](docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md) | Dropbox 브리지 아키텍처 (한국어) |

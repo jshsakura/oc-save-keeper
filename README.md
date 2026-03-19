@@ -119,7 +119,6 @@ backend/dropbox-bridge/   # Optional OAuth bridge service
 docs/                     # Documentation
   ├── backend/            # Backend architecture docs
   └── frontend/           # Frontend UI docs
-BUILD.md                  # Build guide (Korean)
 RELEASE_NOTES_*.md        # Release notes
 ```
 
@@ -332,19 +331,51 @@ Useful things to record when reporting an issue:
 - Cross-device restore is supported, but users should still verify the source device label before restoring.
 - This project is still in alpha, so restore behavior should be tested carefully with non-critical saves first.
 
-## Build
+## Building from Source
 
-Build with the devkitPro container:
+### Build Environment
+
+This project targets Nintendo Switch and requires devkitPro. If devkitPro is not installed locally, use the Docker image.
+
+**Docker (recommended):**
 
 ```bash
 docker run --rm -v "$PWD":/work -w /work devkitpro/devkita64 make
 ```
 
-The build output is:
+**Local devkitPro:**
+
+```bash
+make
+```
+
+### Build with Dropbox App Key
+
+Option 1: `.env` file (recommended for local development):
+
+```bash
+echo "DROPBOX_APP_KEY=your_app_key" > .env
+make
+```
+
+Option 2: Command-line argument:
+
+```bash
+make DROPBOX_APP_KEY="your_app_key"
+```
+
+For GitHub Actions, set the `DROPBOX_APP_KEY` repository secret.
+
+### Build Output
 
 ```text
 oc-save-keeper.nro
 ```
+
+### Development Notes
+
+- **Include dependency**: When modifying `SaveShell.hpp`, ensure `network/Dropbox.hpp` is included to recognize `DropboxBridgeSession` type.
+- **Localization**: When adding new UI strings, update both `romfs/lang/ko.json` and `romfs/lang/en.json`.
 
 ## Test
 
@@ -388,7 +419,6 @@ It is designed to:
 
 | Document | Description |
 |----------|-------------|
-| [BUILD.md](BUILD.md) | Build guide (Korean) |
 | [docs/TESTING.md](docs/TESTING.md) | Test guide and checklist |
 | [docs/TDD.md](docs/TDD.md) | TDD workflow guide |
 | [docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md](docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md) | Dropbox bridge architecture (Korean) |
