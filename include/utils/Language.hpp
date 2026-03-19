@@ -9,6 +9,7 @@
 #include <map>
 #include <initializer_list>
 #include <json-c/json.h>
+#include <cstdio>
 
 #ifdef __SWITCH__
 #include <switch.h>
@@ -16,8 +17,11 @@
 
 #include "utils/Paths.hpp"
 #include "utils/SettingsStore.hpp"
+#include "fs/FileUtil.hpp"
 
 namespace utils {
+
+// ScopedJson is defined in SettingsStore.hpp
 
 class Language {
 public:
@@ -26,7 +30,6 @@ public:
         return lang;
     }
     
-    // Initialize with saved or auto-detected system language
     bool init() {
         std::string langCode = loadSavedLanguage();
         if (langCode.empty()) {
@@ -38,10 +41,10 @@ public:
     bool load(const std::string& langCode) {
         saveLanguagePreference(langCode);
         std::string path = "romfs:/lang/" + langCode + ".json";
-        FILE* file = fopen(path.c_str(), "r");
+        fs::ScopedFile file(std::fopen(path.c_str(), "r"));
         if (!file) {
             path = std::string(utils::paths::ROOT) + "/lang/" + langCode + ".json";
-            file = fopen(path.c_str(), "r");
+            file = fs::ScopedFile(std::fopen(path.c_str(), "r"));
         }
         
         if (!file) {
@@ -49,17 +52,16 @@ public:
             return true;
         }
         
-        fseek(file, 0, SEEK_END);
-        long size = ftell(file);
-        fseek(file, 0, SEEK_SET);
+        std::fseek(file.get(), 0, SEEK_END);
+        long size = std::ftell(file.get());
+        std::fseek(file.get(), 0, SEEK_SET);
         
         std::string buffer(static_cast<std::size_t>(size), '\0');
         if (size > 0) {
-            fread(buffer.data(), 1, static_cast<std::size_t>(size), file);
+            std::fread(buffer.data(), 1, static_cast<std::size_t>(size), file.get());
         }
-        fclose(file);
         
-        json_object* root = json_tokener_parse(buffer.c_str());
+        ScopedJson root(json_tokener_parse(buffer.c_str()));
         
         if (!root) {
             loadBuiltIn(langCode);
@@ -68,11 +70,10 @@ public:
         
         m_strings.clear();
         
-        json_object_object_foreach(root, key, val) {
+        json_object_object_foreach(root.get(), key, val) {
             m_strings[key] = json_object_get_string(val);
         }
         
-        json_object_put(root);
         m_currentLang = langCode;
         
         return true;
@@ -83,7 +84,7 @@ public:
         if (it != m_strings.end()) {
             return it->second;
         }
-        return "[" + key + "]"; // Missing key indicator
+        return "[" + key + "]";
     }
     
     const char* c_str(const std::string& key) const {
@@ -109,16 +110,14 @@ private:
             return saved;
         }
 
-        FILE* f = fopen(utils::paths::LANGUAGE_PREF, "r");
+        fs::ScopedFile f(std::fopen(utils::paths::LANGUAGE_PREF, "r"));
         if (f) {
             char buf[8];
-            if (fgets(buf, sizeof(buf), f)) {
-                fclose(f);
+            if (std::fgets(buf, sizeof(buf), f.get())) {
                 std::string s(buf);
                 if (!s.empty() && s.back() == '\n') s.pop_back();
                 return s;
             }
-            fclose(f);
         }
         return "";
     }
@@ -349,7 +348,6 @@ private:
     
     std::string detectSystemLanguage() {
 #ifdef __SWITCH__
-        // Force setInitialize to be safe, but default to ko
         Result rc = setInitialize();
         if (R_SUCCEEDED(rc)) {
             u64 languageCode = 0;
@@ -370,7 +368,6 @@ private:
     std::string m_currentLang;
 };
 
-// Macro for easy access
 #define LANG(key) utils::Language::instance().c_str(key)
 
 } // namespace utils

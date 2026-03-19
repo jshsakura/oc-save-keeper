@@ -37,7 +37,12 @@ Runtime::Runtime() {
 }
 
 void Runtime::push(std::shared_ptr<Object> object) {
-    if (object) {
+    if (!object) return;
+    if (m_stack.size() >= MAX_STACK_DEPTH) {
+        m_stack.erase(m_stack.begin() + 1);
+    }
+    m_stack.push_back(std::move(object));
+}
         m_stack.push_back(std::move(object));
     }
 }

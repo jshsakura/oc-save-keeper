@@ -11,7 +11,6 @@
 #include <mutex>
 #include <curl/curl.h>
 
-#include "utils/Config.hpp"
 #include "utils/Logger.hpp"
 
 namespace network {
@@ -46,6 +45,8 @@ struct DropboxBridgeSession {
 
 class Dropbox {
 public:
+    static constexpr size_t MAX_DROPBOX_FILES = 1000;
+
     Dropbox();
     ~Dropbox();
     

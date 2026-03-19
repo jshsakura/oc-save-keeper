@@ -54,12 +54,12 @@ private:
     TTF_Font* m_font = nullptr;
     class SaveShell* m_shell = nullptr;
     Theme m_theme{};
+    static constexpr size_t MAX_STACK_DEPTH = 10;
     std::vector<std::shared_ptr<Object>> m_stack{};
     std::string m_lastNotification{};
     bool m_isLoading = false;
     std::string m_loadingMessage;
     
-    // Cached loading texture to avoid per-frame allocation
     SDL_Texture* m_loadingTexture = nullptr;
     std::string m_loadingTextureText;
 };

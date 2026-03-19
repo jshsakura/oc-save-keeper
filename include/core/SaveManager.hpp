@@ -103,6 +103,11 @@ struct SyncDecision {
 
 class SaveManager {
 public:
+    static constexpr size_t MAX_TITLES = 500;
+    static constexpr size_t MAX_USERS = 8;
+    static constexpr size_t MAX_BACKUP_VERSIONS = 100;
+    static constexpr size_t MAX_TRASH_ITEMS = 50;
+
     SaveManager();
     ~SaveManager();
     

@@ -137,10 +137,7 @@ The app creates its data folder automatically on first run:
 ├── backups/           # Local save backups
 ├── logs/              # Log files
 ├── temp/              # Temporary files
-├── config/            # Dropbox auth and settings
-├── device_id.txt      # Device identifier
-├── device_label.txt   # Human-readable device name
-└── device_priority.txt # Conflict priority value
+└── config/            # Dropbox auth, device settings (settings.json)
 ```
 
 ## Dropbox Setup
@@ -246,23 +243,19 @@ Current behavior:
 
 If you use more than one Switch, each device should keep its own identity:
 
-- `device_id.txt`: stable internal identifier
-- `device_label.txt`: human-readable device name
-- `device_priority.txt`: larger number wins conflicts
+- `device_id`: stable internal identifier (auto-generated)
+- `device_priority`: larger number wins conflicts
 
-Example:
+Both are stored in `config/settings.json`. Example:
 
-```text
-device_label.txt     -> OLED Main
-device_priority.txt  -> 200
+```json
+{
+  "device_id": "abc123",
+  "device_priority": 200
+}
 ```
 
-Another device might use:
-
-```text
-device_label.txt     -> Lite Backup
-device_priority.txt  -> 100
-```
+Another device might use `device_priority: 100`.
 
 ## Basic Usage
 

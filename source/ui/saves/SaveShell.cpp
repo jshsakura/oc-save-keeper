@@ -125,6 +125,7 @@ TTF_Font* openSharedFont(const PlFontData& font, int size) {
     TTF_Font* ttfFont = TTF_OpenFontRW(rw, 1, size);
     if (!ttfFont) {
         LOG_ERROR("TTF_OpenFontRW failed for SaveShell font: %s", TTF_GetError());
+        SDL_FreeRW(rw);
     }
     return ttfFont;
 }

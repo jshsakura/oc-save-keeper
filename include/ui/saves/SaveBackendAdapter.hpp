@@ -18,17 +18,16 @@ public:
 
     std::vector<SaveTitleEntry> listTitles() override;
     std::vector<SaveRevisionEntry> listRevisions(uint64_t titleId, SaveSource source) override;
-
     SaveActionResult backup(uint64_t titleId) override;
     SaveActionResult restore(uint64_t titleId, const std::string& revisionId, SaveSource source) override;
     SaveActionResult upload(uint64_t titleId) override;
     SaveActionResult download(uint64_t titleId, const std::string& revisionId) override;
     SaveActionResult refresh(uint64_t titleId) override;
     SaveActionResult deleteRevision(uint64_t titleId, const std::string& revisionId, SaveSource source) override;
-
     void setTargetType(uint64_t titleId, bool isDevice, bool isSystem) override;
-
     bool isCloudAuthenticated() const override;
+    void invalidateCache() { g_remoteCacheValid = false; }
+    void invalidateAllCaches() { g_remoteTitleCache.clear(); g_remoteCacheValid = false; }
 
 private:
     core::SaveManager& m_saveManager;

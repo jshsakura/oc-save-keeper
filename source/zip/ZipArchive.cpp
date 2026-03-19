@@ -112,15 +112,14 @@ void ZipArchive::close() {
 bool ZipArchive::addFile(const std::string& sourcePath, const std::string& archivePath) {
     if (!m_isOpen || !m_isWriting) return false;
     
-    FILE* srcFile = fopen(sourcePath.c_str(), "rb");
+    fs::ScopedFile srcFile(fopen(sourcePath.c_str(), "rb"));
     if (!srcFile) {
         LOG_ERROR("Failed to open source file: %s", sourcePath.c_str());
         return false;
     }
     
-    fseek(srcFile, 0, SEEK_SET);
+    fseek(srcFile.get(), 0, SEEK_SET);
     
-    // Get file modification time
     struct stat st;
     time_t modTime = time(nullptr);
     if (stat(sourcePath.c_str(), &st) == 0) {
@@ -128,7 +127,6 @@ bool ZipArchive::addFile(const std::string& sourcePath, const std::string& archi
     }
     struct tm* t = localtime(&modTime);
     
-    // Setup zip file info
     zip_fileinfo zi = {};
     zi.dosDate = 0;
     zi.tmz_date.tm_year = t->tm_year;
@@ -138,22 +136,19 @@ bool ZipArchive::addFile(const std::string& sourcePath, const std::string& archi
     zi.tmz_date.tm_min = t->tm_min;
     zi.tmz_date.tm_sec = t->tm_sec;
     
-    // Open new entry in zip
     int err = zipOpenNewFileInZip(m_zip, archivePath.c_str(), &zi,
                                    nullptr, 0, nullptr, 0, nullptr,
                                    Z_DEFLATED, Z_DEFAULT_COMPRESSION);
     if (err != ZIP_OK) {
         LOG_ERROR("Failed to create ZIP entry: %s", archivePath.c_str());
-        fclose(srcFile);
         return false;
     }
     
-    // Copy file data
     std::array<char, ZIP_BUFFER_SIZE> buffer{};
     bool success = true;
     
-    while (!feof(srcFile) && success) {
-        size_t bytesRead = fread(buffer.data(), 1, ZIP_BUFFER_SIZE, srcFile);
+    while (!feof(srcFile.get()) && success) {
+        size_t bytesRead = fread(buffer.data(), 1, ZIP_BUFFER_SIZE, srcFile.get());
         if (bytesRead > 0) {
             err = zipWriteInFileInZip(m_zip, buffer.data(), bytesRead);
             if (err != ZIP_OK) {
@@ -163,7 +158,6 @@ bool ZipArchive::addFile(const std::string& sourcePath, const std::string& archi
         }
     }
 
-    fclose(srcFile);
     zipCloseFileInZip(m_zip);
     
     return success;
@@ -208,13 +202,11 @@ bool ZipArchive::addDirectory(const std::string& sourceDir, const std::string& a
 bool ZipArchive::extractFile(const std::string& archivePath, const std::string& destPath) {
     if (!m_isOpen || m_isWriting) return false;
     
-    // Find file in archive
     if (unzLocateFile(m_unz, archivePath.c_str(), 0) != UNZ_OK) {
         LOG_ERROR("File not found in ZIP: %s", archivePath.c_str());
         return false;
     }
     
-    // Get file info
     unz_file_info64 info;
     char filename[256];
     if (unzGetCurrentFileInfo64(m_unz, &info, filename, sizeof(filename), 
@@ -222,33 +214,29 @@ bool ZipArchive::extractFile(const std::string& archivePath, const std::string& 
         return false;
     }
     
-    // Open file in archive
     if (unzOpenCurrentFile(m_unz) != UNZ_OK) {
         LOG_ERROR("Failed to open file in ZIP: %s", archivePath.c_str());
         return false;
     }
     
-    // Create destination directory
     size_t lastSlash = destPath.rfind('/');
     if (lastSlash != std::string::npos) {
         fs::ensureDirectoryExists(destPath.substr(0, lastSlash));
     }
     
-    // Create destination file
-    FILE* dstFile = fopen(destPath.c_str(), "wb");
+    fs::ScopedFile dstFile(fopen(destPath.c_str(), "wb"));
     if (!dstFile) {
         LOG_ERROR("Failed to create file: %s", destPath.c_str());
         unzCloseCurrentFile(m_unz);
         return false;
     }
     
-    // Extract data
     std::array<char, ZIP_BUFFER_SIZE> buffer{};
     bool success = true;
     int bytesRead;
     
     while ((bytesRead = unzReadCurrentFile(m_unz, buffer.data(), ZIP_BUFFER_SIZE)) > 0) {
-        if (fwrite(buffer.data(), 1, bytesRead, dstFile) != (size_t)bytesRead) {
+        if (fwrite(buffer.data(), 1, bytesRead, dstFile.get()) != (size_t)bytesRead) {
             LOG_ERROR("Failed to write file: %s", destPath.c_str());
             success = false;
             break;
@@ -260,7 +248,6 @@ bool ZipArchive::extractFile(const std::string& archivePath, const std::string& 
         success = false;
     }
     
-    fclose(dstFile);
     int crcResult = unzCloseCurrentFile(m_unz);
     if (crcResult == UNZ_CRCERROR) {
         LOG_ERROR("ZIP CRC check failed for: %s", archivePath.c_str());
@@ -338,6 +325,11 @@ std::vector<std::string> ZipArchive::listFiles() {
     if (unzGoToFirstFile(m_unz) != UNZ_OK) return files;
     
     do {
+        // Memory safety: limit entries to prevent unbounded growth
+        if (files.size() >= MAX_ZIP_ENTRIES) {
+            LOG_WARN("ZipArchive: reached MAX_ZIP_ENTRIES limit (%zu)", MAX_ZIP_ENTRIES);
+            break;
+        }
         char filename[512];
         if (unzGetCurrentFileInfo64(m_unz, nullptr, filename, sizeof(filename),
                                      nullptr, 0, nullptr, 0) == UNZ_OK) {
@@ -360,27 +352,21 @@ bool ZipArchive::hasFile(const std::string& archivePath) {
 // SaveMeta implementation
 
 bool SaveMeta::writeToFile(const std::string& path) const {
-    FILE* f = fopen(path.c_str(), "wb");
+    fs::ScopedFile f(std::fopen(path.c_str(), "wb"));
     if (!f) return false;
     
-    bool success = fwrite(this, sizeof(SaveMeta), 1, f) == 1;
-    fclose(f);
-    return success;
+    return std::fwrite(this, sizeof(SaveMeta), 1, f.get()) == 1;
 }
 
 bool SaveMeta::readFromFile(const std::string& path) {
-    FILE* f = fopen(path.c_str(), "rb");
+    fs::ScopedFile f(std::fopen(path.c_str(), "rb"));
     if (!f) return false;
     
-    bool success = fread(this, sizeof(SaveMeta), 1, f) == 1;
-    fclose(f);
-    
-    // Verify magic and version
-    if (magic != MAGIC || version > VERSION) {
+    if (std::fread(this, sizeof(SaveMeta), 1, f.get()) != 1) {
         return false;
     }
     
-    return success;
+    return magic == MAGIC && version <= VERSION;
 }
 
 } // namespace zip

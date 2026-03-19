@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/SaveManager.hpp"
+#include "fs/FileUtil.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -88,56 +89,48 @@ inline bool parseBackupMetadata(const std::string& text, BackupMetadata& outMeta
 }
 
 inline bool writeBackupMetadataFile(const std::string& metadataPath, const BackupMetadata& meta) {
-    FILE* file = std::fopen(metadataPath.c_str(), "w");
+    fs::ScopedFile file(std::fopen(metadataPath.c_str(), "w"));
     if (!file) {
         return false;
     }
 
     const std::string text = serializeBackupMetadata(meta);
-    const bool ok = std::fputs(text.c_str(), file) >= 0;
-    std::fclose(file);
-    return ok;
+    return std::fputs(text.c_str(), file.get()) >= 0;
 }
 
 inline bool readBackupMetadataFile(const std::string& metadataPath, BackupMetadata& outMeta) {
-    FILE* file = std::fopen(metadataPath.c_str(), "r");
+    fs::ScopedFile file(std::fopen(metadataPath.c_str(), "r"));
     if (!file) {
         return false;
     }
 
     std::string text;
     char line[512];
-    while (std::fgets(line, sizeof(line), file)) {
+    while (std::fgets(line, sizeof(line), file.get())) {
         text += line;
     }
 
-    std::fclose(file);
     return parseBackupMetadata(text, outMeta);
 }
 
 inline bool copyMetadataFile(const std::string& sourcePath, const std::string& destinationPath) {
-    FILE* source = std::fopen(sourcePath.c_str(), "r");
+    fs::ScopedFile source(std::fopen(sourcePath.c_str(), "r"));
     if (!source) {
         return false;
     }
 
-    FILE* destination = std::fopen(destinationPath.c_str(), "w");
+    fs::ScopedFile destination(std::fopen(destinationPath.c_str(), "w"));
     if (!destination) {
-        std::fclose(source);
         return false;
     }
 
     char buffer[512];
-    while (std::fgets(buffer, sizeof(buffer), source)) {
-        if (std::fputs(buffer, destination) < 0) {
-            std::fclose(source);
-            std::fclose(destination);
+    while (std::fgets(buffer, sizeof(buffer), source.get())) {
+        if (std::fputs(buffer, destination.get()) < 0) {
             return false;
         }
     }
 
-    std::fclose(source);
-    std::fclose(destination);
     return true;
 }
 

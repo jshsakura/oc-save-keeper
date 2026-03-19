@@ -51,30 +51,27 @@ bool copyFileWithProgress(const std::string& source, const std::string& dest,
                           int64_t journalSize,
                           const std::string& mountName,
                           std::function<void(size_t, size_t)> progressCallback) {
-    FILE* srcFile = fopen(source.c_str(), "rb");
+    ScopedFile srcFile(fopen(source.c_str(), "rb"));
     if (!srcFile) {
         LOG_ERROR("FS: Failed to open source %s", source.c_str());
         return false;
     }
     
-    if (fseek(srcFile, 0, SEEK_END) != 0) {
+    if (fseek(srcFile.get(), 0, SEEK_END) != 0) {
         LOG_ERROR("FS: Failed to seek in source %s", source.c_str());
-        fclose(srcFile);
         return false;
     }
-    long long fileSizeLong = ftell(srcFile);
+    long long fileSizeLong = ftell(srcFile.get());
     if (fileSizeLong < 0) {
         LOG_ERROR("FS: Failed to get file size for %s", source.c_str());
-        fclose(srcFile);
         return false;
     }
     size_t fileSize = static_cast<size_t>(fileSizeLong);
-    fseek(srcFile, 0, SEEK_SET);
+    fseek(srcFile.get(), 0, SEEK_SET);
     
-    FILE* dstFile = fopen(dest.c_str(), "wb");
+    ScopedFile dstFile(fopen(dest.c_str(), "wb"));
     if (!dstFile) {
         LOG_ERROR("FS: Failed to create dest %s", dest.c_str());
-        fclose(srcFile);
         return false;
     }
     
@@ -83,9 +80,9 @@ bool copyFileWithProgress(const std::string& source, const std::string& dest,
     size_t totalCopied = 0;
     bool success = true;
     
-    while (success && !feof(srcFile)) {
-        size_t readSize = fread(buffer.data(), 1, COPY_BUFFER_SIZE, srcFile);
-        if (readSize == 0 && !feof(srcFile)) {
+    while (success && !feof(srcFile.get())) {
+        size_t readSize = fread(buffer.data(), 1, COPY_BUFFER_SIZE, srcFile.get());
+        if (readSize == 0 && !feof(srcFile.get())) {
             LOG_ERROR("FS: Read error in %s", source.c_str());
             success = false;
             break;
@@ -94,17 +91,17 @@ bool copyFileWithProgress(const std::string& source, const std::string& dest,
         if (readSize > 0) {
             // Check journal size before writing (JKSV Style)
             if (journalSize > 0 && journalCount + (int64_t)readSize >= journalSize) {
-                fclose(dstFile);
+                dstFile = ScopedFile(nullptr);  // Close via RAII
                 LOG_INFO("FS: Journal threshold reached, committing %s", mountName.c_str());
                 physicalCommit(mountName);
                 
-                dstFile = fopen(dest.c_str(), "rb+");
+                dstFile = ScopedFile(fopen(dest.c_str(), "rb+"));
                 if (!dstFile) {
                     LOG_ERROR("FS: Failed to re-open dest %s after commit", dest.c_str());
                     success = false;
                     break;
                 }
-                if (fseek(dstFile, (long)totalCopied, SEEK_SET) != 0) {
+                if (fseek(dstFile.get(), (long)totalCopied, SEEK_SET) != 0) {
                     LOG_ERROR("FS: CRITICAL - Failed to seek to position %zu in %s after commit!", totalCopied, dest.c_str());
                     success = false;
                     break;
@@ -112,7 +109,7 @@ bool copyFileWithProgress(const std::string& source, const std::string& dest,
                 journalCount = 0;
             }
 
-            size_t written = fwrite(buffer.data(), 1, readSize, dstFile);
+            size_t written = fwrite(buffer.data(), 1, readSize, dstFile.get());
             if (written != readSize) {
                 LOG_ERROR("FS: Write error in %s", dest.c_str());
                 success = false;
@@ -127,9 +124,6 @@ bool copyFileWithProgress(const std::string& source, const std::string& dest,
             }
         }
     }
-    
-    fclose(srcFile);
-    if (dstFile) fclose(dstFile);
     
     if (success) {
         physicalCommit(mountName);

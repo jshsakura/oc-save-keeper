@@ -10,7 +10,6 @@
 #include <functional>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <switch.h>
 #include <cstdio>
 #include "utils/Logger.hpp"
 
@@ -34,45 +33,38 @@ struct ScopedFile {
     operator bool() const { return fp != nullptr; }
 };
 
+struct ScopedDir {
+    DIR* dp = nullptr;
+    explicit ScopedDir(DIR* d = nullptr) : dp(d) {}
+    ~ScopedDir() { if (dp) closedir(dp); }
+    ScopedDir(const ScopedDir&) = delete;
+    ScopedDir& operator=(const ScopedDir&) = delete;
+    ScopedDir(ScopedDir&& o) noexcept : dp(o.dp) { o.dp = nullptr; }
+    ScopedDir& operator=(ScopedDir&& o) noexcept {
+        if (this != &o) { if (dp) closedir(dp); dp = o.dp; o.dp = nullptr; }
+        return *this;
+    }
+    DIR* get() const { return dp; }
+    operator bool() const { return dp != nullptr; }
+};
+
 bool ensureDirectoryExists(const std::string& path);
 
-/**
- * Recursive directory copy with progress and JKSV-style physical commits
- * @param mountName For save data, the fsdev mount name (e.g., "save") to commit to.
- */
 bool copyDirectoryWithProgress(const std::string& source, const std::string& dest,
                                int64_t journalSize = DEFAULT_JOURNAL_SIZE,
                                const std::string& mountName = "",
                                std::function<void(size_t, size_t)> progressCallback = nullptr);
-
-/**
- * File copy with JKSV-style physical commits (Close -> Commit -> Open)
- * @param mountName If not empty, will call fsdevCommitDevice(mountName) during the copy.
- */
 bool copyFileWithProgress(const std::string& source, const std::string& dest,
                           int64_t journalSize = DEFAULT_JOURNAL_SIZE,
                           const std::string& mountName = "",
                           std::function<void(size_t, size_t)> progressCallback = nullptr);
-
-/**
- * Safely delete all contents inside a directory WITHOUT deleting the directory itself.
- * Crucial for clearing save mounts (e.g. "save:") before restoration without unmounting.
- */
 bool clearDirectoryContents(const std::string& path);
-
-/**
- * Recursive directory deletion
- */
 bool deleteDirectory(const std::string& path);
-
-/**
- * Get total size of a directory
- */
 int64_t getDirectorySize(const std::string& path);
-
-/**
- * Get journal size for a specific title (or default)
- */
+#ifdef __SWITCH__
 int64_t getSaveJournalSize(uint64_t titleId);
+#else
+inline int64_t getSaveJournalSize(uint64_t) { return DEFAULT_JOURNAL_SIZE; }
+#endif
 
 } // namespace fs

@@ -54,18 +54,16 @@ std::string sanitizePathComponent(std::string value) {
 }
 
 std::string readLineFromFile(const char* path) {
-    FILE* file = fopen(path, "r");
+    fs::ScopedFile file(fopen(path, "r"));
     if (!file) {
         return "";
     }
 
     char buffer[128] = {0};
-    if (!fgets(buffer, sizeof(buffer), file)) {
-        fclose(file);
+    if (!fgets(buffer, sizeof(buffer), file.get())) {
         return "";
     }
 
-    fclose(file);
     buffer[strcspn(buffer, "\r\n")] = 0;
     return buffer;
 }
@@ -73,14 +71,12 @@ std::string readLineFromFile(const char* path) {
 
 
 bool writeBinaryFile(const char* path, const void* data, size_t size) {
-    FILE* file = fopen(path, "wb");
+    fs::ScopedFile file(fopen(path, "wb"));
     if (!file) {
         return false;
     }
 
-    const bool success = fwrite(data, 1, size, file) == size;
-    fclose(file);
-    return success;
+    return fwrite(data, 1, size, file.get()) == size;
 }
 
 bool looksBrokenDeviceToken(const std::string& value) {
@@ -251,6 +247,10 @@ bool SaveManager::loadUsers() {
                         writeBinaryFile(userIconPath, image.data(), imageSize);
                         user.iconPath = userIconPath;
                     }
+                }
+                if (m_users.size() >= MAX_USERS) {
+                    LOG_WARN("Max users limit reached (%zu), skipping remaining", MAX_USERS);
+                    break;
                 }
                 m_users.push_back(user);
             }
@@ -501,6 +501,9 @@ bool SaveManager::scanTitle(uint64_t titleId) {
     info.savePath = backupPath;
     
     m_titles.push_back(info);
+    if (m_titles.size() >= MAX_TITLES) {
+        LOG_WARN("Max titles limit reached (%zu), skipping remaining", MAX_TITLES);
+    }
     return true;
 }
 

@@ -138,10 +138,7 @@ RELEASE_NOTES_*.md        # 릴리즈 노트
 ├── backups/           # 로컬 세이브 백업
 ├── logs/              # 로그 파일
 ├── temp/              # 임시 파일
-├── config/            # Dropbox 인증 및 설정
-├── device_id.txt      # 기기 식별자
-├── device_label.txt   # 사용자 지정 기기 이름
-└── device_priority.txt # 충돌 시 우선순위 값
+└── config/            # Dropbox 인증, 기기 설정 (settings.json)
 ```
 
 ## Dropbox 설정
@@ -247,23 +244,19 @@ DROPBOX_BRIDGE_BASE=https://example.yourdomain.com
 
 두 대 이상의 Switch를 사용한다면 각 기기마다 고유 ID를 유지하세요:
 
-- `device_id.txt`: 안정적인 내부 식별자
-- `device_label.txt`: 사람이 읽을 수 있는 기기 이름
-- `device_priority.txt`: 큰 숫자가 충돌 시 우선
+- `device_id`: 안정적인 내부 식별자 (자동 생성)
+- `device_priority`: 큰 숫자가 충돌 시 우선
 
-예시:
+둘 다 `config/settings.json`에 저장됩니다. 예시:
 
-```text
-device_label.txt     -> OLED 메인
-device_priority.txt  -> 200
+```json
+{
+  "device_id": "abc123",
+  "device_priority": 200
+}
 ```
 
-다른 기기:
-
-```text
-device_label.txt     -> Lite 서브
-device_priority.txt  -> 100
-```
+다른 기기는 `device_priority: 100` 등으로 설정할 수 있습니다.
 
 ## 기본 사용
 

@@ -22,6 +22,17 @@ namespace {
 static std::set<uint64_t> g_remoteTitleCache;
 static bool g_remoteCacheValid = false;
 
+// Maximum cache size to prevent unbounded growth (1000 titles ~= 8KB)
+constexpr size_t MAX_REMOTE_CACHE_SIZE = 1000;
+
+static void trimRemoteCache() {
+    if (g_remoteTitleCache.size() > MAX_REMOTE_CACHE_SIZE) {
+        auto it = g_remoteTitleCache.begin();
+        std::advance(it, g_remoteTitleCache.size() - MAX_REMOTE_CACHE_SIZE);
+        g_remoteTitleCache.erase(g_remoteTitleCache.begin(), it);
+    }
+}
+
 const char* saveTypeLabel(core::SaveType type) {
     switch (type) {
         case core::SaveType::System:
@@ -128,12 +139,17 @@ std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
         for (const auto& file : remoteFiles) {
             if (file.isFolder) {
                 char* endptr = nullptr;
-                uint64_t tid = std::strtoull(file.name.c_str(), &endptr, 16);
-                if (endptr && *endptr == '\0') {
+                uint64_t tid = std::strtoull(file.name.c_str(), &endptr,                if (endptr && *endptr == '\0') {
                     g_remoteTitleCache.insert(tid);
                 }
             }
         }
+        trimRemoteCache();
+        g_remoteCacheValid = true;
+    }
+            }
+        }
+        trimRemoteCache();
         g_remoteCacheValid = true;
     }
 

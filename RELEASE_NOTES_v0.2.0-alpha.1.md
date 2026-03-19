@@ -57,10 +57,8 @@ Second alpha build with major safety and UX improvements.
 - `/switch/oc-save-keeper/backups/...`
 - `/switch/oc-save-keeper/logs/...`
 - `/switch/oc-save-keeper/temp/...`
-- `/switch/oc-save-keeper/device_id.txt`
-- `/switch/oc-save-keeper/device_label.txt`
-- `/switch/oc-save-keeper/device_priority.txt`
 - `/switch/oc-save-keeper/config/dropbox_auth.json`
+- `/switch/oc-save-keeper/config/settings.json` (device_id, device_priority)
 
 ## Important Notes
 
@@ -92,7 +90,7 @@ Second alpha build with major safety and UX improvements.
 - Existing local backups are compatible
 - Dropbox cloud paths have been restructured to title-centric model
 - Old cloud backups may need to be re-uploaded for proper organization
-- Device identity files (`device_id.txt`, `device_label.txt`, `device_priority.txt`) are preserved
+- Device identity (device_id, device_priority in settings.json) is preserved
 
 ## Changelog Summary
 

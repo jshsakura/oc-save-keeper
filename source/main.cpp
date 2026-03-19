@@ -17,6 +17,12 @@
 #include "utils/Logger.hpp"
 #include "utils/Paths.hpp"
 
+#if defined(LIBNX_VERSION_MAJOR) && defined(LIBNX_VERSION_MINOR)
+#if LIBNX_VERSION_MAJOR < 4 || (LIBNX_VERSION_MAJOR == 4 && LIBNX_VERSION_MINOR < 10)
+#error "libnx 4.10.0+ required for firmware 21.0.0 TLS ABI compatibility. Please update libnx."
+#endif
+#endif
+
 constexpr int SCREEN_WIDTH = 1280;
 constexpr int SCREEN_HEIGHT = 720;
 
