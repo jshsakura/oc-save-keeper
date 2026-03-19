@@ -41,7 +41,9 @@ Language: [English](README.md) | **한국어**
 - [Dropbox 브리지(선택)](#dropbox-브리지선택)
 - [동기화 판단 방식](#동기화-판단-방식)
 - [빌드](#빌드)
+- [테스트](#테스트)
 - [릴리즈 자동화](#릴리즈-자동화)
+- [문서](#문서)
 
 ## 주요 기능
 
@@ -113,8 +115,12 @@ source/                   # 앱 소스 코드
 include/                  # 헤더 파일
 tests/                    # 호스트 단위 테스트
 romfs/lang/               # 런타임 언어 JSON
+romfs/gfx/                # 그래픽 리소스
 backend/dropbox-bridge/   # 선택적 OAuth 브리지 서비스
 docs/                     # 문서
+  ├── backend/            # 백엔드 아키텍처 문서
+  └── frontend/           # 프론트엔드 UI 문서
+BUILD.md                  # 빌드 가이드 (한국어)
 RELEASE_NOTES_*.md        # 릴리즈 노트
 ```
 
@@ -342,6 +348,26 @@ docker run --rm -v "$PWD":/work -w /work devkitpro/devkita64 make
 oc-save-keeper.nro
 ```
 
+## 테스트
+
+로컬에서 호스트 유닛 테스트 실행:
+
+```bash
+make test
+```
+
+### 테스트 커버리지
+
+| 모듈 | 테스트 | 상태 |
+|------|--------|------|
+| Dropbox util | 17 | ✅ |
+| Metadata logic | 4 | ✅ |
+| Metadata file | 6 | ✅ |
+| Sync logic | 3 | ✅ |
+| **합계** | **30** | ✅ |
+
+상세 테스트 체크리스트는 [docs/TESTING.md](docs/TESTING.md) 참조.
+
 ## 릴리즈 자동화
 
 GitHub Actions가 자동으로 릴리즈 패키지를 빌드합니다.
@@ -359,6 +385,16 @@ GitHub Actions가 자동으로 릴리즈 패키지를 빌드합니다.
 - 워크플로우 실행 시 아티팩트 업로드
 - `main` 푸시마다 `latest` 프리릴리즈 갱신
 - 태그 릴리즈(`v*`) 시 에셋 첨부
+
+## 문서
+
+| 문서 | 설명 |
+|------|------|
+| [BUILD.md](BUILD.md) | 빌드 가이드 (한국어) |
+| [docs/TESTING.md](docs/TESTING.md) | 테스트 가이드 및 체크리스트 |
+| [docs/TDD.md](docs/TDD.md) | TDD 워크플로우 가이드 |
+| [docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md](docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md) | Dropbox 브리지 아키텍처 (한국어) |
+| [docs/frontend/SAVE_UI_MIGRATION.md](docs/frontend/SAVE_UI_MIGRATION.md) | UI 마이그레이션 노트 |
 
 ## 라이선스
 

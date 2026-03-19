@@ -40,7 +40,9 @@ If you find this project useful, please also check out the original [JKSV](https
 - 🌉 [Dropbox Bridge (Optional)](#dropbox-bridge-optional)
 - 🔄 [How Sync Decisions Work](#how-sync-decisions-work)
 - 🧪 [Build](#build)
+- ✅ [Test](#test)
 - ⚙️ [Release Automation](#release-automation)
+- 📚 [Documentation](#documentation)
 
 ## Features
 
@@ -112,8 +114,12 @@ source/                   # App source code
 include/                  # Header files
 tests/                    # Host unit tests
 romfs/lang/               # Runtime language JSON files
+romfs/gfx/                # Graphics resources
 backend/dropbox-bridge/   # Optional OAuth bridge service
 docs/                     # Documentation
+  ├── backend/            # Backend architecture docs
+  └── frontend/           # Frontend UI docs
+BUILD.md                  # Build guide (Korean)
 RELEASE_NOTES_*.md        # Release notes
 ```
 
@@ -343,6 +349,26 @@ The build output is:
 oc-save-keeper.nro
 ```
 
+## Test
+
+Run host unit tests locally:
+
+```bash
+make test
+```
+
+### Test Coverage
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| Dropbox util | 17 | ✅ |
+| Metadata logic | 4 | ✅ |
+| Metadata file | 6 | ✅ |
+| Sync logic | 3 | ✅ |
+| **Total** | **30** | ✅ |
+
+See [docs/TESTING.md](docs/TESTING.md) for detailed test checklist.
+
 ## Release Automation
 
 GitHub Actions builds the release package automatically.
@@ -360,6 +386,16 @@ It is designed to:
 - Upload artifacts on workflow runs
 - Publish a `latest` prerelease on every `main` push
 - Attach assets on tagged releases (`v*`)
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [BUILD.md](BUILD.md) | Build guide (Korean) |
+| [docs/TESTING.md](docs/TESTING.md) | Test guide and checklist |
+| [docs/TDD.md](docs/TDD.md) | TDD workflow guide |
+| [docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md](docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md) | Dropbox bridge architecture (Korean) |
+| [docs/frontend/SAVE_UI_MIGRATION.md](docs/frontend/SAVE_UI_MIGRATION.md) | UI migration notes |
 
 ## License
 
