@@ -84,27 +84,27 @@ If you find this project useful, please also check out the original [JKSV](https
 
 ## Quick Start
 
-1. Download the latest release zip from GitHub Releases.
-2. Extract it to the root of the SD card.
+1. Download `oc-save-keeper.nro` from [GitHub Releases](https://github.com/jshsakura/oc-save-keeper/releases).
+2. Copy it to `/switch/` on your SD card.
 3. Launch `oc-save-keeper` from the Homebrew Menu.
-4. Create a local backup first.
-5. Connect Dropbox and upload the backup.
+4. Connect Dropbox and upload your save to cloud.
 
-If you only want to test the app safely, stop after the first local backup and verify that the backup folder and UI look correct.
+> **Note**: "Upload to Cloud" automatically creates a local backup before uploading. No need to backup manually first.
+
+If you only want to test the app safely, just browse your save titles and verify the UI works correctly.
 
 ## Downloads
 
 - Repository: https://github.com/jshsakura/oc-save-keeper
 - Releases: https://github.com/jshsakura/oc-save-keeper/releases
 
-Recommended for most users:
-
-- download the release `.zip` from Releases
-- extract it to the SD root so this exact path exists:
+Download `oc-save-keeper.nro` and copy it to:
 
 ```text
-/switch/oc-save-keeper/oc-save-keeper.nro
+/switch/oc-save-keeper.nro
 ```
+
+The app will automatically create its data folder at `/switch/oc-save-keeper/` on first run.
 
 ## Repository Layout
 
@@ -125,24 +125,23 @@ RELEASE_NOTES_*.md        # Release notes
 
 ## Install
 
-Extract the release zip to the root of the SD card.
-
-After extraction, verify this exact runtime file path:
+Copy `oc-save-keeper.nro` to your SD card:
 
 ```text
-/switch/oc-save-keeper/oc-save-keeper.nro
+/switch/oc-save-keeper.nro
 ```
 
-Runtime data is stored here:
+The app creates its data folder automatically on first run:
 
 ```text
-/switch/oc-save-keeper/backups/
-/switch/oc-save-keeper/logs/
-/switch/oc-save-keeper/temp/
-/switch/oc-save-keeper/device_id.txt
-/switch/oc-save-keeper/device_label.txt
-/switch/oc-save-keeper/device_priority.txt
-/switch/oc-save-keeper/config/dropbox_auth.json
+/switch/oc-save-keeper/
+├── backups/           # Local save backups
+├── logs/              # Log files
+├── temp/              # Temporary files
+├── config/            # Dropbox auth and settings
+├── device_id.txt      # Device identifier
+├── device_label.txt   # Human-readable device name
+└── device_priority.txt # Conflict priority value
 ```
 
 ## Dropbox Setup
@@ -270,10 +269,9 @@ device_priority.txt  -> 100
 
 1. Launch the app from the Homebrew Menu.
 2. Select a title.
-3. Create a local backup first.
-4. Upload the backup to Dropbox.
-5. On another device, download and review the sync decision.
-6. Restore only after confirming the source device and user are correct.
+3. Connect Dropbox and upload to cloud (local backup is created automatically).
+4. On another device, download from cloud and review the sync decision.
+5. Restore only after confirming the source device and user are correct.
 
 ### Controls
 
@@ -289,9 +287,8 @@ If this is your first time using the app:
 1. Launch `oc-save-keeper`
 2. Confirm text renders correctly
 3. Open one game that already has a save
-4. Choose `Local Backup`
-5. Connect Dropbox
-6. Choose `Upload to Cloud`
+4. Connect Dropbox
+5. Choose `Upload to Cloud` (local backup is created automatically)
 
 After that, the same title on another device can use `Download from Cloud`.
 
@@ -299,10 +296,10 @@ After that, the same title on another device can use `Download from Cloud`.
 
 For safer testing, use this order:
 
-1. Create a local backup
-2. Upload to Dropbox
+1. Connect Dropbox
+2. Upload to cloud (local backup is created automatically)
 3. Switch devices
-4. Download from Dropbox
+4. Download from cloud
 5. Review the decision reason
 6. Restore only if the device and user match your intent
 

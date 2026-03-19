@@ -85,27 +85,27 @@ Language: [English](README.md) | **한국어**
 
 ## 빠른 시작
 
-1. GitHub Releases에서 최신 zip을 받습니다.
-2. SD 카드 루트에 압축을 풉니다.
-3. Homebrew Menu에서 `oc-save-keeper`를 실행합니다.
-4. 먼저 로컬 백업을 1회 생성합니다.
-5. Dropbox를 연결하고 업로드를 진행합니다.
+1. [GitHub Releases](https://github.com/jshsakura/oc-save-keeper/releases)에서 `oc-save-keeper.nro` 다운로드.
+2. SD 카드의 `/switch/` 폴더에 복사.
+3. Homebrew Menu에서 `oc-save-keeper` 실행.
+4. Dropbox 연결 후 클라우드에 세이브 업로드.
 
-안전하게 테스트만 원한다면 첫 로컬 백업 후 중단하고 백업 폴더와 UI가 올바른지 확인하세요.
+> **참고**: "클라우드에 업로드"를 누르면 자동으로 로컬 백업이 먼저 생성됩니다. 수동으로 백업할 필요가 없습니다.
+
+안전하게 테스트만 원한다면 타이틀 목록을 둘러보며 UI가 정상 작동하는지 확인하세요.
 
 ## 다운로드
 
 - 저장소: https://github.com/jshsakura/oc-save-keeper
 - 릴리즈: https://github.com/jshsakura/oc-save-keeper/releases
 
-권장 방식:
-
-- 릴리즈 `.zip` 다운로드
-- SD 루트에 압축 해제 후 아래 경로 확인
+`oc-save-keeper.nro`를 다운로드 후 아래 경로에 복사:
 
 ```text
-/switch/oc-save-keeper/oc-save-keeper.nro
+/switch/oc-save-keeper.nro
 ```
+
+앱은 첫 실행 시 자동으로 데이터 폴더(`/switch/oc-save-keeper/`)를 생성합니다.
 
 ## 저장소 구조
 
@@ -126,22 +126,23 @@ RELEASE_NOTES_*.md        # 릴리즈 노트
 
 ## 설치
 
-zip을 SD 카드 루트에 풀고, 아래 파일이 존재하는지 확인하세요.
+`oc-save-keeper.nro`를 SD 카드에 복사:
 
 ```text
-/switch/oc-save-keeper/oc-save-keeper.nro
+/switch/oc-save-keeper.nro
 ```
 
-런타임 데이터 경로:
+앱은 첫 실행 시 자동으로 데이터 폴더를 생성합니다:
 
 ```text
-/switch/oc-save-keeper/backups/
-/switch/oc-save-keeper/logs/
-/switch/oc-save-keeper/temp/
-/switch/oc-save-keeper/device_id.txt
-/switch/oc-save-keeper/device_label.txt
-/switch/oc-save-keeper/device_priority.txt
-/switch/oc-save-keeper/config/dropbox_auth.json
+/switch/oc-save-keeper/
+├── backups/           # 로컬 세이브 백업
+├── logs/              # 로그 파일
+├── temp/              # 임시 파일
+├── config/            # Dropbox 인증 및 설정
+├── device_id.txt      # 기기 식별자
+├── device_label.txt   # 사용자 지정 기기 이름
+└── device_priority.txt # 충돌 시 우선순위 값
 ```
 
 ## Dropbox 설정
@@ -269,10 +270,9 @@ device_priority.txt  -> 100
 
 1. Homebrew Menu에서 앱 실행
 2. 타이틀 선택
-3. 로컬 백업 먼저 생성
-4. Dropbox에 업로드
-5. 다른 기기에서 다운로드 후 동기화 결정 확인
-6. 기기와 사용자가 의도와 일치할 때만 복원
+3. Dropbox 연결 후 클라우드에 업로드 (로컬 백업 자동 생성)
+4. 다른 기기에서 다운로드 후 동기화 결정 확인
+5. 기기와 사용자가 의도와 일치할 때만 복원
 
 ### 조작법
 
@@ -288,9 +288,8 @@ device_priority.txt  -> 100
 1. `oc-save-keeper` 실행
 2. 텍스트가 올바르게 렌더링되는지 확인
 3. 이미 세이브가 있는 게임 하나 열기
-4. `로컬 백업` 선택
-5. Dropbox 연결
-6. `클라우드에 업로드` 선택
+4. Dropbox 연결
+5. `클라우드에 업로드` 선택 (로컬 백업 자동 생성)
 
 이후 다른 기기에서 같은 타이틀로 `클라우드에서 다운로드` 가능.
 
@@ -298,10 +297,10 @@ device_priority.txt  -> 100
 
 안전한 테스트를 위한 순서:
 
-1. 로컬 백업 생성
-2. Dropbox에 업로드
+1. Dropbox 연결
+2. 클라우드에 업로드 (로컬 백업 자동 생성)
 3. 기기 전환
-4. Dropbox에서 다운로드
+4. 클라우드에서 다운로드
 5. 결정 사유 확인
 6. 기기와 사용자가 의도와 일치할 때만 복원
 
