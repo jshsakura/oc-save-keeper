@@ -546,4 +546,29 @@ inline bool constantTimeEqual(const std::string& a, const std::string& b) {
     return result == 0;
 }
 
+inline bool isUrlPrefixValid(const std::string& url, const std::string& expectedPrefix) {
+    if (url.empty() || expectedPrefix.empty()) {
+        return false;
+    }
+    if (url.find(expectedPrefix) != 0) {
+        return false;
+    }
+    if (url.length() == expectedPrefix.length()) {
+        return true;
+    }
+    char nextChar = url[expectedPrefix.length()];
+    return nextChar == '/' || nextChar == '?' || nextChar == '#';
+}
+
+inline std::string buildSafePollUrl(const std::string& pollUrl, 
+                                    const std::string& bridgeBase,
+                                    const std::string& sessionId) {
+    const std::string expectedPrefix = bridgeBase + "/";
+    
+    if (!pollUrl.empty() && isUrlPrefixValid(pollUrl, expectedPrefix)) {
+        return pollUrl;
+    }
+    return expectedPrefix + "v1/sessions/" + sessionId + "/status";
+}
+
 } // namespace network::dropbox

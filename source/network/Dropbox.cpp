@@ -261,21 +261,11 @@ std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
         return "expired";
     }
 
-    std::string url;
-    const std::string expectedPrefix = std::string(DROPBOX_BRIDGE_BASE_STR) + "/";
-    
-    if (!session.pollUrl.empty()) {
-        // Validate pollUrl starts with expected bridge base to prevent SSRF
-        if (session.pollUrl.find(expectedPrefix) == 0) {
-            url = session.pollUrl;
-        } else {
-            LOG_ERROR("Dropbox: pollUrl validation failed, using default. Got: %s", 
-                      session.pollUrl.c_str());
-            url = expectedPrefix + "v1/sessions/" + session.sessionId + "/status";
-        }
-    } else {
-        url = expectedPrefix + "v1/sessions/" + session.sessionId + "/status";
-    }
+    const std::string url = dropbox::buildSafePollUrl(
+        session.pollUrl, 
+        DROPBOX_BRIDGE_BASE_STR, 
+        session.sessionId
+    );
     const std::string postData = "{\"poll_token\":\"" + session.pollToken + "\"}";
 
     LOG_DEBUG("Dropbox: Polling session status - URL: %s", url.c_str());

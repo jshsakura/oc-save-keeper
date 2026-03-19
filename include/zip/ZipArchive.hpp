@@ -16,6 +16,35 @@
 namespace zip {
 
 /**
+ * Validate archive entry path for security (path traversal prevention)
+ * @param archivePath Path within ZIP archive to validate
+ * @return true if path is safe, false if it contains path traversal attempts
+ * 
+ * Security checks:
+ * - Rejects ".." sequences (path traversal)
+ * - Rejects absolute Unix paths starting with '/'
+ * - Rejects absolute Windows paths like "C:\"
+ */
+inline bool isSafeArchivePath(const std::string& archivePath) {
+    if (archivePath.empty()) {
+        return false;
+    }
+    // Check for path traversal
+    if (archivePath.find("..") != std::string::npos) {
+        return false;
+    }
+    // Check for absolute Unix path
+    if (archivePath[0] == '/' || archivePath[0] == '\\') {
+        return false;
+    }
+    // Check for absolute Windows path (e.g., C:\)
+    if (archivePath.length() >= 2 && archivePath[1] == ':') {
+        return false;
+    }
+    return true;
+}
+
+/**
  * Simple ZIP file wrapper for backup operations
  */
 class ZipArchive {
