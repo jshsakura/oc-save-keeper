@@ -249,7 +249,7 @@ bool SaveManager::loadUsers() {
                     }
                 }
                 if (m_users.size() >= MAX_USERS) {
-                    LOG_WARN("Max users limit reached (%zu), skipping remaining", MAX_USERS);
+                    LOG_WARNING("Max users limit reached (%zu), skipping remaining", MAX_USERS);
                     break;
                 }
                 m_users.push_back(user);
@@ -502,7 +502,7 @@ bool SaveManager::scanTitle(uint64_t titleId) {
     
     m_titles.push_back(info);
     if (m_titles.size() >= MAX_TITLES) {
-        LOG_WARN("Max titles limit reached (%zu), skipping remaining", MAX_TITLES);
+        LOG_WARNING("Max titles limit reached (%zu), skipping remaining", MAX_TITLES);
     }
     return true;
 }
