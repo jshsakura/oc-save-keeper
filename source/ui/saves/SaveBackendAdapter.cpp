@@ -8,6 +8,7 @@
 #include "utils/Paths.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdio>
 #include <sys/stat.h>
 #include <utility>

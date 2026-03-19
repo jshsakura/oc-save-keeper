@@ -12,6 +12,8 @@
 #include <cstring>
 #include <cctype>
 #include <climits>
+#include <cstdlib>
+#include <ctime>
 #include <sys/stat.h>
 #include <json-c/json.h>
 #ifdef __SWITCH__

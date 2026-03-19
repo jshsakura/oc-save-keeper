@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <dirent.h>
 #include <unistd.h>
 #include <vector>
 
