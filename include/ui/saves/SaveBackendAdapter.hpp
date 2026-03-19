@@ -26,8 +26,8 @@ public:
     SaveActionResult deleteRevision(uint64_t titleId, const std::string& revisionId, SaveSource source) override;
     void setTargetType(uint64_t titleId, bool isDevice, bool isSystem) override;
     bool isCloudAuthenticated() const override;
-    void invalidateCache() { g_remoteCacheValid = false; }
-    void invalidateAllCaches() { g_remoteTitleCache.clear(); g_remoteCacheValid = false; }
+    void invalidateCache();
+    void invalidateAllCaches();
 
 private:
     core::SaveManager& m_saveManager;

@@ -130,7 +130,6 @@ SaveBackendAdapter::SaveBackendAdapter(core::SaveManager& saveManager, network::
 std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
     std::vector<SaveTitleEntry> out;
 
-    // Efficiently fetch remote titles if not cached
     if (m_dropbox.isAuthenticated() && !g_remoteCacheValid) {
         const std::string remotePath = "/titles";
         auto remoteFiles = m_dropbox.listFolder(remotePath);
@@ -139,14 +138,10 @@ std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
         for (const auto& file : remoteFiles) {
             if (file.isFolder) {
                 char* endptr = nullptr;
-                uint64_t tid = std::strtoull(file.name.c_str(), &endptr,                if (endptr && *endptr == '\0') {
+                uint64_t tid = std::strtoull(file.name.c_str(), &endptr, 16);
+                if (endptr && *endptr == '\0') {
                     g_remoteTitleCache.insert(tid);
                 }
-            }
-        }
-        trimRemoteCache();
-        g_remoteCacheValid = true;
-    }
             }
         }
         trimRemoteCache();
@@ -487,6 +482,15 @@ void SaveBackendAdapter::setTargetType(uint64_t titleId, bool isDevice, bool isS
 
 bool SaveBackendAdapter::isCloudAuthenticated() const {
     return m_dropbox.isAuthenticated();
+}
+
+void SaveBackendAdapter::invalidateCache() {
+    g_remoteCacheValid = false;
+}
+
+void SaveBackendAdapter::invalidateAllCaches() {
+    g_remoteTitleCache.clear();
+    g_remoteCacheValid = false;
 }
 
 } // namespace ui::saves
