@@ -43,9 +43,6 @@ void Runtime::push(std::shared_ptr<Object> object) {
     }
     m_stack.push_back(std::move(object));
 }
-        m_stack.push_back(std::move(object));
-    }
-}
 
 std::shared_ptr<Object> Runtime::current() const {
     if (m_stack.empty()) {
