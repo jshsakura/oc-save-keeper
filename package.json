@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@jshsakura/opencode-telegram-bot-plugin": "^1.0.4"
+  }
+}

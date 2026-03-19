@@ -7,16 +7,92 @@
 #include "network/DropboxUtil.hpp"
 #include "fs/FileUtil.hpp"
 #include "utils/Paths.hpp"
+#include "utils/TokenCrypto.hpp"
 #include <fstream>
 #include <cstring>
 #include <cctype>
+#include <climits>
 #include <sys/stat.h>
 #include <json-c/json.h>
 #ifdef __SWITCH__
 #include <switch.h>
 #endif
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 namespace network {
+
+namespace {
+
+std::string maskSensitiveFields(const std::string& json) {
+    static const char* kSensitiveKeys[] = {
+        "poll_token", "access_token", "refresh_token",
+        "authorization_code", "code_verifier"
+    };
+    
+    std::string result = json;
+    for (const char* key : kSensitiveKeys) {
+        std::string pattern = std::string("\"") + key + "\":\"";
+        std::size_t pos = 0;
+        while ((pos = result.find(pattern, pos)) != std::string::npos) {
+            std::size_t valueStart = pos + pattern.length();
+            std::size_t valueEnd = result.find('"', valueStart);
+            if (valueEnd != std::string::npos) {
+                std::size_t valueLen = valueEnd - valueStart;
+                if (valueLen <= 8) {
+                    result.replace(valueStart, valueLen, "***REDACTED***");
+                } else {
+                    std::string masked = result.substr(valueStart, 4) + "****" + result.substr(valueEnd - 4, 4);
+                    result.replace(valueStart, valueLen, masked);
+                }
+            }
+            pos = valueStart + 12;
+        }
+    }
+    return result;
+}
+
+bool isPathInAllowedDirectory(const std::string& path) {
+    constexpr const char* kAllowedDirs[] = {
+        "/switch/oc-save-keeper/backups",
+        "/switch/oc-save-keeper/temp",
+        "/switch/oc-save-keeper/cache"
+    };
+
+    char resolved[PATH_MAX];
+    if (!realpath(path.c_str(), resolved)) {
+        char resolvedDir[PATH_MAX];
+        std::string parentPath = path;
+        std::size_t lastSlash = parentPath.rfind('/');
+        if (lastSlash != std::string::npos) {
+            parentPath = parentPath.substr(0, lastSlash);
+        }
+        if (!realpath(parentPath.c_str(), resolvedDir)) {
+            return false;
+        }
+        std::strncpy(resolved, resolvedDir, PATH_MAX - 1);
+        resolved[PATH_MAX - 1] = '\0';
+    }
+
+    for (const char* allowedDir : kAllowedDirs) {
+        char allowedResolved[PATH_MAX];
+        if (!realpath(allowedDir, allowedResolved)) {
+            std::strncpy(allowedResolved, allowedDir, PATH_MAX - 1);
+            allowedResolved[PATH_MAX - 1] = '\0';
+        }
+        std::size_t allowedLen = std::strlen(allowedResolved);
+        if (std::strncmp(resolved, allowedResolved, allowedLen) == 0) {
+            if (resolved[allowedLen] == '\0' || resolved[allowedLen] == '/') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+} // namespace
 
 // RAII wrappers from dropbox namespace
 using dropbox::ScopedJson;
@@ -44,50 +120,8 @@ static constexpr const char* DROPBOX_BRIDGE_BASE_STR = DROPBOX_BRIDGE_BASE;
 static_assert(sizeof(DROPBOX_BRIDGE_BASE) > 1, "DROPBOX_BRIDGE_BASE cannot be empty!");
 static constexpr const char* DROPBOX_AUTH_FILE = utils::paths::DROPBOX_AUTH_JSON;
 static constexpr const char* DROPBOX_LEGACY_TOKEN_FILE = utils::paths::DROPBOX_LEGACY_TOKEN;
-static constexpr const char* DROPBOX_APP_KEY_FILE = utils::paths::DROPBOX_APP_KEY_TXT;
-static constexpr const char* DROPBOX_ROOT_ENV_FILE = utils::paths::ROOT_ENV;
-static constexpr const char* DROPBOX_CONFIG_ENV_FILE = utils::paths::CONFIG_ENV;
 static constexpr const char* DROPBOX_OLD_AUTH_FILE = "/oc-save-keeper/dropbox_auth.json";
 static constexpr const char* DROPBOX_OLD_LEGACY_TOKEN_FILE = "/oc-save-keeper/dropbox_token.txt";
-
-std::string trimCopy(std::string value) {
-    const auto isSpace = [](unsigned char ch) {
-        return std::isspace(ch) != 0;
-    };
-    while (!value.empty() && isSpace(static_cast<unsigned char>(value.front()))) {
-        value.erase(value.begin());
-    }
-    while (!value.empty() && isSpace(static_cast<unsigned char>(value.back()))) {
-        value.pop_back();
-    }
-    return value;
-}
-
-std::string loadAppKeyCandidate(const char* path) {
-    std::ifstream file(path);
-    if (!file) {
-        return "";
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        line = trimCopy(line);
-        if (line.empty() || line[0] == '#') {
-            continue;
-        }
-        constexpr const char* key = "DROPBOX_APP_KEY=";
-        if (line.rfind(key, 0) == 0) {
-            std::string value = trimCopy(line.substr(std::strlen(key)));
-            if (!value.empty() && value.front() == '"' && value.back() == '"' && value.size() >= 2) {
-                value = value.substr(1, value.size() - 2);
-            }
-            return value;
-        }
-        return line;
-    }
-
-    return "";
-}
 
 Dropbox::Dropbox() 
     : m_clientId(loadClientId()), m_tokenExpiresAt(0), m_authenticated(false), m_curl(nullptr) {
@@ -213,11 +247,11 @@ std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
         return "failed";
     }
     
-    LOG_DEBUG("Dropbox: Session status response: %s", response.c_str());
+    LOG_DEBUG("Dropbox: Session status response: %s", maskSensitiveFields(response).c_str());
 
     ScopedJson scopedRoot(json_tokener_parse(response.c_str()));
     if (!scopedRoot) {
-        LOG_ERROR("Dropbox: Failed to parse session status JSON: %s", response.c_str());
+        LOG_ERROR("Dropbox: Failed to parse session status JSON: %s", maskSensitiveFields(response).c_str());
         return "failed";
     }
     json_object* root = scopedRoot.get();
@@ -323,7 +357,7 @@ bool Dropbox::exchangeAuthorizationCode(const std::string& input) {
     }
 
     const std::string state = dropbox::extractQueryParam(input, "state");
-    if (!state.empty() && state != m_csrfToken) {
+    if (!state.empty() && !dropbox::constantTimeEqual(state, m_csrfToken)) {
         LOG_ERROR("Dropbox: OAuth state mismatch");
         return false;
     }
@@ -420,7 +454,8 @@ bool Dropbox::loadToken() {
                     m_accessToken = json_object_get_string(accessObj);
                 }
                 if (json_object_object_get_ex(root.get(), "refresh_token", &refreshObj)) {
-                    m_refreshToken = json_object_get_string(refreshObj);
+                    std::string encryptedRefresh = json_object_get_string(refreshObj);
+                    m_refreshToken = utils::TokenCrypto::decrypt(encryptedRefresh);
                 }
                 if (json_object_object_get_ex(root.get(), "expires_at", &expiresObj)) {
                     m_tokenExpiresAt = static_cast<std::time_t>(json_object_get_int64(expiresObj));
@@ -467,8 +502,11 @@ bool Dropbox::saveToken() {
     if (!root) {
         return false;
     }
+    
+    std::string encryptedRefresh = utils::TokenCrypto::encrypt(m_refreshToken);
+    
     json_object_object_add(root.get(), "access_token", json_object_new_string(m_accessToken.c_str()));
-    json_object_object_add(root.get(), "refresh_token", json_object_new_string(m_refreshToken.c_str()));
+    json_object_object_add(root.get(), "refresh_token", json_object_new_string(encryptedRefresh.c_str()));
     json_object_object_add(root.get(), "expires_at", json_object_new_int64(static_cast<long long>(m_tokenExpiresAt)));
 
     const char* text = json_object_to_json_string_ext(root.get(), JSON_C_TO_STRING_PLAIN);
@@ -500,18 +538,6 @@ std::string Dropbox::clientId() const {
 std::string Dropbox::loadClientId() const {
     if (std::strlen(CLIENT_ID) != 0) {
         return CLIENT_ID;
-    }
-
-    const char* candidates[] = {
-        DROPBOX_APP_KEY_FILE,
-        DROPBOX_ROOT_ENV_FILE,
-        DROPBOX_CONFIG_ENV_FILE,
-    };
-    for (const char* path : candidates) {
-        const std::string value = loadAppKeyCandidate(path);
-        if (!value.empty()) {
-            return value;
-        }
     }
     return "";
 }
@@ -589,6 +615,11 @@ bool Dropbox::downloadFile(const std::string& dropboxPath,
     
     if (!ensureAccessToken()) {
         LOG_ERROR("Dropbox: Not authenticated");
+        return false;
+    }
+    
+    if (!isPathInAllowedDirectory(localPath)) {
+        LOG_ERROR("Dropbox: Path traversal blocked: %s", localPath.c_str());
         return false;
     }
     
@@ -762,18 +793,18 @@ bool Dropbox::refreshToken() {
         return false;
     }
 
-    json_object* root = json_tokener_parse(response.c_str());
-    if (!root) {
+    ScopedJson scopedRoot(json_tokener_parse(response.c_str()));
+    if (!scopedRoot) {
         LOG_ERROR("Dropbox: Refresh token response parse failed");
         return false;
     }
+    json_object* root = scopedRoot.get();
 
     json_object* accessTokenObj = nullptr;
     json_object* expiresInObj = nullptr;
     json_object* refreshTokenObj = nullptr;
     const bool hasAccess = json_object_object_get_ex(root, "access_token", &accessTokenObj);
     if (!hasAccess) {
-        json_object_put(root);
         return false;
     }
 
@@ -789,7 +820,6 @@ bool Dropbox::refreshToken() {
         }
     }
 
-    json_object_put(root);
     m_authenticated = !m_accessToken.empty();
     if (!m_authenticated) {
         return false;
@@ -902,8 +932,8 @@ std::string Dropbox::performRequest(const std::string& url,
         curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers.get());
     }
     curl_easy_setopt(m_curl, CURLOPT_USERAGENT, "oc-save-keeper/1.0");
-    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(m_curl, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(m_curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(m_curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(m_curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);

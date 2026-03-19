@@ -11,7 +11,48 @@
 #include <curl/curl.h>
 #include <curl/curl.h>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 namespace network::dropbox {
+
+// Cryptographically secure random byte generator
+// Uses Switch CSRNG on device, falls back to std::random_device on host
+inline bool getCryptographicBytes(unsigned char* buffer, std::size_t size) {
+#ifdef __SWITCH__
+    Result rc = csrngGetRandomBytes(buffer, size);
+    return R_SUCCEEDED(rc);
+#else
+    std::random_device rd;
+    for (std::size_t i = 0; i < size; ++i) {
+        buffer[i] = static_cast<unsigned char>(rd() & 0xFFu);
+    }
+    return true;
+#endif
+}
+
+// Bias-free random index selection using rejection sampling
+// Eliminates modulo bias when selecting from alphabet
+inline std::size_t getRandomIndex(std::size_t alphabetSize) {
+    // Calculate rejection threshold to eliminate bias
+    // We reject values >= threshold where threshold = (256 / alphabetSize) * alphabetSize
+    constexpr unsigned int kMaxValue = 256;
+    const unsigned int threshold = (kMaxValue / static_cast<unsigned int>(alphabetSize)) * static_cast<unsigned int>(alphabetSize);
+    
+    unsigned char byte;
+    while (true) {
+        if (!getCryptographicBytes(&byte, 1)) {
+            // Fallback on failure
+            std::random_device rd;
+            byte = static_cast<unsigned char>(rd() & 0xFFu);
+        }
+        if (byte < threshold) {
+            return static_cast<std::size_t>(byte) % alphabetSize;
+        }
+        // Reject and try again
+    }
+}
 
 struct ScopedCurlSlist {
     struct curl_slist* list = nullptr;
@@ -124,11 +165,15 @@ inline std::string generateRandomHex(std::size_t bytes) {
     static const char* kHex = "0123456789abcdef";
     std::string out;
     out.reserve(bytes * 2);
-    std::random_device rd;
+    
+    std::vector<unsigned char> buffer(bytes);
+    if (!getCryptographicBytes(buffer.data(), bytes)) {
+        return "";
+    }
+    
     for (std::size_t i = 0; i < bytes; ++i) {
-        const unsigned value = rd() & 0xFFu;
-        out.push_back(kHex[(value >> 4) & 0x0Fu]);
-        out.push_back(kHex[value & 0x0Fu]);
+        out.push_back(kHex[(buffer[i] >> 4) & 0x0Fu]);
+        out.push_back(kHex[buffer[i] & 0x0Fu]);
     }
     return out;
 }
@@ -148,10 +193,9 @@ inline std::string generateCodeVerifier(std::size_t length = 64) {
 
     std::string out;
     out.reserve(length);
-    std::random_device rd;
     const std::size_t alphabetSize = 66;
     for (std::size_t i = 0; i < length; ++i) {
-        out.push_back(kAlphabet[rd() % alphabetSize]);
+        out.push_back(kAlphabet[getRandomIndex(alphabetSize)]);
     }
     return out;
 }
@@ -424,8 +468,21 @@ inline std::string escapeJsonString(const std::string& value) {
             case '\t':
                 escaped += "\\t";
                 break;
+            case '\b':
+                escaped += "\\b";
+                break;
+            case '\f':
+                escaped += "\\f";
+                break;
             default:
-                escaped += ch;
+                if (static_cast<unsigned char>(ch) < 0x20) {
+                    // Escape remaining control characters as \u00XX
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(ch));
+                    escaped += buf;
+                } else {
+                    escaped += ch;
+                }
                 break;
         }
     }
@@ -475,6 +532,18 @@ inline std::string fileName(const std::string& dropboxPath) {
 
 inline bool hasFileComponent(const std::string& dropboxPath) {
     return !fileName(dropboxPath).empty();
+}
+
+inline bool constantTimeEqual(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    
+    int result = 0;
+    for (std::size_t i = 0; i < a.size(); i++) {
+        result |= static_cast<int>(static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]));
+    }
+    return result == 0;
 }
 
 } // namespace network::dropbox

@@ -17,3 +17,7 @@ backend/dropbox-bridge/app/__pycache__/
 
 # External references
 JKSV/
+
+# Node modules
+node_modules/
+.tmp/
