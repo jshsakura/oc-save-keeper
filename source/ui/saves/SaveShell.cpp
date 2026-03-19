@@ -1306,7 +1306,7 @@ void SaveShell::renderDropboxOverlay() {
             fillRect(m_renderer, qrFrame, CAT_CRUST);
             strokeRect(m_renderer, qrFrame, CAT_SURFACE0);
             if (SDL_Texture* icon = loadIcon("romfs:/gfx/icon.png")) {
-                SDL_Rect iconRect{qrX + 50, qrY + 50, qrBox - 100, qrBox - 100};
+                SDL_Rect iconRect{qrX, qrY, qrBox, qrBox};
                 SDL_RenderCopy(m_renderer, icon, nullptr, &iconRect);
             }
         }
