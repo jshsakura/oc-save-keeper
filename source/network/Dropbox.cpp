@@ -14,6 +14,7 @@
 #include <climits>
 #include <cstdlib>
 #include <ctime>
+#include <unistd.h>
 #include <sys/stat.h>
 #include <json-c/json.h>
 #ifdef __SWITCH__
@@ -56,6 +57,46 @@ std::string maskSensitiveFields(const std::string& json) {
     return result;
 }
 
+std::string normalizePath(const std::string& path) {
+    std::string result;
+    result.reserve(path.size());
+
+    std::size_t i = 0;
+    while (i < path.size()) {
+        while (i < path.size() && path[i] == '/') {
+            if (result.empty() || result.back() != '/') {
+                result += '/';
+            }
+            ++i;
+        }
+        if (i >= path.size()) break;
+
+        std::size_t start = i;
+        while (i < path.size() && path[i] != '/') ++i;
+        std::string component = path.substr(start, i - start);
+
+        if (component == ".") {
+        } else if (component == "..") {
+            if (result.size() > 1) {
+                std::size_t lastSlash = result.rfind('/', result.size() - 2);
+                if (lastSlash == std::string::npos) {
+                    result = "/";
+                } else {
+                    result = result.substr(0, lastSlash + 1);
+                }
+            }
+        } else if (!component.empty()) {
+            result += component;
+        }
+    }
+
+    if (result.size() > 1 && result.back() == '/') {
+        result.pop_back();
+    }
+
+    return result;
+}
+
 bool isPathInAllowedDirectory(const std::string& path) {
     constexpr const char* kAllowedDirs[] = {
         "/switch/oc-save-keeper/backups",
@@ -63,30 +104,14 @@ bool isPathInAllowedDirectory(const std::string& path) {
         "/switch/oc-save-keeper/cache"
     };
 
-    char resolved[PATH_MAX];
-    if (!realpath(path.c_str(), resolved)) {
-        char resolvedDir[PATH_MAX];
-        std::string parentPath = path;
-        std::size_t lastSlash = parentPath.rfind('/');
-        if (lastSlash != std::string::npos) {
-            parentPath = parentPath.substr(0, lastSlash);
-        }
-        if (!realpath(parentPath.c_str(), resolvedDir)) {
-            return false;
-        }
-        std::strncpy(resolved, resolvedDir, PATH_MAX - 1);
-        resolved[PATH_MAX - 1] = '\0';
-    }
+    std::string normalized = normalizePath(path);
 
     for (const char* allowedDir : kAllowedDirs) {
-        char allowedResolved[PATH_MAX];
-        if (!realpath(allowedDir, allowedResolved)) {
-            std::strncpy(allowedResolved, allowedDir, PATH_MAX - 1);
-            allowedResolved[PATH_MAX - 1] = '\0';
-        }
-        std::size_t allowedLen = std::strlen(allowedResolved);
-        if (std::strncmp(resolved, allowedResolved, allowedLen) == 0) {
-            if (resolved[allowedLen] == '\0' || resolved[allowedLen] == '/') {
+        std::string normalizedAllowed = normalizePath(allowedDir);
+        std::size_t allowedLen = normalizedAllowed.size();
+        if (normalized.size() >= allowedLen &&
+            std::strncmp(normalized.c_str(), normalizedAllowed.c_str(), allowedLen) == 0) {
+            if (normalized.size() == allowedLen || normalized[allowedLen] == '/') {
                 return true;
             }
         }
