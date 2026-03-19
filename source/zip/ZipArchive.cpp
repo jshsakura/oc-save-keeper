@@ -202,6 +202,24 @@ bool ZipArchive::addDirectory(const std::string& sourceDir, const std::string& a
 bool ZipArchive::extractFile(const std::string& archivePath, const std::string& destPath) {
     if (!m_isOpen || m_isWriting) return false;
     
+    std::string entryName(archivePath);
+    if (entryName.empty()) {
+        LOG_ERROR("ZIP: Empty filename");
+        return false;
+    }
+    if (entryName.find("..") != std::string::npos) {
+        LOG_ERROR("ZIP: Path traversal detected: %s", archivePath.c_str());
+        return false;
+    }
+    if (entryName[0] == '/' || entryName[0] == '\\') {
+        LOG_ERROR("ZIP: Absolute path detected: %s", archivePath.c_str());
+        return false;
+    }
+    if (entryName.length() >= 2 && entryName[1] == ':') {
+        LOG_ERROR("ZIP: Windows absolute path detected: %s", archivePath.c_str());
+        return false;
+    }
+    
     if (unzLocateFile(m_unz, archivePath.c_str(), 0) != UNZ_OK) {
         LOG_ERROR("File not found in ZIP: %s", archivePath.c_str());
         return false;
