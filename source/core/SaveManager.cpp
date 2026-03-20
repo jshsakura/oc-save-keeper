@@ -595,7 +595,18 @@ bool SaveManager::backupSave(TitleInfo* title, const std::string& backupName) {
     return true;
 }
 
-bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
+bool SaveManager::shouldSkipSafetyRollbackForRestorePath(const std::string& backupPath) {
+    if (backupPath.empty()) {
+        return false;
+    }
+
+    const size_t slash = backupPath.find_last_of('/');
+    const std::string entryName = (slash == std::string::npos) ? backupPath : backupPath.substr(slash + 1);
+    const std::string suffix = "_autosave";
+    return entryName.size() > suffix.size() && entryName.compare(entryName.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath, bool createSafetyRollback) {
     if (!title || !m_selectedUser) {
         LOG_ERROR("Invalid title or no user selected");
         return false;
@@ -614,15 +625,16 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath) {
     closedir(dir);
 
     #ifdef __SWITCH__
-    // ULTIMATE SAFETY: Create a rollback point of the current live save 
-    // before we wipe it for restoration. This ensures no data is lost 
-    // if the power goes out or the restoration fails.
-    LOG_INFO("Restore: Creating safety rollback backup...");
-    createVersionedBackup(title, DEFAULT_MAX_VERSIONS);
-    
-    // Remember the path of the rollback backup just in case
-    auto versions = getBackupVersions(title);
-    std::string rollbackPath = versions.empty() ? "" : versions.front().path;
+    std::string rollbackPath;
+    const bool skipRollbackForSource = shouldSkipSafetyRollbackForRestorePath(backupPath);
+    const bool shouldCreateRollback = createSafetyRollback && !skipRollbackForSource;
+    if (shouldCreateRollback) {
+        LOG_INFO("Restore: Creating safety rollback backup...");
+        createVersionedBackup(title, DEFAULT_MAX_VERSIONS);
+
+        auto versions = getBackupVersions(title);
+        rollbackPath = versions.empty() ? "" : versions.front().path;
+    }
 
     // Get journal size for proper commits
     int64_t journalSize = fs::getSaveJournalSize(title->titleId);    
@@ -1294,7 +1306,7 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
 
     writeBackupMetadataFile(getBackupMetadataPath(importPath), finalMeta);
 
-    const bool restored = restoreSave(title, importPath);
+    const bool restored = restoreSave(title, importPath, false);
     fs::deleteDirectory(tempDir);
 
     if (outReason) {

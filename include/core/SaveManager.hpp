@@ -128,7 +128,7 @@ public:
     
     // Backup operations
     bool backupSave(TitleInfo* title, const std::string& backupName);
-    bool restoreSave(TitleInfo* title, const std::string& backupPath);
+    bool restoreSave(TitleInfo* title, const std::string& backupPath, bool createSafetyRollback = true);
     bool deleteBackup(const std::string& backupPath);
     
     // Trash bin operations
@@ -166,6 +166,7 @@ public:
     SyncDecision decideSync(const BackupMetadata* localMeta, const BackupMetadata& incomingMeta) const;
     std::string exportBackupArchive(TitleInfo* title, const std::string& backupPath);
     bool importBackupArchive(TitleInfo* title, const std::string& archivePath, std::string* outReason = nullptr, bool skipConflictCheck = false);
+    static bool shouldSkipSafetyRollbackForRestorePath(const std::string& backupPath);
     
 private:
     bool m_initialized;
