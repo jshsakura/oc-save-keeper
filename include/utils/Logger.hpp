@@ -13,6 +13,29 @@
 #include "utils/Paths.hpp"
 #include "utils/SettingsStore.hpp"
 
+// Enhanced macros with file:line info
+#ifdef NDEBUG
+    // Release: Discard non-error logs to save memory (strings) and CPU
+    #define LOG_DEBUG_EX(...)   ((void)0)
+    #define LOG_DEBUG(...)      ((void)0)
+    #define LOG_INFO_EX(...)    ((void)0)
+    #define LOG_INFO(...)       ((void)0)
+    #define LOG_WARNING_EX(...) ((void)0)
+    #define LOG_WARNING(...)    ((void)0)
+#else
+    // Debug: Keep all logs for development
+    #define LOG_DEBUG_EX(...)   utils::Logger::logEx(utils::LogLevel::DEBUG, __FILE__, __LINE__, __VA_ARGS__)
+    #define LOG_DEBUG(...)      utils::Logger::log(utils::LogLevel::DEBUG, __VA_ARGS__)
+    #define LOG_INFO_EX(...)    utils::Logger::logEx(utils::LogLevel::INFO, __FILE__, __LINE__, __VA_ARGS__)
+    #define LOG_INFO(...)       utils::Logger::log(utils::LogLevel::INFO, __VA_ARGS__)
+    #define LOG_WARNING_EX(...) utils::Logger::logEx(utils::LogLevel::WARNING, __FILE__, __LINE__, __VA_ARGS__)
+    #define LOG_WARNING(...)    utils::Logger::log(utils::LogLevel::WARNING, __VA_ARGS__)
+#endif
+
+// ERROR logs are always kept for diagnostics
+#define LOG_ERROR_EX(...)   utils::Logger::logEx(utils::LogLevel::ERROR, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_ERROR(...)      utils::Logger::log(utils::LogLevel::ERROR, __VA_ARGS__)
+
 namespace utils {
 
 enum class LogLevel {
@@ -43,7 +66,7 @@ public:
     // Core logging function with file:line info
     static void logEx(LogLevel level, const char* file, int line, const char* format, ...) {
         if (!isEnabled() && level != LogLevel::ERROR) {
-            return;  // Always log errors, but skip others if disabled
+            return;
         }
         
         va_list args;
@@ -71,14 +94,16 @@ public:
         vprintf(format, args);
         printf("\n");
         
-        // Also write to file
-        utils::paths::ensureBaseDirectories();
-        FILE* logFile = fopen(utils::paths::LOG_FILE, "a");
-        if (logFile) {
-            fprintf(logFile, "[%s] [%s] [%s:%d] ", timeStr, levelStr[static_cast<int>(level)], filename, line);
-            vfprintf(logFile, format, fileArgs);
-            fprintf(logFile, "\n");
-            fclose(logFile);
+        // Release Policy: ONLY ERROR logs are written to file
+        if (level == LogLevel::ERROR) {
+            utils::paths::ensureBaseDirectories();
+            FILE* logFile = fopen(utils::paths::LOG_FILE, "a");
+            if (logFile) {
+                fprintf(logFile, "[%s] [%s] [%s:%d] ", timeStr, levelStr[static_cast<int>(level)], filename, line);
+                vfprintf(logFile, format, fileArgs);
+                fprintf(logFile, "\n");
+                fclose(logFile);
+            }
         }
         
         va_end(fileArgs);
@@ -109,14 +134,16 @@ public:
         vprintf(format, args);
         printf("\n");
         
-        // Also write to file
-        utils::paths::ensureBaseDirectories();
-        FILE* logFile = fopen(utils::paths::LOG_FILE, "a");
-        if (logFile) {
-            fprintf(logFile, "[%s] [%s] ", timeStr, levelStr[static_cast<int>(level)]);
-            vfprintf(logFile, format, fileArgs);
-            fprintf(logFile, "\n");
-            fclose(logFile);
+        // Release Policy: ONLY ERROR logs are written to file
+        if (level == LogLevel::ERROR) {
+            utils::paths::ensureBaseDirectories();
+            FILE* logFile = fopen(utils::paths::LOG_FILE, "a");
+            if (logFile) {
+                fprintf(logFile, "[%s] [%s] ", timeStr, levelStr[static_cast<int>(level)]);
+                vfprintf(logFile, format, fileArgs);
+                fprintf(logFile, "\n");
+                fclose(logFile);
+            }
         }
         
         va_end(fileArgs);
@@ -125,15 +152,3 @@ public:
 };
 
 } // namespace utils
-
-// Enhanced macros with file:line info
-#define LOG_DEBUG_EX(...) utils::Logger::logEx(utils::LogLevel::DEBUG, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_INFO_EX(...) utils::Logger::logEx(utils::LogLevel::INFO, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_WARNING_EX(...) utils::Logger::logEx(utils::LogLevel::WARNING, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_ERROR_EX(...) utils::Logger::logEx(utils::LogLevel::ERROR, __FILE__, __LINE__, __VA_ARGS__)
-
-// Legacy macros (without file:line) for backward compatibility
-#define LOG_DEBUG(...) utils::Logger::log(utils::LogLevel::DEBUG, __VA_ARGS__)
-#define LOG_INFO(...) utils::Logger::log(utils::LogLevel::INFO, __VA_ARGS__)
-#define LOG_WARNING(...) utils::Logger::log(utils::LogLevel::WARNING, __VA_ARGS__)
-#define LOG_ERROR(...) utils::Logger::log(utils::LogLevel::ERROR, __VA_ARGS__)

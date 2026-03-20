@@ -134,7 +134,7 @@ private:
     bool m_hostTextInput = false;
     bool m_isAppletMode = false;
     static constexpr std::size_t MAX_ICON_CACHE_ITEMS = 24;
-    static constexpr int ICON_TEXTURE_SIZE = 96;
+    static constexpr int ICON_TEXTURE_SIZE = 160;
     std::map<std::string, SDL_Texture*> m_iconCache;
     std::deque<std::string> m_iconCacheOrder;
 };

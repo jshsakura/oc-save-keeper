@@ -53,10 +53,6 @@ public:
         return m_titleLabel;
     }
 
-    bool isCloudSource() const {
-        return m_source == SaveSource::Cloud;
-    }
-
     const std::shared_ptr<Sidebar>& sidebar() const {
         return m_sidebar;
     }

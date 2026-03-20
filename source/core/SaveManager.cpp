@@ -952,6 +952,59 @@ bool SaveManager::cleanupExpiredTrashEntries(int retentionDays) {
     return true;
 }
 
+bool SaveManager::hasExpiredTrashEntries(int retentionDays) {
+    const std::string trashPath = getTrashPath();
+    DIR* rootDir = opendir(trashPath.c_str());
+    if (!rootDir) {
+        return false;
+    }
+
+    const std::time_t now = std::time(nullptr);
+    const int safeDays = retentionDays > 0 ? retentionDays : TRASH_RETENTION_DAYS_DEFAULT;
+    const std::time_t retentionSeconds = static_cast<std::time_t>(safeDays) * 24 * 60 * 60;
+
+    struct dirent* titleEntry;
+    while ((titleEntry = readdir(rootDir)) != nullptr) {
+        if (titleEntry->d_name[0] == '.') {
+            continue;
+        }
+
+        const std::string titlePath = trashPath + "/" + titleEntry->d_name;
+        struct stat titleStat;
+        if (stat(titlePath.c_str(), &titleStat) != 0 || !S_ISDIR(titleStat.st_mode)) {
+            continue;
+        }
+
+        DIR* titleDir = opendir(titlePath.c_str());
+        if (!titleDir) {
+            continue;
+        }
+
+        struct dirent* itemEntry;
+        while ((itemEntry = readdir(titleDir)) != nullptr) {
+            if (itemEntry->d_name[0] == '.') {
+                continue;
+            }
+
+            const std::string itemPath = titlePath + "/" + itemEntry->d_name;
+            struct stat itemStat;
+            if (stat(itemPath.c_str(), &itemStat) != 0) {
+                continue;
+            }
+
+            if (now - itemStat.st_mtime >= retentionSeconds) {
+                closedir(titleDir);
+                closedir(rootDir);
+                return true;
+            }
+        }
+        closedir(titleDir);
+    }
+
+    closedir(rootDir);
+    return false;
+}
+
 bool SaveManager::emptyTrash() {
     LOG_INFO("emptyTrash: clearing all trash contents");
     

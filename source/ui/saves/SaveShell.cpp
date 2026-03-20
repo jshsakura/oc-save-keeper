@@ -229,8 +229,12 @@ bool SaveShell::initialize() {
     Runtime::instance().setFont(m_fontMedium);
     Runtime::instance().setShell(this);
 
-    showProcessingOverlay(tr("sync.trash_cleanup", "휴지통을 정리하고 있습니다."));
-    m_saveManager.cleanupExpiredTrashEntries(30);
+    showProcessingOverlay(tr("sync.loading_saves", "Loading saves..."));
+    if (m_saveManager.hasExpiredTrashEntries(30)) {
+        showProcessingOverlay(tr("sync.trash_cleanup", "Cleaning up trash..."));
+        m_saveManager.cleanupExpiredTrashEntries(30);
+        showProcessingOverlay(tr("sync.loading_saves", "Loading saves..."));
+    }
 
     m_saveManager.scanTitles();
     m_backend = std::make_shared<SaveBackendAdapter>(m_saveManager, m_dropbox);
@@ -629,7 +633,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
     }
 
     const std::string sortHint = std::string("- ") + tr("ui.sort_mode_prefix", "Sort") + " " + screen.sortModeLabel();
-    renderFooter(tr("footer.hint.main", "A Open  B Exit  X Refresh  Y Language  L Users  R Cloud  - Sort") + " " + screen.sortModeLabel(), sortHint);
+    renderFooter(tr("footer.hint.main", "A Open  B Exit  X Refresh  Y Language  L Users  R Cloud  - Sort"), sortHint);
 }
 
 void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
@@ -683,9 +687,7 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
         renderSidebar(*screen.sidebar());
     }
 
-    const std::string rightHint = !m_statusMessage.empty()
-        ? m_statusMessage
-        : (screen.isCloudSource() ? tr("ui.cloud_refresh_hint", "X: Refresh cloud list") : "");
+    const std::string rightHint = m_statusMessage;
     renderFooter(tr("footer.hint.revision", "A: Restore/Download  B: Back  X: Refresh  Y: Language  L: Users  -: Delete"),
                  rightHint);
 }
@@ -707,7 +709,7 @@ void SaveShell::renderSidebar(const Sidebar& sidebar) {
     const auto& items = sidebar.items();
     for (int i = 0; i < static_cast<int>(items.size()); ++i) {
         const auto& item = items[i];
-        SDL_Rect row{panel.x + 32, panel.y + 126 + i * 82, panel.w - 64, 70};
+        SDL_Rect row{panel.x + 32, panel.y + 128 + i * 86, panel.w - 64, 76};
         const bool isSelected = i == sidebar.index();
         const bool isEnabled = item->isEnabled() && !isLoading;
 
@@ -727,9 +729,24 @@ void SaveShell::renderSidebar(const Sidebar& sidebar) {
             drawFocus(m_renderer, row);
         }
 
-        renderText(item->title(), row.x + 20, row.y + 18, m_fontMedium, textColor);
-        if (!item->info().empty()) {
-            renderText(fitText(m_fontSmall, item->info(), panel.w - 100), row.x + 20, row.y + 44, m_fontSmall, infoColor);
+        const int titleHeight = TTF_FontHeight(m_fontMedium);
+        const int infoHeight = TTF_FontHeight(m_fontSmall);
+        const bool hasInfo = !item->info().empty();
+        const int lineGap = 6;
+
+        int titleY = row.y;
+        int infoY = row.y;
+        if (hasInfo) {
+            const int blockHeight = titleHeight + lineGap + infoHeight;
+            titleY = row.y + std::max(0, (row.h - blockHeight) / 2);
+            infoY = titleY + titleHeight + lineGap;
+        } else {
+            titleY = row.y + std::max(0, (row.h - titleHeight) / 2);
+        }
+
+        renderText(item->title(), row.x + 20, titleY, m_fontMedium, textColor);
+        if (hasInfo) {
+            renderText(fitText(m_fontSmall, item->info(), panel.w - 100), row.x + 20, infoY, m_fontSmall, infoColor);
         }
     }
     
@@ -857,6 +874,7 @@ SDL_Texture* SaveShell::loadIcon(const std::string& path) {
     SDL_FreeSurface(scaledSurface);
     SDL_FreeSurface(surface);
     if (texture) {
+        SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
         m_iconCache[path] = texture;
         rememberCachedIcon(path);
         trimIconCache();
