@@ -153,6 +153,7 @@
     "ui.no_revision_entries": "No revision entries",
     "ui.refresh": "Refresh",
     "ui.refresh_completed": "Refresh completed.",
+    "ui.cloud_refresh_hint": "X: Refresh cloud list",
     "ui.sort_toggle": "Sort",
     "ui.sort_mode_prefix": "Sort",
     "ui.sort_mode_name_short": "Name",

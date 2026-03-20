@@ -652,8 +652,11 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
         renderSidebar(*screen.sidebar());
     }
 
+    const std::string rightHint = !m_statusMessage.empty()
+        ? m_statusMessage
+        : (screen.isCloudSource() ? tr("ui.cloud_refresh_hint", "X: Refresh cloud list") : screen.titleLabel());
     renderFooter(tr("footer.hint.revision", "A: Restore/Download  B: Back  X: Refresh  Y: Language  L: Users  -: Delete"),
-                 m_statusMessage.empty() ? screen.titleLabel() : m_statusMessage);
+                 rightHint);
 }
 
 void SaveShell::renderSidebar(const Sidebar& sidebar) {

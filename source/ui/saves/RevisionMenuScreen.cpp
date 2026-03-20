@@ -118,17 +118,13 @@ void RevisionMenuScreen::reload() {
     
     const auto& lang = utils::Language::instance();
     
-    if (m_source == SaveSource::Cloud) {
-        Runtime::instance().setLoading(true, lang.get("sync.querying"));
-        Runtime::instance().forceRender();
-    }
+    Runtime::instance().setLoading(true, lang.get("sync.querying"));
+    Runtime::instance().forceRender();
     
     setTitleSubHeading(m_titleLabel);
     m_entries = m_backend->listRevisions(m_titleId, m_source);
     
-    if (m_source == SaveSource::Cloud) {
-        Runtime::instance().setLoading(false);
-    }
+    Runtime::instance().setLoading(false);
     
     if (m_entries.empty()) {
         m_index = 0;

@@ -112,7 +112,13 @@ void SaveMenuScreen::reload() {
         return;
     }
 
+    const auto& lang = utils::Language::instance();
+    Runtime::instance().setLoading(true, lang.get("sync.querying"));
+    Runtime::instance().forceRender();
+
     m_entries = m_backend->listTitles();
+    Runtime::instance().setLoading(false);
+
     applySort();
     if (m_entries.empty()) {
         m_index = 0;
@@ -120,7 +126,7 @@ void SaveMenuScreen::reload() {
         m_index = static_cast<int>(m_entries.size()) - 1;
     }
     
-    Runtime::instance().notify(utils::Language::instance().get("ui.refresh_completed"));
+    Runtime::instance().notify(lang.get("ui.refresh_completed"));
 }
 
 void SaveMenuScreen::applySort() {

@@ -153,6 +153,7 @@
     "ui.no_revision_entries": "표시할 이력이 없습니다.",
     "ui.refresh": "새로고침",
     "ui.refresh_completed": "목록 새로고침 완료",
+    "ui.cloud_refresh_hint": "X 버튼: 클라우드 목록 새로고침",
     "ui.sort_toggle": "정렬",
     "ui.sort_mode_prefix": "정렬",
     "ui.sort_mode_name_short": "이름",
