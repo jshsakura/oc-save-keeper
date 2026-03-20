@@ -701,10 +701,10 @@ bool SaveManager::moveToTrash(const std::string& backupPath) {
         if (prevSlash != std::string::npos && slash != std::string::npos) {
             const std::string titleIdStr = backupPath.substr(prevSlash + 1, slash - prevSlash - 1);
             LOG_DEBUG("moveToTrash: attempting to parse titleId from string '%s'", titleIdStr.c_str());
-            try {
-                titleId = std::stoull(titleIdStr, nullptr, 16);
-            } catch (const std::exception& e) {
-                LOG_ERROR("moveToTrash: CRITICAL - failed to parse titleId from '%s': %s", titleIdStr.c_str(), e.what());
+            char* endptr = nullptr;
+            titleId = std::strtoull(titleIdStr.c_str(), &endptr, 16);
+            if (endptr == titleIdStr.c_str() || *endptr != '\0') {
+                LOG_ERROR("moveToTrash: CRITICAL - failed to parse titleId from '%s'", titleIdStr.c_str());
                 titleId = 0;
             }
         }
@@ -778,10 +778,10 @@ bool SaveManager::restoreFromTrash(const std::string& trashPath) {
         if (prevSlash != std::string::npos && slash != std::string::npos) {
             const std::string titleIdStr = trashPath.substr(prevSlash + 1, slash - prevSlash - 1);
             LOG_DEBUG("restoreFromTrash: attempting to parse titleId from string '%s'", titleIdStr.c_str());
-            try {
-                titleId = std::stoull(titleIdStr, nullptr, 16);
-            } catch (const std::exception& e) {
-                LOG_ERROR("restoreFromTrash: CRITICAL - failed to parse titleId from '%s': %s", titleIdStr.c_str(), e.what());
+            char* endptr = nullptr;
+            titleId = std::strtoull(titleIdStr.c_str(), &endptr, 16);
+            if (endptr == titleIdStr.c_str() || *endptr != '\0') {
+                LOG_ERROR("restoreFromTrash: CRITICAL - failed to parse titleId from '%s'", titleIdStr.c_str());
                 titleId = 0;
             }
         }
