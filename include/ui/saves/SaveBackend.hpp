@@ -30,6 +30,9 @@ struct SaveTitleEntry {
     bool hasCloudBackup = false;
     bool isDevice = false; // New
     bool isSystem = false; // New
+    std::time_t latestBackupTimestamp = 0;
+    int installOrder = 0;
+    int sourceOrder = 0;
 };
 
 struct SaveRevisionEntry {
@@ -42,6 +45,7 @@ struct SaveRevisionEntry {
     std::time_t timestamp = 0;
     int64_t size = 0;
     SaveSource source = SaveSource::Local;
+    bool isAutoBackup = false;
 };
 
 struct SaveActionResult {

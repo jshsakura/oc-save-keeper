@@ -23,6 +23,7 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <unordered_set>
 
 namespace core {
 
@@ -122,6 +123,16 @@ struct TitleSaveRecord {
     int64_t deviceSize = 0;
     int64_t systemSize = 0;
 };
+
+#ifdef __SWITCH__
+int64_t measureLiveSaveUsage(uint64_t titleId, AccountUid uid, SaveType saveType) {
+    fs::ScopedSaveMount saveMount("sizemount", titleId, uid, saveType);
+    if (!saveMount.isOpen()) {
+        return -1;
+    }
+    return fs::getDirectorySize(saveMount.getMountPath());
+}
+#endif
 
 } // namespace
 
@@ -273,9 +284,25 @@ void SaveManager::scanTitles() {
     m_titles.clear();
     
 #ifdef __SWITCH__
-    std::set<uint64_t> titleIds;
+    std::vector<uint64_t> titleIds;
+    std::unordered_set<uint64_t> titleIdSet;
     std::map<uint64_t, TitleSaveRecord> titleSaveInfo;
     const bool isDeviceUser = m_selectedUser && m_selectedUser->id == "device";
+
+    AccountUid accountUsageUid{};
+    bool hasAccountUsageUid = false;
+    if (m_selectedUser && m_selectedUser->id != "device") {
+        accountUsageUid = m_selectedUser->uid;
+        hasAccountUsageUid = true;
+    } else {
+        for (const auto& user : m_users) {
+            if (user.id != "device") {
+                accountUsageUid = user.uid;
+                hasAccountUsageUid = true;
+                break;
+            }
+        }
+    }
 
     FsSaveDataFilter filter{};
     FsSaveDataInfoReader reader;
@@ -299,7 +326,9 @@ void SaveManager::scanTitles() {
                 if (entry.save_data_type == FsSaveDataType_Account || 
                     entry.save_data_type == FsSaveDataType_Device || 
                     entry.save_data_type == FsSaveDataType_System) {
-                    titleIds.insert(entry.application_id);
+                    if (titleIdSet.insert(entry.application_id).second) {
+                        titleIds.push_back(entry.application_id);
+                    }
                     auto& record = titleSaveInfo[entry.application_id];
                     switch (entry.save_data_type) {
                         case FsSaveDataType_Account:
@@ -343,6 +372,20 @@ void SaveManager::scanTitles() {
                     title->accountSize = record.accountSize;
                     title->hasDeviceSave = record.hasDevice || record.hasSystem;
                     title->deviceSize = record.hasDevice ? record.deviceSize : record.systemSize;
+
+                    if (title->hasAccountSave && hasAccountUsageUid) {
+                        const int64_t usedAccountSize = measureLiveSaveUsage(titleId, accountUsageUid, SaveType::Account);
+                        if (usedAccountSize >= 0) {
+                            title->accountSize = usedAccountSize;
+                        }
+                    }
+                    if (title->hasDeviceSave) {
+                        const SaveType deviceType = record.hasDevice ? SaveType::Device : SaveType::System;
+                        const int64_t usedDeviceSize = measureLiveSaveUsage(titleId, AccountUid{}, deviceType);
+                        if (usedDeviceSize >= 0) {
+                            title->deviceSize = usedDeviceSize;
+                        }
+                    }
 
                     // Set hasSave to true if either exists
                     title->hasSave = title->hasAccountSave || title->hasDeviceSave;
@@ -405,6 +448,7 @@ bool SaveManager::scanTitle(uint64_t titleId) {
     info.saveType = SaveType::Account;
     info.saveSize = 0;
     info.isFavorite = false;
+    info.installOrder = static_cast<int>(m_titles.size());
     
 #ifdef __SWITCH__
     // Get title name
@@ -630,7 +674,7 @@ bool SaveManager::restoreSave(TitleInfo* title, const std::string& backupPath, b
     const bool shouldCreateRollback = createSafetyRollback && !skipRollbackForSource;
     if (shouldCreateRollback) {
         LOG_INFO("Restore: Creating safety rollback backup...");
-        createVersionedBackup(title, DEFAULT_MAX_VERSIONS);
+        createVersionedBackup(title, DEFAULT_MAX_VERSIONS, true);
 
         auto versions = getBackupVersions(title);
         rollbackPath = versions.empty() ? "" : versions.front().path;
@@ -904,6 +948,7 @@ std::vector<BackupVersion> SaveManager::listTrash(TitleInfo* title) {
                 ver.userId = meta.userId;
                 ver.userName = meta.userName;
                 ver.source = meta.source;
+                ver.isAutoBackup = meta.isAutoBackup;
                 if (meta.createdAt != 0) {
                     ver.timestamp = meta.createdAt;
                 }
@@ -1032,32 +1077,18 @@ std::vector<BackupVersion> SaveManager::getBackupVersions(TitleInfo* title) {
     
     closedir(dir);
     
-    // Sort: _autosave entries together, sorted by base name (without suffix), then by full name
-    std::sort(versions.begin(), versions.end(), 
+    std::sort(versions.begin(), versions.end(),
         [](const BackupVersion& a, const BackupVersion& b) {
-            // Extract base name without _autosave suffix for comparison
-            auto stripSuffix = [](const std::string& s) {
-                const std::string suffix = "_autosave";
-                if (s.size() > suffix.size() && s.substr(s.size() - suffix.size()) == suffix) {
-                    return s.substr(0, s.size() - suffix.size());
-                }
-                return s;
-            };
-            std::string aBase = stripSuffix(a.name);
-            std::string bBase = stripSuffix(b.name);
-            
-            // First sort by base name (newest first by timestamp)
             if (a.timestamp != b.timestamp) {
                 return a.timestamp > b.timestamp;
             }
-            // Then by full name (autosave entries last)
             return a.name < b.name;
         });
     
     return versions;
 }
 
-bool SaveManager::createVersionedBackup(TitleInfo* title, int maxVersions) {
+bool SaveManager::createVersionedBackup(TitleInfo* title, int maxVersions, bool isAutoBackup) {
     // Create timestamped backup name
     time_t now = time(nullptr);
     struct tm* t = localtime(&now);
@@ -1067,6 +1098,15 @@ bool SaveManager::createVersionedBackup(TitleInfo* title, int maxVersions) {
     // Create backup
     if (!backupSave(title, name)) {
         return false;
+    }
+
+    if (isAutoBackup) {
+        const std::string backupPath = getBackupPath(title) + "/" + std::string(name);
+        BackupMetadata meta;
+        if (readBackupMetadata(backupPath, meta)) {
+            meta.isAutoBackup = true;
+            writeBackupMetadataFile(getBackupMetadataPath(backupPath), meta);
+        }
     }
     
     // Clean up old versions
@@ -1271,15 +1311,22 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
     }
 
     // Keep one rollback point before any incoming cloud restore touches the live save.
-    createVersionedBackup(title, DEFAULT_MAX_VERSIONS);
+    createVersionedBackup(title, DEFAULT_MAX_VERSIONS, true);
 
     const std::string baseName = hasIncomingMeta && !incomingMeta.backupName.empty()
         ? incomingMeta.backupName
         : ("cloud_" + std::to_string(static_cast<long long>(time(nullptr))));
-    const std::string importName = sanitizePathComponent(baseName) + "_autosave";
-    const std::string importPath = getBackupPath(title) + "/" + importName;
+    std::string importName = sanitizePathComponent(baseName);
+    if (importName.empty()) {
+        importName = "cloud_" + std::to_string(static_cast<long long>(time(nullptr)));
+    }
+    std::string importPath = getBackupPath(title) + "/" + importName;
+    struct stat importStat;
+    if (stat(importPath.c_str(), &importStat) == 0) {
+        importName += "_" + std::to_string(static_cast<long long>(time(nullptr)));
+        importPath = getBackupPath(title) + "/" + importName;
+    }
 
-    fs::deleteDirectory(importPath);
     if (!fs::copyDirectoryWithProgress(tempDir, importPath, fs::DEFAULT_JOURNAL_SIZE)) {
         fs::deleteDirectory(tempDir);
         if (outReason) *outReason = "Failed to stage imported backup";
@@ -1303,6 +1350,7 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
     finalMeta.backupName = importName;
     finalMeta.revisionId = importName;
     finalMeta.source = "cloud";
+    finalMeta.isAutoBackup = false;
 
     writeBackupMetadataFile(getBackupMetadataPath(importPath), finalMeta);
 

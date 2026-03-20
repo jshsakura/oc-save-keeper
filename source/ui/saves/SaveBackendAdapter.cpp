@@ -83,6 +83,14 @@ bool endsWith(const std::string& value, const std::string& suffix) {
            value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+std::string trimAutoBackupSuffix(const std::string& value) {
+    static const std::string suffix = "_autosave";
+    if (endsWith(value, suffix)) {
+        return value.substr(0, value.size() - suffix.size());
+    }
+    return value;
+}
+
 std::string makeTempArchivePath(uint64_t titleId) {
     char buffer[256];
     std::snprintf(buffer, sizeof(buffer), "%s/frontend_%016llX_%lld.zip", utils::paths::TEMP,
@@ -129,6 +137,7 @@ SaveBackendAdapter::SaveBackendAdapter(core::SaveManager& saveManager, network::
 
 std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
     std::vector<SaveTitleEntry> out;
+    const auto& lang = utils::Language::instance();
 
     if (m_dropbox.isAuthenticated() && !g_remoteCacheValid) {
         const std::string remotePath = "/titles";
@@ -150,6 +159,7 @@ std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
 
     for (auto* title : m_saveManager.getTitlesWithSaves()) {
         const auto versions = m_saveManager.getBackupVersions(title);
+        const std::time_t latestBackupTimestamp = versions.empty() ? 0 : versions.front().timestamp;
         std::string vCount = versions.empty() ? "" : (" (" + std::to_string(versions.size()) + ")");
 
         // 1. Account Save (if exists)
@@ -164,6 +174,9 @@ std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
             entry.hasCloudBackup = m_dropbox.isAuthenticated() && (g_remoteTitleCache.count(title->titleId) > 0);
             entry.isDevice = false;
             entry.isSystem = false;
+            entry.latestBackupTimestamp = latestBackupTimestamp;
+            entry.installOrder = title->installOrder;
+            entry.sourceOrder = 0;
             out.push_back(std::move(entry));
         }
 
@@ -171,7 +184,7 @@ std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
         if (title->hasDeviceSave) {
             SaveTitleEntry entry;
             entry.titleId = title->titleId;
-            entry.name = title->name + " (디바이스)";
+            entry.name = title->name + " " + lang.get("ui.device_shared_tag");
             entry.author = title->publisher;
             entry.iconPath = title->iconPath;
             entry.subtitle = "Device  " + shortSizeLabel(title->deviceSize);
@@ -179,9 +192,13 @@ std::vector<SaveTitleEntry> SaveBackendAdapter::listTitles() {
             entry.hasCloudBackup = false;
             entry.isDevice = true;
             entry.isSystem = (title->actualSaveType == core::SaveType::System);
+            entry.latestBackupTimestamp = latestBackupTimestamp;
+            entry.installOrder = title->installOrder;
+            entry.sourceOrder = 1;
             out.push_back(std::move(entry));
         }
     }
+
     return out;
 }
 
@@ -200,7 +217,7 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
         for (const auto& version : m_saveManager.getBackupVersions(title)) {
             SaveRevisionEntry entry;
             entry.id = version.path;
-            entry.label = version.name;
+            entry.label = trimAutoBackupSuffix(version.name);
             entry.path = version.path;
             
             // If the local backup originated from this device, show '현재 기기'
@@ -214,7 +231,8 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
             entry.sourceLabel = (version.source == "local") ? lang.get("history.source_local") : lang.get("history.source_dropbox");
             entry.timestamp = version.timestamp;
             entry.size = version.size;
-            entry.source = SaveSource::Local;
+            entry.source = (version.source == "cloud") ? SaveSource::Cloud : SaveSource::Local;
+            entry.isAutoBackup = version.isAutoBackup;
             out.push_back(std::move(entry));
         }
     } else {
@@ -234,7 +252,7 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
 
             SaveRevisionEntry entry;
             entry.id = file.path;
-            entry.label = incomingMeta.backupName.empty() ? file.name : incomingMeta.backupName;
+            entry.label = trimAutoBackupSuffix(incomingMeta.backupName.empty() ? file.name : incomingMeta.backupName);
             entry.path = file.path.substr(0, file.path.size() - 5) + ".zip";
             
             // For Cloud revisions: if the meta device ID matches current, show '현재 기기'
@@ -250,6 +268,7 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
             entry.timestamp = incomingMeta.createdAt != 0 ? incomingMeta.createdAt : file.modifiedTime;
             entry.size = incomingMeta.size > 0 ? incomingMeta.size : static_cast<int64_t>(file.size);
             entry.source = SaveSource::Cloud;
+            entry.isAutoBackup = incomingMeta.isAutoBackup;
             out.push_back(std::move(entry));
         }
     }

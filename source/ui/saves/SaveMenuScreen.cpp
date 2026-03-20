@@ -4,6 +4,8 @@
 #include "ui/saves/Runtime.hpp"
 #include "utils/Language.hpp"
 
+#include <algorithm>
+
 namespace ui::saves {
 
 SaveMenuScreen::SaveMenuScreen(std::shared_ptr<SaveBackend> backend)
@@ -18,6 +20,9 @@ SaveMenuScreen::SaveMenuScreen(std::shared_ptr<SaveBackend> backend)
     }});
     setAction(Button::X, Action{lang.get("ui.refresh"), [this]() {
         reload();
+    }});
+    setAction(Button::Minus, Action{lang.get("ui.sort_toggle"), [this]() {
+        cycleSortMode();
     }});
     setAction(Button::B, Action{lang.get("detail.back"), [this]() {
         setPop();
@@ -40,7 +45,25 @@ int SaveMenuScreen::visibleCount() const {
     return m_list ? m_list->page() : 0;
 }
 
+std::string SaveMenuScreen::sortModeLabel() const {
+    const auto& lang = utils::Language::instance();
+    switch (m_sortMode) {
+        case SortMode::Name:
+            return lang.get("ui.sort_mode_name_short");
+        case SortMode::Install:
+            return lang.get("ui.sort_mode_install_short");
+        case SortMode::Saved:
+        default:
+            return lang.get("ui.sort_mode_saved_short");
+    }
+}
+
 void SaveMenuScreen::update(const Controller& controller, const TouchInfo& touch) {
+    if (m_reloadOnNextFocus) {
+        m_reloadOnNextFocus = false;
+        reload();
+    }
+
     auto sidebar = m_sidebar;
     if (sidebar) {
         sidebar->update(controller, touch);
@@ -90,6 +113,7 @@ void SaveMenuScreen::reload() {
     }
 
     m_entries = m_backend->listTitles();
+    applySort();
     if (m_entries.empty()) {
         m_index = 0;
     } else if (m_index >= static_cast<int>(m_entries.size())) {
@@ -97,6 +121,62 @@ void SaveMenuScreen::reload() {
     }
     
     Runtime::instance().notify(utils::Language::instance().get("ui.refresh_completed"));
+}
+
+void SaveMenuScreen::applySort() {
+    std::sort(m_entries.begin(), m_entries.end(), [this](const SaveTitleEntry& lhs, const SaveTitleEntry& rhs) {
+        if (m_sortMode == SortMode::Name) {
+            if (lhs.name != rhs.name) {
+                return lhs.name < rhs.name;
+            }
+        } else if (m_sortMode == SortMode::Install) {
+            if (lhs.installOrder != rhs.installOrder) {
+                return lhs.installOrder > rhs.installOrder;
+            }
+        } else {
+            if (lhs.latestBackupTimestamp != rhs.latestBackupTimestamp) {
+                return lhs.latestBackupTimestamp > rhs.latestBackupTimestamp;
+            }
+        }
+
+        if (lhs.titleId != rhs.titleId) {
+            return lhs.titleId < rhs.titleId;
+        }
+        return lhs.sourceOrder < rhs.sourceOrder;
+    });
+}
+
+void SaveMenuScreen::cycleSortMode() {
+    uint64_t selectedTitleId = 0;
+    bool selectedIsDevice = false;
+    bool selectedIsSystem = false;
+    if (!m_entries.empty() && m_index >= 0 && m_index < static_cast<int>(m_entries.size())) {
+        const auto& current = m_entries[m_index];
+        selectedTitleId = current.titleId;
+        selectedIsDevice = current.isDevice;
+        selectedIsSystem = current.isSystem;
+    }
+
+    if (m_sortMode == SortMode::Name) {
+        m_sortMode = SortMode::Install;
+    } else if (m_sortMode == SortMode::Install) {
+        m_sortMode = SortMode::Saved;
+    } else {
+        m_sortMode = SortMode::Name;
+    }
+
+    applySort();
+
+    for (int i = 0; i < static_cast<int>(m_entries.size()); ++i) {
+        const auto& entry = m_entries[i];
+        if (entry.titleId == selectedTitleId && entry.isDevice == selectedIsDevice && entry.isSystem == selectedIsSystem) {
+            m_index = i;
+            break;
+        }
+    }
+
+    const auto& lang = utils::Language::instance();
+    Runtime::instance().notify(lang.get("ui.sort_mode_prefix") + " " + sortModeLabel());
 }
 
 void SaveMenuScreen::openActions() {
@@ -178,6 +258,7 @@ void SaveMenuScreen::openHistory(SaveSource source) {
     }
 
     const auto& entry = m_entries[m_index];
+    m_reloadOnNextFocus = true;
     Runtime::instance().push(std::make_shared<RevisionMenuScreen>(m_backend, entry.titleId, source, entry.name, entry.isSystem));
 }
 

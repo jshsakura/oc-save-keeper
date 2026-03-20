@@ -10,6 +10,12 @@ namespace ui::saves {
 
 class SaveMenuScreen final : public GridMenuBase {
 public:
+    enum class SortMode {
+        Name,
+        Install,
+        Saved,
+    };
+
     explicit SaveMenuScreen(std::shared_ptr<SaveBackend> backend);
 
     const char* shortTitle() const override;
@@ -34,8 +40,16 @@ public:
     int firstVisibleIndex() const;
     int visibleCount() const;
 
+    SortMode sortMode() const {
+        return m_sortMode;
+    }
+
+    std::string sortModeLabel() const;
+
 private:
     void reload();
+    void applySort();
+    void cycleSortMode();
     void openActions();
     void openHistory(SaveSource source);
 
@@ -46,6 +60,8 @@ private:
     int m_index = 0;
     int m_layout = LayoutTypeGrid;
     bool m_isOperationInProgress = false;
+    SortMode m_sortMode = SortMode::Saved;
+    bool m_reloadOnNextFocus = false;
 };
 
 } // namespace ui::saves

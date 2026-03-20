@@ -62,6 +62,7 @@ struct TitleInfo {
     int64_t accountSize = 0;     // New
     int64_t deviceSize = 0;      // New
     bool isFavorite = false;
+    int installOrder = 0;
 };
 
 // Backup version
@@ -141,7 +142,7 @@ public:
     
     // Version management
     std::vector<BackupVersion> getBackupVersions(TitleInfo* title);
-    bool createVersionedBackup(TitleInfo* title, int maxVersions = 5);
+    bool createVersionedBackup(TitleInfo* title, int maxVersions = 5, bool isAutoBackup = false);
     
     // Batch operations
     bool backupAll();

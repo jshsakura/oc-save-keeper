@@ -456,20 +456,15 @@ void SaveShell::render() {
 void SaveShell::renderHeader(const std::string& title, const std::string& subtitle) {
     SDL_Rect header{0, 0, 1280, 96};
     fillRect(m_renderer, header, color(15, 23, 42));
-    SDL_SetRenderDrawColor(m_renderer, 56, 189, 248, 255);
-    SDL_Rect accent{24, 24, 8, 40};
-    SDL_RenderFillRect(m_renderer, &accent);
-    
-    // Main App Name - Moved down slightly (18 -> 24)
-    renderText(tr("app.name", "OC Save Keeper"), 46, 24, m_fontLarge, color(241, 245, 249));
-    
-    // Screen Title next to it - smaller font and moved right/down
+
+    renderText(tr("app.name", "OC Save Keeper"), 36, 14, m_fontLarge, color(241, 245, 249));
+
     if (!title.empty()) {
-        renderText(title, 350, 36, m_fontSmall, color(148, 163, 184));
+        renderText(title, 300, 24, m_fontSmall, color(148, 163, 184));
     }
 
     if (!subtitle.empty()) {
-        renderText(subtitle, 46, 64, m_fontSmall, color(148, 163, 184));
+        renderText(subtitle, 36, 48, m_fontSmall, color(148, 163, 184));
     }
 
     const int chipW = 180;
@@ -575,7 +570,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
 
         const int textX = iconRect.x + iconRect.w + 20;
         const int textW = card.x + card.w - textX - 16;
-        renderText(fitText(m_fontMedium, entry.name, textW), textX, card.y + 12, m_fontMedium, color(241, 245, 249));
+        renderText(fitText(m_fontSmall, entry.name, textW), textX, card.y + 12, m_fontSmall, color(241, 245, 249));
         renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 46, m_fontSmall, color(148, 163, 184));
         renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 70, m_fontSmall, color(148, 163, 184));
 
@@ -587,7 +582,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
         fillRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(8, 47, 73) : color(39, 39, 42));
         strokeRect(m_renderer, localChip, entry.hasLocalBackup ? color(74, 222, 128) : color(82, 82, 91));
         strokeRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(56, 189, 248) : color(82, 82, 91));
-        renderTextCentered(fitText(m_fontSmall, entry.hasLocalBackup ? tr("history.local", "Local") : tr("ui.empty", "Empty"), chipW - 8),
+        renderTextCentered(fitText(m_fontSmall, entry.hasLocalBackup ? tr("history.local", "Local") : tr("ui.no_local_backup_chip", "No Local"), chipW - 8),
                            localChip,
                            m_fontSmall,
                            color(241, 245, 249));
@@ -601,7 +596,9 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
         renderSidebar(*screen.sidebar());
     }
 
-    renderFooter(tr("footer.hint.main", "A: Open  B: Exit  X: Refresh  Y: Language  L: Users"));
+    const std::string sortHint = std::string("-") + tr("ui.sort_toggle", "Sort") + "  "
+        + tr("ui.sort_mode_prefix", "Sort") + " " + screen.sortModeLabel();
+    renderFooter(tr("footer.hint.main", "A Open  B Exit  X Refresh  Y Language  L Users  R Cloud"), sortHint);
 }
 
 void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
@@ -638,11 +635,14 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
         renderText(fitText(m_fontSmall, entry.userLabel.empty() ? tr("history.unknown_user", "Unknown user") : entry.userLabel, 200), row.x + 360, row.y + 16, m_fontSmall, color(148, 163, 184));
         renderText(fitText(m_fontSmall, entry.deviceLabel.empty() ? tr("history.unknown_device", "Unknown device") : entry.deviceLabel, 240), row.x + 600, row.y + 16, m_fontSmall, color(148, 163, 184));
 
-        // Source Badge
         SDL_Rect sourceBadge{row.x + 880, row.y + 12, 140, 26};
-        fillRect(m_renderer, sourceBadge, entry.source == SaveSource::Cloud ? color(8, 47, 73) : color(20, 83, 45));
-        strokeRect(m_renderer, sourceBadge, entry.source == SaveSource::Cloud ? color(56, 189, 248) : color(74, 222, 128));
-        renderTextCentered(fitText(m_fontSmall, entry.sourceLabel.empty() ? tr("history.unknown_source", "Unknown source") : entry.sourceLabel, 130), sourceBadge, m_fontSmall, color(241, 245, 249));
+        const bool isAutoBackup = entry.isAutoBackup;
+        fillRect(m_renderer, sourceBadge, isAutoBackup ? color(154, 52, 18) : color(8, 47, 73));
+        strokeRect(m_renderer, sourceBadge, isAutoBackup ? color(251, 146, 60) : color(56, 189, 248));
+        const std::string sourceBadgeText = isAutoBackup
+            ? tr("history.auto_backup", "Auto Backup")
+            : (entry.sourceLabel.empty() ? tr("history.unknown_source", "Unknown source") : entry.sourceLabel);
+        renderTextCentered(fitText(m_fontSmall, sourceBadgeText, 130), sourceBadge, m_fontSmall, color(241, 245, 249));
         renderText(sizeBuf, row.x + 1060, row.y + 16, m_fontSmall, color(148, 163, 184));
         SDL_SetRenderDrawColor(m_renderer, 51, 65, 85, 255);
         SDL_RenderDrawLine(m_renderer, row.x, row.y + row.h + 11, row.x + row.w, row.y + row.h + 11);
@@ -887,10 +887,10 @@ void SaveShell::openDropboxOverlay() {
 
     if (m_dropbox.isAuthenticated()) {
         m_dropboxState = DropboxAuthState::Idle;
-        setStatus(tr("auth.status_authenticated", "You are already connected to Dropbox."));
+        setStatus(tr("auth.status_authenticated", "You are already connected to cloud."));
     } else {
         m_dropboxState = DropboxAuthState::Idle;
-        setStatus(tr("auth.status_ready", "Ready to start Dropbox connection."));
+        setStatus(tr("auth.status_ready", "Ready to start cloud connection."));
     }
 }
 
@@ -978,7 +978,7 @@ void SaveShell::updateOverlay() {
             // Actually consume the session
             if (m_dropbox.consumeBridgeSession(m_bridgeSession)) {
                 m_dropboxState = DropboxAuthState::Success;
-                setStatus(tr("auth.status_success", "Successfully connected to Dropbox!"));
+                setStatus(tr("auth.status_success", "Successfully connected to cloud!"));
                 rebuildRootScreen();
             } else {
                 m_dropboxState = DropboxAuthState::Failed;
@@ -1142,7 +1142,7 @@ void SaveShell::activateOverlaySelection() {
         } else if (m_overlayIndex == 1) { // Logout
             m_dropboxState = DropboxAuthState::ConfirmLogout;
             m_overlayIndex = 1; // Default to 'No'
-            setStatus(tr("auth.confirm_logout", "Are you sure you want to disconnect from Dropbox?"));
+            setStatus(tr("auth.confirm_logout", "Are you sure you want to disconnect from cloud?"));
         }
         return;
     }
@@ -1188,7 +1188,7 @@ void SaveShell::renderDropboxOverlay() {
     drawPanel(m_renderer, panel, CAT_MANTLE, CAT_BLUE); // Darker base, Blue border
     
     // Header - Use Blue for the title to match icon
-    renderText(tr("auth.title", "Dropbox Setup"), panel.x + 24, panel.y + 31, m_fontLarge, CAT_BLUE);
+    renderText(tr("auth.title", "Cloud Setup"), panel.x + 24, panel.y + 31, m_fontLarge, CAT_BLUE);
     
     // Status Bar - Only show for Errors or Success, hide during normal flow to avoid redundancy
     SDL_Rect statusRect{panel.x + 24, panel.y + 80, panel.w - 48, 44};
@@ -1204,11 +1204,11 @@ void SaveShell::renderDropboxOverlay() {
     if (m_dropboxState == DropboxAuthState::Success) {
         // --- SUCCESS VIEW: Large, centered, clean ---
         SDL_Rect successRect{panel.x, panel.y + 120, panel.w, 180};
-        renderTextCentered(tr("auth.status_success", "Successfully connected to Dropbox!"), 
+        renderTextCentered(tr("auth.status_success", "Successfully connected to cloud!"), 
                            successRect, m_fontLarge, CAT_GREEN);
         
         SDL_Rect descRect{panel.x + 48, panel.y + 230, panel.w - 96, 60};
-        renderTextCentered(tr("auth.finish_description", "Dropbox is now ready to use."), 
+        renderTextCentered(tr("auth.finish_description", "Cloud is now ready to use."), 
                            descRect, m_fontMedium, CAT_TEXT);
 
         SDL_Rect closeBtn{panel.x + (panel.w - 400) / 2, panel.y + 340, 400, 60};
@@ -1250,7 +1250,7 @@ void SaveShell::renderDropboxOverlay() {
         }
     } else if (m_dropbox.isAuthenticated()) {
         // --- AUTHENTICATED OPTIONS ---
-        renderTextCentered(tr("auth.status_authenticated", "You are already connected to Dropbox."), 
+        renderTextCentered(tr("auth.status_authenticated", "You are already connected to cloud."), 
                            SDL_Rect{panel.x, panel.y + 120, panel.w, 60}, m_fontMedium, CAT_GREEN);
 
         const char* options[2] = { "detail.back", "ui.logout" };
