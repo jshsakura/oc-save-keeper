@@ -748,9 +748,8 @@ bool SaveManager::moveToTrash(const std::string& backupPath) {
     }
 
     BackupMetadata meta;
-    bool metaRead = readBackupMetadata(backupPath, meta);
+    readBackupMetadata(backupPath, meta);
     uint64_t titleId = meta.titleId;
-    LOG_DEBUG("moveToTrash: metaRead=%d, titleId_from_meta=%016lX", metaRead, titleId);
 
     if (titleId == 0) {
         const size_t slash = backupPath.find_last_of('/');
@@ -825,9 +824,8 @@ bool SaveManager::restoreFromTrash(const std::string& trashPath) {
     }
 
     BackupMetadata meta;
-    bool metaRead = readBackupMetadata(trashPath, meta);
+    readBackupMetadata(trashPath, meta);
     uint64_t titleId = meta.titleId;
-    LOG_DEBUG("restoreFromTrash: metaRead=%d, titleId_from_meta=%016lX", metaRead, titleId);
     
     if (titleId == 0) {
         const size_t slash = trashPath.find_last_of('/');
