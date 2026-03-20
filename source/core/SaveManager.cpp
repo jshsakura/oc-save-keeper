@@ -37,6 +37,7 @@ constexpr const char* DEVICE_ID_PATH = utils::paths::DEVICE_ID;
 constexpr const char* DEVICE_PRIORITY_PATH = utils::paths::DEVICE_PRIORITY;
 constexpr const char* META_ENTRY_NAME = ".dropkeep.meta";
 constexpr int DEFAULT_MAX_VERSIONS = 5;
+constexpr int TRASH_RETENTION_DAYS_DEFAULT = 30;
 
 std::string sanitizePathComponent(std::string value) {
     if (value.empty()) {
@@ -883,6 +884,71 @@ bool SaveManager::restoreFromTrash(const std::string& trashPath) {
     std::remove(trashZipDel.c_str());
 
     LOG_INFO("restoreFromTrash: SUCCESS");
+    return true;
+}
+
+bool SaveManager::cleanupExpiredTrashEntries(int retentionDays) {
+    const std::string trashPath = getTrashPath();
+    DIR* rootDir = opendir(trashPath.c_str());
+    if (!rootDir) {
+        return true;
+    }
+
+    const std::time_t now = std::time(nullptr);
+    const int safeDays = retentionDays > 0 ? retentionDays : TRASH_RETENTION_DAYS_DEFAULT;
+    const std::time_t retentionSeconds = static_cast<std::time_t>(safeDays) * 24 * 60 * 60;
+
+    int deletedCount = 0;
+    struct dirent* titleEntry;
+    while ((titleEntry = readdir(rootDir)) != nullptr) {
+        if (titleEntry->d_name[0] == '.') {
+            continue;
+        }
+
+        const std::string titlePath = trashPath + "/" + titleEntry->d_name;
+        struct stat titleStat;
+        if (stat(titlePath.c_str(), &titleStat) != 0 || !S_ISDIR(titleStat.st_mode)) {
+            continue;
+        }
+
+        DIR* titleDir = opendir(titlePath.c_str());
+        if (!titleDir) {
+            continue;
+        }
+
+        struct dirent* itemEntry;
+        while ((itemEntry = readdir(titleDir)) != nullptr) {
+            if (itemEntry->d_name[0] == '.') {
+                continue;
+            }
+
+            const std::string itemPath = titlePath + "/" + itemEntry->d_name;
+            struct stat itemStat;
+            if (stat(itemPath.c_str(), &itemStat) != 0) {
+                continue;
+            }
+
+            if (now - itemStat.st_mtime < retentionSeconds) {
+                continue;
+            }
+
+            if (S_ISDIR(itemStat.st_mode)) {
+                fs::deleteDirectory(itemPath);
+                std::remove((itemPath + ".zip").c_str());
+                ++deletedCount;
+            } else {
+                if (std::remove(itemPath.c_str()) == 0) {
+                    ++deletedCount;
+                }
+            }
+        }
+        closedir(titleDir);
+    }
+
+    closedir(rootDir);
+    if (deletedCount > 0) {
+        LOG_INFO("cleanupExpiredTrashEntries: deleted %d expired trash item(s) older than %d days", deletedCount, safeDays);
+    }
     return true;
 }
 

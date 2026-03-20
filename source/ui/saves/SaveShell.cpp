@@ -87,6 +87,18 @@ std::string currentSelectionSubtitle(core::SaveManager& saveManager, network::Dr
     return mode + "  |  " + selected + "  |  " + device;
 }
 
+void trimLastUtf8Codepoint(std::string& value) {
+    if (value.empty()) {
+        return;
+    }
+
+    size_t lead = value.size() - 1;
+    while (lead > 0 && (static_cast<unsigned char>(value[lead]) & 0xC0) == 0x80) {
+        --lead;
+    }
+    value.erase(lead);
+}
+
 #ifndef __SWITCH__
 bool fileExists(const char* path) {
     FILE* file = std::fopen(path, "rb");
@@ -216,6 +228,10 @@ bool SaveShell::initialize() {
     utils::Language::instance().init();
     Runtime::instance().setFont(m_fontMedium);
     Runtime::instance().setShell(this);
+
+    showProcessingOverlay(tr("sync.trash_cleanup", "휴지통을 정리하고 있습니다."));
+    m_saveManager.cleanupExpiredTrashEntries(30);
+
     m_saveManager.scanTitles();
     m_backend = std::make_shared<SaveBackendAdapter>(m_saveManager, m_dropbox);
     pushRootScreen();
@@ -467,7 +483,7 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     }
 
     if (!subtitle.empty()) {
-        renderText(subtitle, 36, 52, m_fontSmall, color(148, 163, 184));
+        renderText(subtitle, 36, 56, m_fontSmall, color(148, 163, 184));
     }
 
     const int chipW = 180;
@@ -784,9 +800,7 @@ std::string SaveShell::fitText(TTF_Font* font, const std::string& text, int maxW
 
     std::string clipped = text;
     while (!clipped.empty()) {
-        do {
-            clipped.pop_back();
-        } while (!clipped.empty() && (static_cast<unsigned char>(clipped.back()) & 0xC0) == 0x80);
+        trimLastUtf8Codepoint(clipped);
         
         std::string trial = clipped + "...";
         if (TTF_SizeUTF8(actualFont, trial.c_str(), &width, nullptr) == 0 && width <= maxWidth) {
@@ -1226,7 +1240,7 @@ void SaveShell::renderDropboxOverlay() {
                            successRect, m_fontLarge, CAT_GREEN);
         
         SDL_Rect descRect{panel.x + 48, panel.y + 230, panel.w - 96, 60};
-        renderTextCentered(tr("auth.finish_description", "Cloud is now ready to use."), 
+        renderTextCentered(tr("auth.finish_description", "Dropbox integration complete. You're all set."), 
                            descRect, m_fontMedium, CAT_TEXT);
 
         SDL_Rect closeBtn{panel.x + (panel.w - 400) / 2, panel.y + 340, 400, 60};

@@ -136,6 +136,7 @@ public:
     bool moveToTrash(const std::string& backupPath);
     bool restoreFromTrash(const std::string& trashPath);
     bool emptyTrash();
+    bool cleanupExpiredTrashEntries(int retentionDays);
     std::vector<BackupVersion> listTrash(TitleInfo* title);
     std::string getTrashPath(TitleInfo* title) const;
     std::string getTrashPath() const;
