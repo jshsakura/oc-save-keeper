@@ -457,6 +457,9 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     SDL_Rect header{0, 0, 1280, 96};
     fillRect(m_renderer, header, color(15, 23, 42));
 
+    SDL_Rect titleAccentBar{14, 26, 4, 44};
+    fillRect(m_renderer, titleAccentBar, color(56, 189, 248));
+
     renderText(tr("app.name", "OC Save Keeper"), 36, 14, m_fontLarge, color(241, 245, 249));
 
     if (!title.empty()) {
