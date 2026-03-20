@@ -17,7 +17,7 @@
     "footer.hint.close": "B 닫기",
     "footer.hint.select_close": "A 선택  B 닫기",
     "footer.hint.select_move_close": "A 선택  ↑↓ 이동  B 닫기",
-    "footer.hint.main": "A 열기  B 종료  X 새로고침  Y 언어  L 사용자 변경  R 연동 설정",
+    "footer.hint.main": "A 열기  B 종료  X 새로고침  Y 언어  L 사용자 변경  R 연동 설정  - 정렬",
     "footer.hint.revision": "A 복원  B 닫기  X 새로고침  Y 언어  L 사용자 변경  R 연동 설정  - 삭제",
 
     "detail.upload": "클라우드 업로드",

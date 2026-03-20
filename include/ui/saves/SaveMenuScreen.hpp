@@ -60,7 +60,7 @@ private:
     int m_index = 0;
     int m_layout = LayoutTypeGrid;
     bool m_isOperationInProgress = false;
-    SortMode m_sortMode = SortMode::Saved;
+    SortMode m_sortMode = SortMode::Install;
     bool m_reloadOnNextFocus = false;
 };
 

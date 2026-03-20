@@ -629,7 +629,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
     }
 
     const std::string sortHint = std::string("- ") + tr("ui.sort_mode_prefix", "Sort") + " " + screen.sortModeLabel();
-    renderFooter(tr("footer.hint.main", "A Open  B Exit  X Refresh  Y Language  L Users  R Cloud"), sortHint);
+    renderFooter(tr("footer.hint.main", "A Open  B Exit  X Refresh  Y Language  L Users  R Cloud  - Sort") + " " + screen.sortModeLabel(), sortHint);
 }
 
 void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
