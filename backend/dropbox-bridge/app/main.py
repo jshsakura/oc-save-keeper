@@ -228,13 +228,14 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # Content-Security-Policy: unpkg.com(feather-icons), fonts.googleapis.com 등을 허용
+    # Content-Security-Policy: 실서비스 환경에 맞게 완화
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' unpkg.com; "
+        "script-src 'self' unpkg.com 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline' fonts.googleapis.com; "
-        "font-src fonts.gstatic.com; "
-        "img-src 'self' data:;"
+        "font-src 'self' fonts.gstatic.com save.opencourse.kr; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://stats.g.doubleclick.net https://*.google-analytics.com https://*.analytics.google.com;"
     )
     return response
 
