@@ -1207,7 +1207,7 @@ void SaveShell::renderDropboxOverlay() {
         renderTextCentered(tr("auth.status_success", "Successfully connected to Dropbox!"), 
                            successRect, m_fontLarge, CAT_GREEN);
         
-        SDL_Rect descRect{panel.x + 48, panel.y + 200, panel.w - 96, 60};
+        SDL_Rect descRect{panel.x + 48, panel.y + 230, panel.w - 96, 60};
         renderTextCentered(tr("auth.finish_description", "Dropbox is now ready to use."), 
                            descRect, m_fontMedium, CAT_TEXT);
 

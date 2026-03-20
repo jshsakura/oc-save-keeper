@@ -114,15 +114,28 @@ void RevisionMenuScreen::reload() {
         m_index = 0;
         return;
     }
+    
+    const auto& lang = utils::Language::instance();
+    
+    if (m_source == SaveSource::Cloud) {
+        Runtime::instance().setLoading(true, lang.get("sync.querying"));
+        Runtime::instance().forceRender();
+    }
+    
     setTitleSubHeading(m_titleLabel);
     m_entries = m_backend->listRevisions(m_titleId, m_source);
+    
+    if (m_source == SaveSource::Cloud) {
+        Runtime::instance().setLoading(false);
+    }
+    
     if (m_entries.empty()) {
         m_index = 0;
     } else if (m_index >= static_cast<int>(m_entries.size())) {
         m_index = static_cast<int>(m_entries.size()) - 1;
     }
 
-    Runtime::instance().notify(utils::Language::instance().get("ui.refresh_completed"));
+    Runtime::instance().notify(lang.get("ui.refresh_completed"));
 }
 
 void RevisionMenuScreen::restoreSelected() {

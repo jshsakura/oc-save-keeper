@@ -350,9 +350,16 @@ SaveActionResult SaveBackendAdapter::download(uint64_t titleId, const std::strin
         return {false, lang.get("error.not_authenticated")};
     }
 
+    // Convert .meta path to .zip path for download
+    std::string zipPath = revisionId;
+    if (revisionId.size() > 5 && revisionId.substr(revisionId.size() - 5) == ".meta") {
+        zipPath = revisionId.substr(0, revisionId.size() - 5) + ".zip";
+    }
+    LOG_INFO("download: revisionId=%s -> zipPath=%s", revisionId.c_str(), zipPath.c_str());
+
     utils::paths::ensureBaseDirectories();
     const std::string tempArchive = makeTempArchivePath(titleId);
-    if (!m_dropbox.downloadFile(revisionId, tempArchive)) {
+    if (!m_dropbox.downloadFile(zipPath, tempArchive)) {
         return {false, lang.get("error.download_failed")};
     }
 
@@ -367,7 +374,7 @@ SaveActionResult SaveBackendAdapter::download(uint64_t titleId, const std::strin
 
     return {
         true,
-        reason.empty() ? lang.get("sync.upload_completed") : reason
+        reason.empty() ? lang.get("sync.restore_success") : reason
     };
 }
 
