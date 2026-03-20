@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from typing import Literal
 from urllib.parse import urlencode
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +36,9 @@ DROPBOX_BRIDGE_BASE = get_env("DROPBOX_BRIDGE_BASE")
 POLL_TOKEN_SECRET = get_env("POLL_TOKEN_SECRET")
 RELEASE_URL = get_env("RELEASE_URL", "https://github.com/jshsakura/oc-save-keeper/releases/tag/latest")
 GITHUB_URL = get_env("GITHUB_URL", "https://github.com/jshsakura/oc-save-keeper")
+BRIDGE_LOG_LEVEL = get_env("BRIDGE_LOG_LEVEL", "WARNING").upper()
+ENABLE_ACCESS_LOGS = get_env("ENABLE_ACCESS_LOGS", "0") == "1"
+ENABLE_SECURITY_EVENT_LOGS = get_env("ENABLE_SECURITY_EVENT_LOGS", "0") == "1"
 
 # 보안 강화: 파일에서 시크릿 읽기 지원 (Docker Secrets 스타일)
 SECRET_FILE_PATH = "/run/secrets/poll_token_secret"
@@ -120,6 +124,8 @@ async def detect_attack(redis: Redis, client_ip: str) -> bool:
 
 async def log_suspicious(redis: Redis, client_ip: str, action: str, reason: str):
     """의심스러운 활동 로깅"""
+    if not ENABLE_SECURITY_EVENT_LOGS:
+        return
     try:
         import json
         log_entry = json.dumps({
@@ -183,7 +189,10 @@ class HealthResponse(BaseModel):
 
 # 로깅 설정
 logger = logging.getLogger("bridge")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logging.basicConfig(
+    level=getattr(logging, BRIDGE_LOG_LEVEL, logging.WARNING),
+    format="%(asctime)s %(levelname)s %(message)s"
+)
 
 
 async def safe_redis_call(coro, fallback=None, error_msg="Redis error"):
@@ -246,7 +255,9 @@ async def root(request: Request) -> str:
     # 다국어 텍스트
     if is_korean:
         lang, title = "ko", "OC Save Keeper Bridge"
-        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox가 OAuth Device Code Grant를 공식 지원하지 않아, Switch에서 폴링 기반 인증을 완료하려면 이 브릿지가 필요합니다. 원한다면 직접 호스팅하여 운용할 수 있습니다.</span>"
+        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox가 OAuth Device Code Grant를 공식 지원하지 않습니다.<br>그래서 Switch에서 폴링 기반 인증을 완료하려면 이 브릿지가 필요합니다.<br>원한다면 직접 호스팅하여 운용할 수 있습니다.</span>"
+        info_title = "안내"
+        info_body = "이 브리지는 최소한의 보안 조치를 적용하지만, 공용 또는 공유 브리지를 쓰면 인증 트래픽과 세션 메타데이터가 제3자 인프라를 통과합니다.<br>로그도 기본적으로 남기지 않도록 설계했지만, 어떤 서버를 신뢰할지는 결국 사용자 책임입니다.<br>프라이버시가 중요하다면 자신의 도메인에서 직접 호스팅하세요."
         install_title = "설치 방법"
         install_icon = "download"
         install_steps = [
@@ -269,7 +280,9 @@ async def root(request: Request) -> str:
         status_text = "브릿지 서버 정상 작동 중"
     else:
         lang, title = "en", "OC Save Keeper Bridge"
-        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch. You can also self-host this service.</span>"
+        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox does not officially support OAuth Device Code Grant.<br>That is why this bridge is required for polling-based auth on Switch.<br>You can self-host this service if you prefer.</span>"
+        info_title = "Info"
+        info_body = "This bridge applies minimum safeguards, but a public or shared bridge still sends your OAuth traffic and session metadata through third-party infrastructure.<br>It is designed to avoid keeping logs by default, but choosing which server to trust is still your responsibility.<br>If privacy matters, self-host the bridge on your own domain."
         install_title = "Installation"
         install_icon = "download"
         install_steps = [
@@ -462,6 +475,40 @@ async def root(request: Request) -> str:
         max-width: 480px;
         margin: 0 auto;
       }}
+
+      .hero-info {{
+        margin: 22px auto 0;
+        max-width: 500px;
+        padding: 18px 20px;
+        text-align: left;
+        background: rgba(116, 195, 236, 0.08);
+        border: 1px solid rgba(116, 195, 236, 0.18);
+        border-radius: 18px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }}
+
+      .hero-info-header {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--sapphire);
+      }}
+
+      .hero-info-header i {{
+        width: 16px;
+        height: 16px;
+      }}
+
+      .hero-info p {{
+        color: var(--subtext1);
+        font-size: 14px;
+        line-height: 1.7;
+      }}
       
       .github-link-container {{
         text-align: center;
@@ -631,6 +678,13 @@ async def root(request: Request) -> str:
           </div>
           <h1>{title}</h1>
           <p class="description">{desc}</p>
+          <div class="hero-info">
+            <div class="hero-info-header">
+              <i data-feather="info"></i>
+              {info_title}
+            </div>
+            <p>{info_body}</p>
+          </div>
         </div>
         
         <div class="github-link-container">
@@ -1219,7 +1273,17 @@ async def dropbox_callback(
         <p><b>OC Save Keeper</b> bridge service</p>
       </div>
     </div>
-  </body>
+    </body>
 </html>
 """
     return HTMLResponse(html, status_code=200)
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8080,
+        access_log=ENABLE_ACCESS_LOGS,
+        log_level=BRIDGE_LOG_LEVEL.lower(),
+    )

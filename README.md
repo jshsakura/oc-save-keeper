@@ -80,7 +80,9 @@ If you find this project useful, please also check out the original [JKSV](https
 
 - **SHA-512 integrity verification**: Strong hash for backup validation
 - **Rickroll guard**: Protection against unsecured HTTP requests
-- **Rate limiting**: Backend protection for bridge service
+- **Rate limiting and attack detection**: Backend throttling for bridge abuse protection
+- **OAuth state verification**: CSRF mitigation for Dropbox authorization callbacks
+- **SSRF-resistant poll URL handling**: Bridge poll URLs are constrained to the configured bridge base
 
 ## Quick Start
 
@@ -198,6 +200,10 @@ For automatic callback-and-poll auth (no manual code entry), use the Python brid
 - Refresh token stored only on Switch, never on the bridge
 
 *Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch. You can also self-host this service.*
+
+> **Security note**: The bridge includes minimum safeguards such as OAuth `state` validation, HMAC-protected poll tokens, TTL-based session expiry, one-time consume, and rate limiting. That does **not** make a public or shared bridge fully trustworthy.
+>
+> If you use a bridge operated by someone else, your OAuth traffic and session metadata still pass through infrastructure you do not control. The bridge does not keep refresh tokens, but the operator can still observe connection metadata and authorization timing. Choosing to trust a public/shared bridge is your responsibility. If privacy matters, self-host the bridge on your own domain and keep logging disabled unless you explicitly need it.
 
 - Service docs: `backend/dropbox-bridge/README.md`
 - Architecture notes: `docs/backend/DROPBOX_BRIDGE_ARCHITECTURE.ko.md`

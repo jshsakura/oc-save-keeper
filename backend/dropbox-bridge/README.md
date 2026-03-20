@@ -31,6 +31,18 @@ https://example.yourdomain.com/oauth/dropbox/callback
 - **Refresh token is generated on and stored only on Switch**
 - **Bridge never stores access/refresh tokens** - only transient session data
 
+## Privacy and Trust Boundary
+
+This bridge applies minimum protections such as OAuth `state` validation, HMAC-protected poll tokens, TTL-based session expiry, one-time consume, and rate limiting.
+
+That still does **not** make a public/shared bridge fully trustworthy.
+
+- A third-party operator can still observe connection metadata, timing, and transient OAuth session activity.
+- The authorization code passes through the bridge callback before the Switch exchanges it directly with Dropbox.
+- Refresh tokens stay on the Switch, but trusting a public/shared bridge is still the user's responsibility.
+
+If privacy matters, self-host the bridge on your own domain and keep request/security-event logging disabled unless you explicitly need it for incident response.
+
 ## Quick Start
 
 ```bash
@@ -52,6 +64,19 @@ curl http://localhost:8080/healthz
 - `REDIS_URL`: redis connection string.
 - `STATE_TTL_SECONDS`: state mapping TTL.
 - `SESSION_TTL_SECONDS`: auth session TTL.
+- `BRIDGE_LOG_LEVEL`: Python/uvicorn application log level. Default: `WARNING`.
+- `ENABLE_ACCESS_LOGS`: Enables HTTP access logs when set to `1`. Default: `0`.
+- `ENABLE_SECURITY_EVENT_LOGS`: Enables Redis-backed suspicious activity logs when set to `1`. Default: `0`.
+
+## Logging Defaults
+
+Privacy-sensitive defaults are intentional:
+
+- HTTP access logs are disabled by default.
+- Suspicious-activity event logs in Redis are disabled by default.
+- General application logging defaults to `WARNING`.
+
+Only enable these flags when you explicitly need operational visibility and understand the privacy tradeoff for your users.
 
 ## Endpoint Summary
 
