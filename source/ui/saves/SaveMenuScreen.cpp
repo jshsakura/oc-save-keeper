@@ -222,39 +222,31 @@ void SaveMenuScreen::openActions() {
         openHistory(SaveSource::Local);
     }, true, lang.get("ui.action_history_hint"));
 
-    auto uploadBtn = m_sidebar->add<SidebarEntryCallback>(lang.get("detail.upload"), [this, entry]() {
-        const auto& lang = utils::Language::instance();
-        Runtime::instance().setLoading(true, lang.get("sync.uploading"));
-        Runtime::instance().forceRender();
-        m_isOperationInProgress = true;
-        
-        m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
-        const auto result = m_backend->upload(entry.titleId);
-        
-        m_isOperationInProgress = false;
-        Runtime::instance().setLoading(false);
-        if (result.ok) {
-            Runtime::instance().notify(lang.get("sync.success"));
-            reload(); 
-        } else {
-            Runtime::instance().pushError(lang.get("sync.upload_failed"));
-        }
-    }, false, lang.get("ui.action_upload_hint"));
+    if (isAuthed) {
+        m_sidebar->add<SidebarEntryCallback>(lang.get("detail.upload"), [this, entry]() {
+            const auto& lang = utils::Language::instance();
+            Runtime::instance().setLoading(true, lang.get("sync.uploading"));
+            Runtime::instance().forceRender();
+            m_isOperationInProgress = true;
+            
+            m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
+            const auto result = m_backend->upload(entry.titleId);
+            
+            m_isOperationInProgress = false;
+            Runtime::instance().setLoading(false);
+            if (result.ok) {
+                Runtime::instance().notify(lang.get("sync.success"));
+                reload();
+            } else {
+                Runtime::instance().pushError(lang.get("sync.upload_failed"));
+            }
+        }, false, lang.get("ui.action_upload_hint"));
 
-    if (!isAuthed) {
-        uploadBtn->setEnabled(false);
-        uploadBtn->setInfo(lang.get("history.login_needed"));
-    }
-
-    // 4. 드롭박스 이력 (Dropbox History)
-    auto cloudHistoryBtn = m_sidebar->add<SidebarEntryCallback>(lang.get("history.cloud"), [this, entry]() {
-        m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
-        openHistory(SaveSource::Cloud);
-    }, true, lang.get("ui.action_cloud_hint"));
-
-    if (!isAuthed) {
-        cloudHistoryBtn->setEnabled(false);
-        cloudHistoryBtn->setInfo(lang.get("history.login_needed"));
+        // 4. 드롭박스 이력 (Dropbox History)
+        m_sidebar->add<SidebarEntryCallback>(lang.get("history.cloud"), [this, entry]() {
+            m_backend->setTargetType(entry.titleId, entry.isDevice, entry.isSystem);
+            openHistory(SaveSource::Cloud);
+        }, true, lang.get("ui.action_cloud_hint"));
     }
 }
 

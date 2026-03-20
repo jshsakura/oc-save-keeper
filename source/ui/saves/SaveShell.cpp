@@ -502,11 +502,17 @@ void SaveShell::renderFooter(const std::string& leftHint, const std::string& rig
     renderText(leftHint, 24, footer.y + 10, m_fontSmall, color(148, 163, 184));
     
     if (!rightHint.empty()) {
-        const int maxW = 800;
-        const std::string fitted = fitText(m_fontSmall, rightHint, maxW);
+        int leftHintW = 0;
+        TTF_SizeUTF8(m_fontSmall, leftHint.c_str(), &leftHintW, nullptr);
+        const int rightSafeLeftX = 24 + leftHintW + 40;
+        const int availableW = std::max(0, 1280 - 24 - rightSafeLeftX);
+        if (availableW <= 0) {
+            return;
+        }
+        const std::string fitted = fitText(m_fontSmall, rightHint, availableW);
         int textW = 0;
-        TTF_SizeText(m_fontSmall, fitted.c_str(), &textW, nullptr);
-        const int x = std::max(24, 1280 - 24 - textW);
+        TTF_SizeUTF8(m_fontSmall, fitted.c_str(), &textW, nullptr);
+        const int x = std::max(rightSafeLeftX, 1280 - 24 - textW);
         renderText(fitted, x, footer.y + 10, m_fontSmall, color(100, 116, 139));
     }
 }
@@ -527,15 +533,19 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
     const int firstVisible = screen.firstVisibleIndex();
     const int lastVisible = std::min(static_cast<int>(entries.size()), firstVisible + std::max(1, screen.visibleCount()));
     const int cols = 3;
+    const int rows = 3;
     const int frameX = 0;
     const int frameY = 96;
     const int frameH = 580;
     const int frameW = 1280;
     const int gap = 16;
     const int innerPad = 20;
+    const int gridTopOffset = 30;
     const int cardW = (frameW - innerPad * 2 - gap * (cols - 1)) / cols;
-    const int cardH = 176;
-    const int cardPad = 12;
+    const int gridTop = frameY + innerPad + gridTopOffset;
+    const int gridBottom = frameY + frameH - innerPad;
+    const int cardH = (gridBottom - gridTop - gap * (rows - 1)) / rows;
+    const int cardPad = 10;
     const int startX = frameX + innerPad;
     const int startY = frameY + innerPad;
 
@@ -552,7 +562,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
         const int visibleIndex = i - firstVisible;
         const int row = visibleIndex / cols;
         const int col = visibleIndex % cols;
-        SDL_Rect card{startX + col * (cardW + gap), startY + row * (cardH + gap) + 30, cardW, cardH};
+        SDL_Rect card{startX + col * (cardW + gap), startY + row * (cardH + gap) + gridTopOffset, cardW, cardH};
         const bool isSelected = i == selected;
 
         drawPanel(m_renderer, card, isSelected ? color(19, 42, 79) : color(17, 24, 39), color(51, 65, 85));
@@ -602,8 +612,7 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
         renderSidebar(*screen.sidebar());
     }
 
-    const std::string sortHint = std::string("-") + tr("ui.sort_toggle", "Sort") + "  "
-        + tr("ui.sort_mode_prefix", "Sort") + " " + screen.sortModeLabel();
+    const std::string sortHint = std::string("- ") + tr("ui.sort_mode_prefix", "Sort") + " " + screen.sortModeLabel();
     renderFooter(tr("footer.hint.main", "A Open  B Exit  X Refresh  Y Language  L Users  R Cloud"), sortHint);
 }
 
@@ -660,7 +669,7 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
 
     const std::string rightHint = !m_statusMessage.empty()
         ? m_statusMessage
-        : (screen.isCloudSource() ? tr("ui.cloud_refresh_hint", "X: Refresh cloud list") : screen.titleLabel());
+        : (screen.isCloudSource() ? tr("ui.cloud_refresh_hint", "X: Refresh cloud list") : "");
     renderFooter(tr("footer.hint.revision", "A: Restore/Download  B: Back  X: Refresh  Y: Language  L: Users  -: Delete"),
                  rightHint);
 }
