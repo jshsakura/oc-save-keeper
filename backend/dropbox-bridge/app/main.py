@@ -284,7 +284,7 @@ async def root(request: Request) -> str:
     # 다국어 텍스트
     if is_korean:
         lang, title = "ko", "OC Save Keeper Bridge"
-        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox가 OAuth Device Code Grant를 공식 지원하지 않습니다.<br>그래서 Switch에서 폴링 기반 인증을 완료하려면 이 브릿지가 필요합니다.<br>원한다면 직접 호스팅하여 운용할 수 있습니다.</span>"
+        desc = "세이브 백업 앱 <strong>OC Save Keeper</strong>의 OAuth 브릿지 서비스입니다.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox가 OAuth Device Code Grant를 공식 지원하지 않습니다.<br>그래서 Switch에서 폴링 기반 인증을 완료하려면 이 브릿지가 필요합니다.</span>"
         info_title = "안내"
         info_body = "이 브리지는 최소한의 보안 조치를 적용하지만, 공용 또는 공유 브리지를 쓰면 인증 트래픽과 세션 메타데이터가 제3자 인프라를 통과합니다.<br>로그도 기본적으로 남기지 않도록 설계했지만, 어떤 서버를 신뢰할지는 결국 사용자 책임입니다.<br>프라이버시가 중요하다면 자신의 도메인에서 직접 호스팅하세요."
         install_title = "설치 방법"
@@ -309,7 +309,7 @@ async def root(request: Request) -> str:
         status_text = "브릿지 서버 정상 작동 중"
     else:
         lang, title = "en", "OC Save Keeper Bridge"
-        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox does not officially support OAuth Device Code Grant.<br>That is why this bridge is required for polling-based auth on Switch.<br>You can self-host this service if you prefer.</span>"
+        desc = "OAuth bridge service for <strong>OC Save Keeper</strong>, a save backup app.<br><span style='color: var(--subtext0); font-size: 14px;'>Dropbox does not officially support OAuth Device Code Grant.<br>That is why this bridge is required for polling-based auth on Switch.</span>"
         info_title = "Info"
         info_body = "This bridge applies minimum safeguards, but a public or shared bridge still sends your OAuth traffic and session metadata through third-party infrastructure.<br>It is designed to avoid keeping logs by default, but choosing which server to trust is still your responsibility.<br>If privacy matters, self-host the bridge on your own domain."
         install_title = "Installation"

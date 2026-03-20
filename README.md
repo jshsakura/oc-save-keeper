@@ -199,7 +199,7 @@ For automatic callback-and-poll auth (no manual code entry), use the Python brid
 - PKCE key exchange handled automatically
 - Refresh token stored only on Switch, never on the bridge
 
-*Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch. You can also self-host this service.*
+*Dropbox does not officially support OAuth Device Code Grant, so this bridge is required for polling-based auth on Switch.*
 
 > **Security note**: The bridge includes minimum safeguards such as OAuth `state` validation, HMAC-protected poll tokens, TTL-based session expiry, one-time consume, and rate limiting. That does **not** make a public or shared bridge fully trustworthy.
 >
