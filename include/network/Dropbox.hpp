@@ -46,6 +46,8 @@ struct DropboxBridgeSession {
 class Dropbox {
 public:
     static constexpr size_t MAX_DROPBOX_FILES = 1000;
+    static constexpr curl_off_t MAX_JSON_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
+    static constexpr curl_off_t MAX_DOWNLOAD_FILE_SIZE = 512 * 1024 * 1024; // 512MB
 
     Dropbox();
     ~Dropbox();

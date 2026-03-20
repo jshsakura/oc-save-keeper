@@ -26,7 +26,8 @@ ZipArchive::ZipArchive()
     : m_zip(nullptr)
     , m_unz(nullptr)
     , m_isOpen(false)
-    , m_isWriting(false) {
+    , m_isWriting(false)
+    , m_totalUncompressedSize(0) {
 }
 
 ZipArchive::~ZipArchive() {
@@ -38,10 +39,12 @@ ZipArchive::ZipArchive(ZipArchive&& other) noexcept
     , m_unz(other.m_unz)
     , m_isOpen(other.m_isOpen)
     , m_isWriting(other.m_isWriting)
-    , m_path(std::move(other.m_path)) {
+    , m_path(std::move(other.m_path))
+    , m_totalUncompressedSize(other.m_totalUncompressedSize) {
     other.m_zip = nullptr;
     other.m_unz = nullptr;
     other.m_isOpen = false;
+    other.m_totalUncompressedSize = 0;
 }
 
 ZipArchive& ZipArchive::operator=(ZipArchive&& other) noexcept {
@@ -52,9 +55,11 @@ ZipArchive& ZipArchive::operator=(ZipArchive&& other) noexcept {
         m_isOpen = other.m_isOpen;
         m_isWriting = other.m_isWriting;
         m_path = std::move(other.m_path);
+        m_totalUncompressedSize = other.m_totalUncompressedSize;
         other.m_zip = nullptr;
         other.m_unz = nullptr;
         other.m_isOpen = false;
+        other.m_totalUncompressedSize = 0;
     }
     return *this;
 }
@@ -93,6 +98,7 @@ bool ZipArchive::open(const std::string& path) {
     m_path = path;
     m_isOpen = true;
     m_isWriting = false;
+    m_totalUncompressedSize = 0;
     return true;
 }
 
@@ -218,7 +224,30 @@ bool ZipArchive::extractFile(const std::string& archivePath, const std::string& 
                                  nullptr, 0, nullptr, 0) != UNZ_OK) {
         return false;
     }
-    
+
+    // Security: Zip Bomb defense
+    uint64_t uncompressedSize = info.uncompressed_size;
+    uint64_t compressedSize = info.compressed_size;
+
+    if (uncompressedSize > MAX_TOTAL_UNCOMPRESSED_SIZE) {
+        LOG_ERROR("ZIP: Single file exceeds max uncompressed size: %s", archivePath.c_str());
+        return false;
+    }
+
+    if (m_totalUncompressedSize + uncompressedSize > MAX_TOTAL_UNCOMPRESSED_SIZE) {
+        LOG_ERROR("ZIP: Cumulative extraction size would exceed limit: %s", archivePath.c_str());
+        return false;
+    }
+
+    if (compressedSize > 0) {
+        uint64_t ratio = uncompressedSize / compressedSize;
+        // Only check ratio for larger files (> 1MB) to avoid false positives on small files
+        if (ratio > MAX_COMPRESSION_RATIO && uncompressedSize > 1024 * 1024) {
+            LOG_ERROR("ZIP: Suspicious compression ratio (%lu:1): %s", (unsigned long)ratio, archivePath.c_str());
+            return false;
+        }
+    }
+
     if (unzOpenCurrentFile(m_unz) != UNZ_OK) {
         LOG_ERROR("Failed to open file in ZIP: %s", archivePath.c_str());
         return false;
@@ -253,6 +282,10 @@ bool ZipArchive::extractFile(const std::string& archivePath, const std::string& 
         success = false;
     }
     
+    if (success) {
+        m_totalUncompressedSize += uncompressedSize;
+    }
+
     int crcResult = unzCloseCurrentFile(m_unz);
     if (crcResult == UNZ_CRCERROR) {
         LOG_ERROR("ZIP CRC check failed for: %s", archivePath.c_str());

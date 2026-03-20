@@ -221,6 +221,35 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 
 
 @app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """보안 헤더 추가"""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Content-Security-Policy: unpkg.com(feather-icons), fonts.googleapis.com 등을 허용
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' unpkg.com; "
+        "style-src 'self' 'unsafe-inline' fonts.googleapis.com; "
+        "font-src fonts.gstatic.com; "
+        "img-src 'self' data:;"
+    )
+    return response
+
+
+@app.middleware("http")
+async def limit_payload_size(request: Request, call_next):
+    """요청 페이로드 크기 제한 (1MB)"""
+    if request.method == "POST":
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 1 * 1024 * 1024:
+            return JSONResponse(status_code=413, content={"detail": "Payload too large"})
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def rickroll_unsecured_http(request: Request, call_next):
     """
     보안 가드: HTTPS가 아닌 생(plain) HTTP로 접근하면 릭롤 시전

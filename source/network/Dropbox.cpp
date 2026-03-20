@@ -266,7 +266,10 @@ std::string Dropbox::pollBridgeSession(const DropboxBridgeSession& session) {
         DROPBOX_BRIDGE_BASE_STR, 
         session.sessionId
     );
-    const std::string postData = "{\"poll_token\":\"" + session.pollToken + "\"}";
+    
+    ScopedJson root_obj(json_object_new_object());
+    json_object_object_add(root_obj.get(), "poll_token", json_object_new_string(session.pollToken.c_str()));
+    const std::string postData = json_object_to_json_string_ext(root_obj.get(), JSON_C_TO_STRING_PLAIN);
 
     LOG_DEBUG("Dropbox: Polling session status - URL: %s", url.c_str());
     std::string response = performRequest(url, postData, "Content-Type: application/json", false);
@@ -300,7 +303,10 @@ bool Dropbox::consumeBridgeSession(const DropboxBridgeSession& session) {
     if (!session.active) return false;
 
     const std::string url = std::string(DROPBOX_BRIDGE_BASE_STR) + "/v1/sessions/" + session.sessionId + "/consume";
-    const std::string postData = "{\"poll_token\":\"" + session.pollToken + "\"}";
+    
+    ScopedJson root_obj(json_object_new_object());
+    json_object_object_add(root_obj.get(), "poll_token", json_object_new_string(session.pollToken.c_str()));
+    const std::string postData = json_object_to_json_string_ext(root_obj.get(), JSON_C_TO_STRING_PLAIN);
 
     std::string response = performRequest(url, postData, "Content-Type: application/json", false);
     if (response.empty()) return false;
@@ -617,6 +623,8 @@ bool Dropbox::uploadFile(const std::string& localPath,
     std::string response;
     curl_easy_setopt(m_curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(m_curl, CURLOPT_TIMEOUT, 300L);
     
     CURLcode res = curl_easy_perform(m_curl);
     long httpCode = 0;
@@ -671,6 +679,9 @@ bool Dropbox::downloadFile(const std::string& dropboxPath,
     curl_easy_setopt(m_curl, CURLOPT_URL, downloadUrl.c_str());
     curl_easy_setopt(m_curl, CURLOPT_HTTPHEADER, headers.get());
     curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, file.get());
+    curl_easy_setopt(m_curl, CURLOPT_MAXFILESIZE_LARGE, (curl_off_t)MAX_DOWNLOAD_FILE_SIZE);
+    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(m_curl, CURLOPT_TIMEOUT, 300L);
     
     CURLcode res = curl_easy_perform(m_curl);
     long httpCode = 0;
@@ -722,7 +733,10 @@ std::vector<DropboxFile> Dropbox::listFolder(const std::string& path, bool recur
     }
 
     while (hasMore && !cursor.empty()) {
-        const std::string continueRequest = std::string("{\"cursor\":\"") + cursor + "\"}";
+        ScopedJson root_obj(json_object_new_object());
+        json_object_object_add(root_obj.get(), "cursor", json_object_new_string(cursor.c_str()));
+        const std::string continueRequest = json_object_to_json_string_ext(root_obj.get(), JSON_C_TO_STRING_PLAIN);
+        
         response = performRequest(DROPBOX_LIST_FOLDER_CONTINUE, continueRequest, "", true);
         if (response.empty()) {
             break;
@@ -971,8 +985,9 @@ std::string Dropbox::performRequest(const std::string& url,
     curl_easy_setopt(m_curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(m_curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(m_curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 30L);
-    curl_easy_setopt(m_curl, CURLOPT_TIMEOUT, 60L);
+    curl_easy_setopt(m_curl, CURLOPT_MAXFILESIZE_LARGE, (curl_off_t)MAX_JSON_RESPONSE_SIZE);
+    curl_easy_setopt(m_curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(m_curl, CURLOPT_TIMEOUT, 30L);
     
     CURLcode res = curl_easy_perform(m_curl);
     long httpCode = 0;

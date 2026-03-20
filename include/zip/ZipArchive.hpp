@@ -15,6 +15,10 @@
 
 namespace zip {
 
+// Security limits for Zip Bomb defense
+constexpr uint64_t MAX_TOTAL_UNCOMPRESSED_SIZE = 512ULL * 1024 * 1024; // 512MB
+constexpr uint32_t MAX_COMPRESSION_RATIO = 100; // 100x
+
 /**
  * Validate archive entry path for security (path traversal prevention)
  * @param archivePath Path within ZIP archive to validate
@@ -128,6 +132,7 @@ private:
     bool m_isOpen;
     bool m_isWriting;
     std::string m_path;
+    uint64_t m_totalUncompressedSize; // Cumulative uncompressed size for security
 };
 
 /**
