@@ -460,11 +460,11 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     renderText(tr("app.name", "OC Save Keeper"), 36, 14, m_fontLarge, color(241, 245, 249));
 
     if (!title.empty()) {
-        renderText(title, 300, 24, m_fontSmall, color(148, 163, 184));
+        renderText(title, 328, 24, m_fontSmall, color(148, 163, 184));
     }
 
     if (!subtitle.empty()) {
-        renderText(subtitle, 36, 48, m_fontSmall, color(148, 163, 184));
+        renderText(subtitle, 36, 52, m_fontSmall, color(148, 163, 184));
     }
 
     const int chipW = 180;
@@ -531,7 +531,8 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
     const int gap = 16;
     const int innerPad = 20;
     const int cardW = (frameW - innerPad * 2 - gap * (cols - 1)) / cols;
-    const int cardH = 150; // Reduced from 160 to 150
+    const int cardH = 176;
+    const int cardPad = 12;
     const int startX = frameX + innerPad;
     const int startY = frameY + innerPad;
 
@@ -556,8 +557,8 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
             drawFocus(m_renderer, card);
         }
 
-        const int iconSize = 90; // Reduced from 96 to match 150 height
-        SDL_Rect iconRect{card.x + 16, card.y + (card.h - iconSize) / 2, iconSize, iconSize};
+        const int iconSize = card.h - cardPad * 2;
+        SDL_Rect iconRect{card.x + cardPad, card.y + cardPad, iconSize, iconSize};
         SDL_Rect iconFrame{iconRect.x - 1, iconRect.y - 1, iconRect.w + 2, iconRect.h + 2};
         fillRect(m_renderer, iconFrame, color(8, 12, 22));
         if (SDL_Texture* icon = loadIcon(entry.iconPath)) {
@@ -570,14 +571,16 @@ void SaveShell::renderSaveMenu(const SaveMenuScreen& screen) {
 
         const int textX = iconRect.x + iconRect.w + 20;
         const int textW = card.x + card.w - textX - 16;
-        renderText(fitText(m_fontSmall, entry.name, textW), textX, card.y + 12, m_fontSmall, color(241, 245, 249));
+        renderText(fitText(m_fontSmall, entry.name, textW), textX, card.y + 14, m_fontSmall, color(241, 245, 249));
         renderText(fitText(m_fontSmall, entry.author, textW), textX, card.y + 46, m_fontSmall, color(148, 163, 184));
-        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 70, m_fontSmall, color(148, 163, 184));
+        renderText(fitText(m_fontSmall, entry.subtitle, textW), textX, card.y + 72, m_fontSmall, color(148, 163, 184));
 
-        const int chipGap = 10;
-        const int chipW = std::max(80, (textW - chipGap) / 2);
-        SDL_Rect localChip{textX, card.y + 104, chipW, 28};
-        SDL_Rect cloudChip{textX + chipW + chipGap, card.y + 104, chipW, 28};
+        const int chipGap = 8;
+        const int chipH = 24;
+        const int chipW = std::max(72, (textW - chipGap) / 2);
+        const int chipY = card.y + card.h - cardPad - chipH;
+        SDL_Rect localChip{textX, chipY, chipW, chipH};
+        SDL_Rect cloudChip{textX + chipW + chipGap, chipY, chipW, chipH};
         fillRect(m_renderer, localChip, entry.hasLocalBackup ? color(20, 83, 45) : color(39, 39, 42));
         fillRect(m_renderer, cloudChip, entry.hasCloudBackup ? color(8, 47, 73) : color(39, 39, 42));
         strokeRect(m_renderer, localChip, entry.hasLocalBackup ? color(74, 222, 128) : color(82, 82, 91));
