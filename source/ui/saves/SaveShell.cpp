@@ -229,14 +229,18 @@ bool SaveShell::initialize() {
     Runtime::instance().setFont(m_fontMedium);
     Runtime::instance().setShell(this);
 
+    // Show initial loading message
     showProcessingOverlay(tr("sync.loading_saves", "Loading saves..."));
+    
+    // Perform the heavy lifting first (Scanning titles)
+    m_saveManager.scanTitles();
+
+    // Check for expired trash only after initial scan is done or ongoing
     if (m_saveManager.hasExpiredTrashEntries(30)) {
         showProcessingOverlay(tr("sync.trash_cleanup", "Cleaning up trash..."));
         m_saveManager.cleanupExpiredTrashEntries(30);
-        showProcessingOverlay(tr("sync.loading_saves", "Loading saves..."));
     }
 
-    m_saveManager.scanTitles();
     m_backend = std::make_shared<SaveBackendAdapter>(m_saveManager, m_dropbox);
     pushRootScreen();
     return true;
