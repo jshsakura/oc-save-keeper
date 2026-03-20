@@ -698,7 +698,12 @@ bool SaveManager::moveToTrash(const std::string& backupPath) {
         const size_t prevSlash = (slash != std::string::npos) ? backupPath.find_last_of('/', slash - 1) : std::string::npos;
         if (prevSlash != std::string::npos && slash != std::string::npos) {
             const std::string titleIdStr = backupPath.substr(prevSlash + 1, slash - prevSlash - 1);
-            titleId = std::stoull(titleIdStr, nullptr, 16);
+            try {
+                titleId = std::stoull(titleIdStr, nullptr, 16);
+            } catch (const std::exception& e) {
+                LOG_ERROR("moveToTrash: failed to parse titleId from path '%s': %s", titleIdStr.c_str(), e.what());
+                titleId = 0;
+            }
         }
     }
 
@@ -721,13 +726,17 @@ bool SaveManager::moveToTrash(const std::string& backupPath) {
     const std::string metaPath = getBackupMetadataPath(backupPath);
     if (stat(metaPath.c_str(), &st) == 0) {
         const std::string trashMetaPath = getBackupMetadataPath(trashEntryPath);
-        std::rename(metaPath.c_str(), trashMetaPath.c_str());
+        if (std::rename(metaPath.c_str(), trashMetaPath.c_str()) != 0) {
+            LOG_ERROR("moveToTrash: failed to move meta file to trash, errno=%d", errno);
+        }
     }
 
     const std::string zipPath = backupPath + ".zip";
     if (stat(zipPath.c_str(), &st) == 0) {
         const std::string trashZipPath = trashEntryPath + ".zip";
-        std::rename(zipPath.c_str(), trashZipPath.c_str());
+        if (std::rename(zipPath.c_str(), trashZipPath.c_str()) != 0) {
+            LOG_ERROR("moveToTrash: failed to move zip file to trash, errno=%d", errno);
+        }
     }
 
     LOG_INFO("moveToTrash: success, moved to %s", trashEntryPath.c_str());
@@ -752,7 +761,12 @@ bool SaveManager::restoreFromTrash(const std::string& trashPath) {
         const size_t prevSlash = (slash != std::string::npos) ? trashPath.find_last_of('/', slash - 1) : std::string::npos;
         if (prevSlash != std::string::npos && slash != std::string::npos) {
             const std::string titleIdStr = trashPath.substr(prevSlash + 1, slash - prevSlash - 1);
-            titleId = std::stoull(titleIdStr, nullptr, 16);
+            try {
+                titleId = std::stoull(titleIdStr, nullptr, 16);
+            } catch (const std::exception& e) {
+                LOG_ERROR("restoreFromTrash: failed to parse titleId from path '%s': %s", titleIdStr.c_str(), e.what());
+                titleId = 0;
+            }
         }
     }
 
