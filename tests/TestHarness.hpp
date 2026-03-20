@@ -1,16 +1,12 @@
 #pragma once
 
 #include <functional>
-#include <stdexcept>
+#include <iostream>
 #include <string>
 #include <vector>
+#include <cstdlib>
 
 namespace test {
-
-struct Failure : public std::runtime_error {
-    explicit Failure(const std::string& message)
-        : std::runtime_error(message) {}
-};
 
 struct Case {
     std::string name;
@@ -20,6 +16,11 @@ struct Case {
 inline std::vector<Case>& registry() {
     static std::vector<Case> cases;
     return cases;
+}
+
+inline void report_failure(const std::string& message) {
+    std::cerr << "\n[FAIL] " << message << std::endl;
+    std::exit(1);
 }
 
 struct Registrar {
@@ -41,7 +42,7 @@ struct Registrar {
 #define REQUIRE(cond) \
     do { \
         if (!(cond)) { \
-            throw test::Failure(std::string("REQUIRE failed: ") + #cond); \
+            test::report_failure(std::string("REQUIRE failed: ") + #cond); \
         } \
     } while (0)
 
@@ -50,6 +51,6 @@ struct Registrar {
         const auto& lhs_value = (lhs); \
         const auto& rhs_value = (rhs); \
         if (!(lhs_value == rhs_value)) { \
-            throw test::Failure(std::string("REQUIRE_EQ failed: ") + #lhs + " == " + #rhs); \
+            test::report_failure(std::string("REQUIRE_EQ failed: ") + #lhs + " == " + #rhs); \
         } \
     } while (0)

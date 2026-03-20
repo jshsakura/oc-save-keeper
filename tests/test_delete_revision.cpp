@@ -8,7 +8,6 @@
 #include <mutex>
 #include <string>
 #include <thread>
-#include <stdexcept>
 #include <unordered_map>
 
 namespace {
@@ -449,8 +448,7 @@ TEST_CASE("Cancel flag checked before and after mutex lock") {
 
 /**
  * Simulates the titleId extraction logic from SaveManager::moveToTrash()
- * at lines 696-703. Tests the stoull parsing behavior that can throw
- * exceptions on malformed input.
+ * using strtoull to avoid exceptions in non-exceptions environment.
  */
 uint64_t extractTitleIdFromPath(const std::string& backupPath) {
     const size_t slash = backupPath.find_last_of('/');
@@ -459,13 +457,12 @@ uint64_t extractTitleIdFromPath(const std::string& backupPath) {
     
     if (prevSlash != std::string::npos && slash != std::string::npos) {
         const std::string titleIdStr = backupPath.substr(prevSlash + 1, slash - prevSlash - 1);
-        try {
-            return std::stoull(titleIdStr, nullptr, 16);
-        } catch (const std::invalid_argument&) {
-            return 0;  // Malformed hex string
-        } catch (const std::out_of_range&) {
-            return 0;  // Value too large
+        char* endptr = nullptr;
+        uint64_t val = std::strtoull(titleIdStr.c_str(), &endptr, 16);
+        if (endptr == titleIdStr.c_str() || *endptr != '\0') {
+            return 0; // Parsing failed
         }
+        return val;
     }
     return 0;
 }
@@ -546,7 +543,7 @@ TEST_CASE("Local delete - missing revision component is rejected") {
     REQUIRE(!isValidLocalDeletePath(noRevision, basePath));
 }
 
-// --- stoull Exception Handling Tests (Risk: SaveManager.cpp:701) ---
+// --- strtoull Parsing Tests (Risk: SaveManager.cpp:701) ---
 
 TEST_CASE("Local delete - malformed hex string returns zero safely") {
     const std::string malformedPath = "/switch/oc-save-keeper/backups/NOTHEX123/20260316_232624";
