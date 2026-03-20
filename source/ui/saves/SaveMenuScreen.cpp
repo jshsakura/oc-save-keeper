@@ -112,7 +112,7 @@ void SaveMenuScreen::openActions() {
     
     m_sidebar->add<SidebarEntryCallback>(lang.get("detail.backup"), [this, entry]() {
         const auto& lang = utils::Language::instance();
-        Runtime::instance().setLoading(true, lang.get("sync.syncing"));
+        Runtime::instance().setLoading(true, lang.get("sync.creating_local"));
         Runtime::instance().forceRender();
         m_isOperationInProgress = true;
         

@@ -25,11 +25,15 @@ void SidebarEntryCallback::activate() {
         return;
     }
     
-    if (m_callback) {
-        m_callback();
-    }
+    // Set pop flag BEFORE callback - callback may destroy 'this' via m_sidebar.reset()
+    // Sidebar's update loop will check shouldPop() and close safely
     if (m_popOnClick) {
         setPop();
+    }
+    
+    if (m_callback) {
+        m_callback();
+        // 'this' may now be destroyed - do NOT access any members after this point
     }
 }
 
