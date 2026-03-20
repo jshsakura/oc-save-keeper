@@ -213,7 +213,7 @@ private:
                 {"ui.user_changed", "선택 대상을 변경했습니다."},
                 {"ui.confirm_delete", "백업 삭제 확인"},
                 {"ui.confirm_delete_hint", "예로 이동한 뒤 바로 삭제합니다."},
-                {"ui.confirm_restore", "백업 복원 확인"},
+                {"ui.confirm_restore", "백업에서 복원 확인"},
                 {"ui.confirm_restore_hint", "즉시 세이브가 복원되니 주의하세요."},
                 {"ui.no_user", "사용자 없음"},
                 {"ui.no_save_entries", "표시할 세이브가 없습니다."},

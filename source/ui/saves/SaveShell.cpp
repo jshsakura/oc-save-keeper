@@ -667,7 +667,7 @@ void SaveShell::renderSidebar(const Sidebar& sidebar) {
     SDL_Rect topLine{panel.x + 32, panel.y + 76, panel.w - 64, 1};
     fillRect(m_renderer, topLine, color(51, 65, 85));
     renderText(tr("ui.save_actions", "Save Actions"), panel.x + 32, panel.y + 18, m_fontSmall, color(56, 189, 248));
-    renderText(fitText(m_fontMedium, sidebar.title(), panel.w - 64), panel.x + 32, panel.y + 38, m_fontMedium, color(241, 245, 249));
+    renderText(fitText(m_fontSmall, sidebar.title(), panel.w - 64), panel.x + 32, panel.y + 42, m_fontSmall, color(241, 245, 249));
     renderText(tr("ui.actions_hint", "A Confirm   B Close"), panel.x + 32, panel.y + 90, m_fontSmall, color(100, 116, 139));
 
     const auto& items = sidebar.items();

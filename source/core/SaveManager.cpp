@@ -1248,7 +1248,7 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
     const std::string baseName = hasIncomingMeta && !incomingMeta.backupName.empty()
         ? incomingMeta.backupName
         : ("cloud_" + std::to_string(static_cast<long long>(time(nullptr))));
-    const std::string importName = sanitizePathComponent(baseName) + "_import";
+    const std::string importName = sanitizePathComponent(baseName) + "_autosave";
     const std::string importPath = getBackupPath(title) + "/" + importName;
 
     fs::deleteDirectory(importPath);
