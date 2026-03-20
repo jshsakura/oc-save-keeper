@@ -1020,10 +1020,26 @@ std::vector<BackupVersion> SaveManager::getBackupVersions(TitleInfo* title) {
     
     closedir(dir);
     
-    // Sort by timestamp (newest first)
+    // Sort: _autosave entries together, sorted by base name (without suffix), then by full name
     std::sort(versions.begin(), versions.end(), 
         [](const BackupVersion& a, const BackupVersion& b) {
-            return a.timestamp > b.timestamp;
+            // Extract base name without _autosave suffix for comparison
+            auto stripSuffix = [](const std::string& s) {
+                const std::string suffix = "_autosave";
+                if (s.size() > suffix.size() && s.substr(s.size() - suffix.size()) == suffix) {
+                    return s.substr(0, s.size() - suffix.size());
+                }
+                return s;
+            };
+            std::string aBase = stripSuffix(a.name);
+            std::string bBase = stripSuffix(b.name);
+            
+            // First sort by base name (newest first by timestamp)
+            if (a.timestamp != b.timestamp) {
+                return a.timestamp > b.timestamp;
+            }
+            // Then by full name (autosave entries last)
+            return a.name < b.name;
         });
     
     return versions;
