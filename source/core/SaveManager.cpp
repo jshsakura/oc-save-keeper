@@ -682,33 +682,43 @@ std::string SaveManager::getTrashPath(TitleInfo* title) const {
 }
 
 bool SaveManager::moveToTrash(const std::string& backupPath) {
-    LOG_INFO("moveToTrash: path=%s", backupPath.c_str());
+    LOG_INFO("moveToTrash: ENTER path='%s'", backupPath.c_str());
 
     struct stat st;
     if (stat(backupPath.c_str(), &st) != 0) {
-        LOG_ERROR("moveToTrash: backup path does not exist");
+        LOG_ERROR("moveToTrash: backup path does not exist or access denied (errno=%d: %s)", errno, strerror(errno));
         return false;
     }
 
     BackupMetadata meta;
-    (void)readBackupMetadata(backupPath, meta);
+    bool metaRead = readBackupMetadata(backupPath, meta);
     uint64_t titleId = meta.titleId;
+    LOG_DEBUG("moveToTrash: metaRead=%d, titleId_from_meta=%016lX", metaRead, titleId);
+
     if (titleId == 0) {
         const size_t slash = backupPath.find_last_of('/');
         const size_t prevSlash = (slash != std::string::npos) ? backupPath.find_last_of('/', slash - 1) : std::string::npos;
         if (prevSlash != std::string::npos && slash != std::string::npos) {
             const std::string titleIdStr = backupPath.substr(prevSlash + 1, slash - prevSlash - 1);
+            LOG_DEBUG("moveToTrash: attempting to parse titleId from string '%s'", titleIdStr.c_str());
             try {
                 titleId = std::stoull(titleIdStr, nullptr, 16);
             } catch (const std::exception& e) {
-                LOG_ERROR("moveToTrash: failed to parse titleId from path '%s': %s", titleIdStr.c_str(), e.what());
+                LOG_ERROR("moveToTrash: CRITICAL - failed to parse titleId from '%s': %s", titleIdStr.c_str(), e.what());
                 titleId = 0;
             }
         }
     }
 
+    LOG_INFO("moveToTrash: titleId derived as %016lX", titleId);
     TitleInfo* title = getTitleById(titleId);
+    if (!title) {
+        LOG_WARNING("moveToTrash: title info not found for ID %016lX, using raw ID for trash folder", titleId);
+    }
+
     const std::string trashBase = getTrashPath(title);
+    LOG_DEBUG("moveToTrash: trashBase='%s'", trashBase.c_str());
+    
     mkdir(utils::paths::TRASH, 0777);
     mkdir(trashBase.c_str(), 0777);
 
@@ -718,65 +728,74 @@ bool SaveManager::moveToTrash(const std::string& backupPath) {
     const std::string trashEntryName = backupName + "_" + timestamp;
     const std::string trashEntryPath = trashBase + "/" + trashEntryName;
 
+    LOG_INFO("moveToTrash: RENAME '%s' -> '%s'", backupPath.c_str(), trashEntryPath.c_str());
     if (std::rename(backupPath.c_str(), trashEntryPath.c_str()) != 0) {
-        LOG_ERROR("moveToTrash: failed to move backup to trash, errno=%d", errno);
+        LOG_ERROR("moveToTrash: rename FAILED (errno=%d: %s)", errno, strerror(errno));
         return false;
     }
 
+    // Move associated metadata file if it exists
     const std::string metaPath = getBackupMetadataPath(backupPath);
     if (stat(metaPath.c_str(), &st) == 0) {
         const std::string trashMetaPath = getBackupMetadataPath(trashEntryPath);
+        LOG_DEBUG("moveToTrash: moving meta file '%s' -> '%s'", metaPath.c_str(), trashMetaPath.c_str());
         if (std::rename(metaPath.c_str(), trashMetaPath.c_str()) != 0) {
-            LOG_ERROR("moveToTrash: failed to move meta file to trash, errno=%d", errno);
+            LOG_ERROR("moveToTrash: meta file move FAILED (errno=%d: %s)", errno, strerror(errno));
         }
     }
 
+    // Move associated ZIP file if it exists
     const std::string zipPath = backupPath + ".zip";
     if (stat(zipPath.c_str(), &st) == 0) {
         const std::string trashZipPath = trashEntryPath + ".zip";
+        LOG_DEBUG("moveToTrash: moving zip file '%s' -> '%s'", zipPath.c_str(), trashZipPath.c_str());
         if (std::rename(zipPath.c_str(), trashZipPath.c_str()) != 0) {
-            LOG_ERROR("moveToTrash: failed to move zip file to trash, errno=%d", errno);
+            LOG_ERROR("moveToTrash: zip file move FAILED (errno=%d: %s)", errno, strerror(errno));
         }
     }
 
-    LOG_INFO("moveToTrash: success, moved to %s", trashEntryPath.c_str());
+    LOG_INFO("moveToTrash: SUCCESS");
     return true;
 }
 
 bool SaveManager::restoreFromTrash(const std::string& trashPath) {
-    LOG_INFO("restoreFromTrash: path=%s", trashPath.c_str());
+    LOG_INFO("restoreFromTrash: ENTER path='%s'", trashPath.c_str());
 
     struct stat st;
     if (stat(trashPath.c_str(), &st) != 0) {
-        LOG_ERROR("restoreFromTrash: trash entry does not exist");
+        LOG_ERROR("restoreFromTrash: trash entry does not exist (errno=%d: %s)", errno, strerror(errno));
         return false;
     }
 
     BackupMetadata meta;
-    (void)readBackupMetadata(trashPath, meta);
+    bool metaRead = readBackupMetadata(trashPath, meta);
     uint64_t titleId = meta.titleId;
+    LOG_DEBUG("restoreFromTrash: metaRead=%d, titleId_from_meta=%016lX", metaRead, titleId);
     
     if (titleId == 0) {
         const size_t slash = trashPath.find_last_of('/');
         const size_t prevSlash = (slash != std::string::npos) ? trashPath.find_last_of('/', slash - 1) : std::string::npos;
         if (prevSlash != std::string::npos && slash != std::string::npos) {
             const std::string titleIdStr = trashPath.substr(prevSlash + 1, slash - prevSlash - 1);
+            LOG_DEBUG("restoreFromTrash: attempting to parse titleId from string '%s'", titleIdStr.c_str());
             try {
                 titleId = std::stoull(titleIdStr, nullptr, 16);
             } catch (const std::exception& e) {
-                LOG_ERROR("restoreFromTrash: failed to parse titleId from path '%s': %s", titleIdStr.c_str(), e.what());
+                LOG_ERROR("restoreFromTrash: CRITICAL - failed to parse titleId from '%s': %s", titleIdStr.c_str(), e.what());
                 titleId = 0;
             }
         }
     }
 
+    LOG_INFO("restoreFromTrash: titleId derived as %016lX", titleId);
     TitleInfo* title = getTitleById(titleId);
     if (!title) {
-        LOG_ERROR("restoreFromTrash: title not found for ID %016lX", titleId);
+        LOG_ERROR("restoreFromTrash: title not found for ID %016lX. Cannot restore without title metadata.", titleId);
         return false;
     }
 
     const std::string backupBase = getBackupPath(title);
+    LOG_DEBUG("restoreFromTrash: backupBase='%s'", backupBase.c_str());
     mkdir(backupBase.c_str(), 0777);
 
     const size_t nameStart = trashPath.find_last_of('/');
@@ -785,26 +804,29 @@ bool SaveManager::restoreFromTrash(const std::string& trashPath) {
     const std::string originalName = (underscorePos != std::string::npos) ? entryName.substr(0, underscorePos) : entryName;
     const std::string restorePath = backupBase + "/" + originalName + "_restored";
 
+    LOG_INFO("restoreFromTrash: COPYING '%s' -> '%s'", trashPath.c_str(), restorePath.c_str());
     if (!fs::copyDirectoryWithProgress(trashPath, restorePath)) {
-        LOG_ERROR("restoreFromTrash: failed to copy from trash");
+        LOG_ERROR("restoreFromTrash: copy FAILED");
         return false;
     }
 
     const std::string trashMetaPath = getBackupMetadataPath(trashPath);
     if (stat(trashMetaPath.c_str(), &st) == 0) {
+        LOG_DEBUG("restoreFromTrash: writing updated metadata to '%s'", restorePath.c_str());
         BackupMetadata restoredMeta = meta;
         restoredMeta.backupName = originalName + "_restored";
         restoredMeta.source = "restored_from_trash";
         writeBackupMetadataFile(getBackupMetadataPath(restorePath), restoredMeta);
     }
 
+    LOG_INFO("restoreFromTrash: DELETING original trash entry '%s'", trashPath.c_str());
     fs::deleteDirectory(trashPath);
     const std::string trashMetaDel = getBackupMetadataPath(trashPath);
     std::remove(trashMetaDel.c_str());
     const std::string trashZipDel = trashPath + ".zip";
     std::remove(trashZipDel.c_str());
 
-    LOG_INFO("restoreFromTrash: success, restored to %s", restorePath.c_str());
+    LOG_INFO("restoreFromTrash: SUCCESS");
     return true;
 }
 
