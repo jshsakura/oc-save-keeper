@@ -2,7 +2,47 @@
 
 #include "ui/saves/Sidebar.hpp"
 
+#include <functional>
+#include <memory>
+
 using ui::saves::Sidebar;
+
+namespace {
+
+struct LifetimeSidebar {
+    bool pop = false;
+    std::function<void()> onUpdate;
+
+    void update() {
+        if (onUpdate) {
+            onUpdate();
+        }
+    }
+
+    bool shouldPop() const {
+        return pop;
+    }
+};
+
+struct LifetimeOwner {
+    std::shared_ptr<LifetimeSidebar> sidebar;
+
+    bool updateWithStrongRef() {
+        auto hold = sidebar;
+        if (!hold) {
+            return false;
+        }
+
+        hold->update();
+        if (sidebar == hold && hold->shouldPop()) {
+            sidebar.reset();
+        }
+
+        return static_cast<bool>(hold);
+    }
+};
+
+} 
 
 TEST_CASE("Sidebar resolveInitialIndex defaults to first item when list is empty") {
     REQUIRE_EQ(Sidebar::resolveInitialIndex(0, 0), 0);
@@ -90,4 +130,31 @@ TEST_CASE("Restore confirmation safe default - local and cloud") {
     const int confirmationItemCount = 2; // Yes, No
     
     REQUIRE_EQ(Sidebar::resolveInitialIndex(safeCancelIndex, confirmationItemCount), 1);
+}
+
+TEST_CASE("Sidebar owner keeps object alive during update when callback clears owner pointer") {
+    LifetimeOwner owner;
+    owner.sidebar = std::make_shared<LifetimeSidebar>();
+    std::weak_ptr<LifetimeSidebar> weak = owner.sidebar;
+
+    owner.sidebar->onUpdate = [&owner]() {
+        owner.sidebar.reset();
+    };
+
+    const bool holdWasAlive = owner.updateWithStrongRef();
+    REQUIRE(holdWasAlive);
+    REQUIRE(!owner.sidebar);
+    REQUIRE(weak.expired());
+}
+
+TEST_CASE("Sidebar owner clears pointer after pop only when sidebar instance is unchanged") {
+    LifetimeOwner owner;
+    owner.sidebar = std::make_shared<LifetimeSidebar>();
+
+    owner.sidebar->onUpdate = [&owner]() {
+        owner.sidebar->pop = true;
+    };
+
+    owner.updateWithStrongRef();
+    REQUIRE(!owner.sidebar);
 }

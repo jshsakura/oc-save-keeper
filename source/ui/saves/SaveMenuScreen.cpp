@@ -41,9 +41,10 @@ int SaveMenuScreen::visibleCount() const {
 }
 
 void SaveMenuScreen::update(const Controller& controller, const TouchInfo& touch) {
-    if (m_sidebar) {
-        m_sidebar->update(controller, touch);
-        if (m_sidebar->shouldPop()) {
+    auto sidebar = m_sidebar;
+    if (sidebar) {
+        sidebar->update(controller, touch);
+        if (m_sidebar == sidebar && sidebar->shouldPop()) {
             m_sidebar.reset();
         }
         return;

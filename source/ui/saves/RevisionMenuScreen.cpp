@@ -68,9 +68,10 @@ void RevisionMenuScreen::update(const Controller& controller, const TouchInfo& t
         }
     }
 
-    if (m_sidebar) {
-        m_sidebar->update(controller, touch);
-        if (m_sidebar->shouldPop()) {
+    auto sidebar = m_sidebar;
+    if (sidebar) {
+        sidebar->update(controller, touch);
+        if (m_sidebar == sidebar && sidebar->shouldPop()) {
             m_sidebar.reset();
         }
         return;
@@ -177,7 +178,6 @@ void RevisionMenuScreen::restoreSelected() {
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this]() {
         LOG_INFO("restoreSelected: YES clicked");
         const auto& lang = utils::Language::instance();
-        this->m_sidebar.reset();
         
         if (!m_restoreData) {
             LOG_ERROR("restoreSelected: m_restoreData is null");
@@ -207,11 +207,10 @@ void RevisionMenuScreen::restoreSelected() {
         }
         
         m_restoreData.reset();
-    }, false, yesHint);
+    }, true, yesHint);
 
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
         LOG_INFO("restoreSelected: NO clicked");
-        this->m_sidebar.reset();
         m_restoreData.reset();
     }, true);
 }
@@ -260,7 +259,6 @@ void RevisionMenuScreen::deleteSelected() {
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this]() {
         LOG_INFO("deleteSelected: YES clicked");
         const auto& lang = utils::Language::instance();
-        this->m_sidebar.reset();
         
         if (!m_deleteData) {
             LOG_ERROR("deleteSelected: m_deleteData is null");
@@ -300,11 +298,10 @@ void RevisionMenuScreen::deleteSelected() {
             m_deleteMessage = result.message;
             m_deleteInProgress = false;
         });
-    }, false, yesHint);
+    }, true, yesHint);
 
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
         LOG_INFO("deleteSelected: NO clicked");
-        this->m_sidebar.reset();
         m_deleteData.reset();
     }, true);
 }
