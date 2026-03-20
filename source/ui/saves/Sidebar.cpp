@@ -49,6 +49,8 @@ void Sidebar::update(const Controller& controller, const TouchInfo& touch) {
         return;
     }
 
+    m_index = Sidebar::resolveInitialIndex(m_index, m_items.size());
+
     m_list->onUpdate(controller, touch, m_index, static_cast<int>(m_items.size()), [this](bool tapped, int index) {
         setIndex(index);
         if (tapped) {
@@ -91,7 +93,7 @@ void Sidebar::setIndex(int index) {
         m_index = 0;
         return;
     }
-    m_index = index;
+    m_index = Sidebar::resolveInitialIndex(index, m_items.size());
     syncActions();
 }
 
