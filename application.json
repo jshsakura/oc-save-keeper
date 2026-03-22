@@ -2,7 +2,7 @@
     "name": "OC Save Keeper",
     "icon": "icon.jpg",
     "author": "OpenCourse",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Safe save backup and sync for homebrew",
     "launch_path": "/switch/oc-save-keeper/oc-save-keeper.nro"
 }
