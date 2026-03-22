@@ -24,6 +24,7 @@ public:
     SaveActionResult download(uint64_t titleId, const std::string& revisionId) override;
     SaveActionResult refresh(uint64_t titleId) override;
     SaveActionResult deleteRevision(uint64_t titleId, const std::string& revisionId, SaveSource source) override;
+    SaveActionResult toggleFavorite(uint64_t titleId, const std::string& revisionPath, SaveSource source) override;
     void setTargetType(uint64_t titleId, bool isDevice, bool isSystem) override;
     bool isCloudAuthenticated() const override;
     void invalidateCache();

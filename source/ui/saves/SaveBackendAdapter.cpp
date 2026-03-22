@@ -1,5 +1,6 @@
 #include "ui/saves/SaveBackendAdapter.hpp"
 
+#include "core/MetadataLogic.hpp"
 #include "core/SaveManager.hpp"
 #include "network/Dropbox.hpp"
 #include "ui/saves/Runtime.hpp"
@@ -233,6 +234,8 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
             entry.size = version.size;
             entry.source = (version.source == "cloud") ? SaveSource::Cloud : SaveSource::Local;
             entry.isAutoBackup = version.isAutoBackup;
+            core::BackupMetadata localMeta;
+            entry.isFavorite = m_saveManager.readBackupMetadata(version.path, localMeta) && localMeta.isFavorite;
             out.push_back(std::move(entry));
         }
     } else {
@@ -269,6 +272,7 @@ std::vector<SaveRevisionEntry> SaveBackendAdapter::listRevisions(uint64_t titleI
             entry.size = incomingMeta.size > 0 ? incomingMeta.size : static_cast<int64_t>(file.size);
             entry.source = SaveSource::Cloud;
             entry.isAutoBackup = incomingMeta.isAutoBackup;
+            entry.isFavorite = incomingMeta.isFavorite;
             out.push_back(std::move(entry));
         }
     }
@@ -514,6 +518,104 @@ SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std:
         LOG_INFO("deleteRevision: cloud delete result=%d", ok);
         return { ok, ok ? lang.get("sync.delete_success") : lang.get("sync.delete_failed") };
     }
+}
+
+SaveActionResult SaveBackendAdapter::toggleFavorite(uint64_t titleId, const std::string& revisionPath, SaveSource source) {
+    auto& lang = utils::Language::instance();
+    LOG_INFO("toggleFavorite: titleId=%016lX revisionPath=%s source=%d", titleId, revisionPath.c_str(), static_cast<int>(source));
+    
+    // Favorites only supported for cloud backups in v1
+    if (source == SaveSource::Local) {
+        LOG_ERROR("toggleFavorite: favorites only supported for cloud backups");
+        return {false, lang.get("error.favorites_cloud_only")};
+    }
+    
+    if (revisionPath.empty()) {
+        LOG_ERROR("toggleFavorite: empty revisionPath");
+        return {false, lang.get("error.invalid_backup_selection")};
+    }
+    
+    auto* title = m_saveManager.getTitleById(titleId);
+    if (!title) {
+        LOG_ERROR("toggleFavorite: unknown title");
+        return {false, lang.get("error.unknown_title")};
+    }
+    
+    if (!m_dropbox.isAuthenticated()) {
+        LOG_ERROR("toggleFavorite: Dropbox not authenticated");
+        if (m_dropbox.consumeReconnectRequired()) {
+            return {false, lang.get("error.reauth_required")};
+        }
+        return {false, lang.get("error.not_authenticated")};
+    }
+    
+    // Determine .meta path from revisionPath
+    std::string metaPath;
+    if (revisionPath.size() > 5 && revisionPath.substr(revisionPath.size() - 5) == ".meta") {
+        metaPath = revisionPath;
+    } else if (revisionPath.size() > 4 && revisionPath.substr(revisionPath.size() - 4) == ".zip") {
+        metaPath = revisionPath.substr(0, revisionPath.size() - 4) + ".meta";
+    } else {
+        LOG_ERROR("toggleFavorite: unexpected revisionPath format: %s", revisionPath.c_str());
+        return {false, lang.get("error.invalid_backup_format")};
+    }
+    
+    // Validate path is within title revisions
+    char titleIdStr[20];
+    std::snprintf(titleIdStr, sizeof(titleIdStr), "%016lX", titleId);
+    const std::string expectedPrefix = std::string("/titles/") + titleIdStr + "/revisions/";
+    
+    if (metaPath.find(expectedPrefix) != 0) {
+        LOG_ERROR("toggleFavorite: invalid cloud path (outside title revisions): %s", metaPath.c_str());
+        return {false, lang.get("error.invalid_cloud_path")};
+    }
+    
+    // Download current .meta to temp location
+    utils::paths::ensureBaseDirectories();
+    const std::string tempMetaPath = makeTempMetadataPath(titleId, "fav_toggle");
+    
+    if (!m_dropbox.downloadFile(metaPath, tempMetaPath)) {
+        LOG_ERROR("toggleFavorite: failed to download meta file");
+        if (m_dropbox.consumeReconnectRequired()) {
+            return {false, lang.get("error.reauth_required")};
+        }
+        return {false, lang.get("error.download_failed")};
+    }
+    
+    // Parse metadata
+    core::BackupMetadata meta;
+    if (!core::readBackupMetadataFile(tempMetaPath, meta)) {
+        LOG_ERROR("toggleFavorite: failed to parse meta file");
+        std::remove(tempMetaPath.c_str());
+        return {false, lang.get("error.metadata_parse_failed")};
+    }
+    
+    // Toggle isFavorite
+    meta.isFavorite = !meta.isFavorite;
+    LOG_INFO("toggleFavorite: toggling favorite to %s", meta.isFavorite ? "true" : "false");
+    
+    // Serialize and write updated metadata
+    if (!core::writeBackupMetadataFile(tempMetaPath, meta)) {
+        LOG_ERROR("toggleFavorite: failed to write updated meta file");
+        std::remove(tempMetaPath.c_str());
+        return {false, lang.get("error.metadata_write_failed")};
+    }
+    
+    // Upload updated .meta back to Dropbox
+    if (!m_dropbox.uploadFile(tempMetaPath, metaPath)) {
+        LOG_ERROR("toggleFavorite: failed to upload meta file");
+        std::remove(tempMetaPath.c_str());
+        if (m_dropbox.consumeReconnectRequired()) {
+            return {false, lang.get("error.reauth_required")};
+        }
+        return {false, lang.get("sync.upload_failed")};
+    }
+    
+    // Cleanup temp file
+    std::remove(tempMetaPath.c_str());
+    
+    LOG_INFO("toggleFavorite: success, isFavorite=%s", meta.isFavorite ? "true" : "false");
+    return {true, meta.isFavorite ? lang.get("sync.favorite_added") : lang.get("sync.favorite_removed")};
 }
 
 void SaveBackendAdapter::setTargetType(uint64_t titleId, bool isDevice, bool isSystem) {
