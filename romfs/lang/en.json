@@ -18,7 +18,7 @@
     "footer.hint.select_close": "A Select  B Close",
     "footer.hint.select_move_close": "A Select  ↑↓ Move  B Close",
     "footer.hint.main": "A Open  B Exit  X Refresh  Y Lang  L Change User  R Cloud Setup  - Sort",
-    "footer.hint.revision": "A Restore  B Close  X Refresh  Y Lang  L Change User  R Cloud Setup  - Delete",
+    "footer.hint.revision": "A Restore  B Close  X Refresh  Y Lang  L Change User  R Cloud Setup",
 
     "detail.upload": "Upload",
     "detail.download": "Fetch",

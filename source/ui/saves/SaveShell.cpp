@@ -726,6 +726,24 @@ void SaveShell::renderSidebar(const Sidebar& sidebar) {
         SDL_Color textColor = isEnabled ? color(241, 245, 249) : color(75, 85, 99);
         SDL_Color infoColor = isEnabled ? color(100, 116, 139) : color(55, 65, 81);
 
+        // Apply action-specific colors for enabled items
+        if (isEnabled) {
+            switch (item->actionStyle()) {
+                case ActionStyle::Destructive:
+                    textColor = CAT_RED;
+                    break;
+                case ActionStyle::Positive:
+                    textColor = CAT_YELLOW;
+                    break;
+                case ActionStyle::Primary:
+                    textColor = CAT_BLUE;
+                    break;
+                case ActionStyle::Default:
+                default:
+                    break;
+            }
+        }
+
         if (!isEnabled) {
             rowColor = color(12, 18, 28);
             borderColor = color(30, 41, 59);

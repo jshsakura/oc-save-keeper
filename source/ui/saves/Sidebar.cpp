@@ -11,10 +11,11 @@ SidebarEntryBase::SidebarEntryBase(std::string title, std::string info)
     : m_title(std::move(title))
     , m_info(std::move(info)) {}
 
-SidebarEntryCallback::SidebarEntryCallback(const std::string& title, Callback callback, bool popOnClick, const std::string& info)
+SidebarEntryCallback::SidebarEntryCallback(const std::string& title, Callback callback, bool popOnClick, const std::string& info, ActionStyle style)
     : SidebarEntryBase(title, info)
     , m_callback(std::move(callback))
     , m_popOnClick(popOnClick) {
+    setActionStyle(style);
     setAction(Button::A, Action{utils::Language::instance().get("ui.confirm"), [this]() {
         activate();
     }});

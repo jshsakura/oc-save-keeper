@@ -48,6 +48,23 @@ int RevisionMenuScreen::visibleCount() const {
 }
 
 void RevisionMenuScreen::update(const Controller& controller, const TouchInfo& touch) {
+    // Check for async restore completion
+    if (m_restoreThread.joinable() && !m_restoreInProgress) {
+        m_restoreThread.join();
+        Runtime::instance().setLoading(false);
+        
+        std::lock_guard<std::mutex> lock(m_restoreMutex);
+        if (m_restoreSuccess) {
+            Runtime::instance().notify(utils::Language::instance().get("sync.restore_success"));
+            m_restoreData.reset();
+            reload();
+        } else {
+            Runtime::instance().pushError(m_restoreMessage.empty() 
+                ? utils::Language::instance().get("sync.restore_failed") 
+                : m_restoreMessage);
+        }
+    }
+
     // Check for async delete completion
     if (m_deleteThread.joinable() && !m_deleteInProgress) {
         m_deleteThread.join();
@@ -173,13 +190,17 @@ void RevisionMenuScreen::openActions() {
     m_sidebar->add<SidebarEntryCallback>(
         isKorean ? "복원" : utils::Language::instance().get("history.restore"),
         [this]() { restoreSelected(); },
-        false
+        false,
+        "",
+        ActionStyle::Primary
     );
     
     m_sidebar->add<SidebarEntryCallback>(
         isKorean ? "삭제" : "Delete",
         [this]() { deleteSelected(); },
-        false
+        false,
+        "",
+        ActionStyle::Destructive
     );
     
     const std::string favoriteLabel = entry.isFavorite
@@ -189,14 +210,19 @@ void RevisionMenuScreen::openActions() {
     m_sidebar->add<SidebarEntryCallback>(
         favoriteLabel,
         [this]() { toggleFavoriteSelected(); },
-        false
+        false,
+        "",
+        ActionStyle::Positive
     );
 }
 
 void RevisionMenuScreen::restoreSelected() {
     LOG_INFO("restoreSelected() called");
 
-    // Guard: 이미 sidebar가 열려있으면 무시
+    // FIX: Close action sidebar BEFORE any other logic so confirmation callback can proceed
+    m_sidebar.reset();
+
+    // Guard: 이미 sidebar가 열려있으면 무시 (now safe after reset)
     if (m_sidebar) {
         LOG_WARNING("restoreSelected: sidebar already open");
         return;
@@ -207,6 +233,11 @@ void RevisionMenuScreen::restoreSelected() {
     if (m_entries.empty()) {
         LOG_WARNING("restoreSelected: no entries");
         Runtime::instance().notify(lang.get("ui.no_revision_entries"));
+        return;
+    }
+
+    if (m_restoreInProgress) {
+        LOG_WARNING("restoreSelected: already in progress");
         return;
     }
 
@@ -241,26 +272,43 @@ void RevisionMenuScreen::restoreSelected() {
         
         LOG_INFO("restoreSelected: entryId=%s", m_restoreData->entryId.c_str());
         
+        {
+            std::lock_guard<std::mutex> lock(m_restoreMutex);
+            m_restoreInProgress = true;
+            m_restoreSuccess = false;
+            m_cancelRestore = false;
+            m_restoreMessage.clear();
+        }
+        
         Runtime::instance().setLoading(true, lang.get("sync.restoring"));
-        Runtime::instance().forceRender();
         
-        SaveActionResult result;
+        auto dataPtr = m_restoreData;
+        auto backendPtr = m_backend;
         
-        if (m_restoreData->source == SaveSource::Cloud) {
-            result = m_backend->download(m_restoreData->titleId, m_restoreData->entryPath);
-        } else {
-            result = m_backend->restore(m_restoreData->titleId, m_restoreData->entryId, m_restoreData->source);
-        }
-        
-        Runtime::instance().setLoading(false);
-        
-        if (result.ok) {
-            Runtime::instance().notify(lang.get("sync.restore_success"));
-        } else {
-            Runtime::instance().pushError(result.message.empty() ? lang.get("sync.restore_failed") : result.message);
-        }
-        
-        m_restoreData.reset();
+        m_restoreThread = std::thread([this, dataPtr, backendPtr]() {
+            LOG_INFO("restoreSelected: worker started");
+            LOG_INFO("restoreSelected: entryId=%s", dataPtr->entryId.c_str());
+            
+            SaveActionResult result;
+            
+            if (dataPtr->source == SaveSource::Cloud) {
+                result = backendPtr->download(dataPtr->titleId, dataPtr->entryPath);
+            } else {
+                result = backendPtr->restore(dataPtr->titleId, dataPtr->entryId, dataPtr->source);
+            }
+            
+            LOG_INFO("restoreSelected: result ok=%d msg=%s", result.ok, result.message.c_str());
+            
+            if (m_cancelRestore) {
+                LOG_INFO("restoreSelected: cancelled, skipping result handling");
+                return;
+            }
+            
+            std::lock_guard<std::mutex> lock(m_restoreMutex);
+            m_restoreSuccess = result.ok;
+            m_restoreMessage = result.message;
+            m_restoreInProgress = false;
+        });
     }, true, yesHint);
 
     m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
@@ -272,7 +320,10 @@ void RevisionMenuScreen::restoreSelected() {
 void RevisionMenuScreen::deleteSelected() {
     LOG_INFO("deleteSelected() called");
 
-    // Guard: 이미 sidebar가 열려있으면 무시
+    // FIX: Close action sidebar BEFORE any other logic so confirmation callback can proceed
+    m_sidebar.reset();
+
+    // Guard: 이미 sidebar가 열려있으면 무시 (now safe after reset)
     if (m_sidebar) {
         LOG_WARNING("deleteSelected: sidebar already open");
         return;
@@ -475,6 +526,10 @@ void RevisionMenuScreen::toggleFavoriteSelected() {
 }
 
 RevisionMenuScreen::~RevisionMenuScreen() {
+    m_cancelRestore = true;
+    if (m_restoreThread.joinable()) {
+        m_restoreThread.join();
+    }
     m_cancelDelete = true;
     if (m_deleteThread.joinable()) {
         m_deleteThread.join();

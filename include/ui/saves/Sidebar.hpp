@@ -12,6 +12,14 @@
 
 namespace ui::saves {
 
+// Action style for visual differentiation in sidebar entries
+enum class ActionStyle {
+    Default,    // Neutral/default styling
+    Destructive, // Red - for delete/dangerous actions
+    Positive,    // Yellow/gold - for favorite/positive actions
+    Primary      // Blue - for restore/primary actions
+};
+
 class SidebarEntryBase : public Widget {
 public:
     SidebarEntryBase(std::string title, std::string info = "");
@@ -37,17 +45,26 @@ public:
         m_enabled = enabled;
     }
 
+    ActionStyle actionStyle() const {
+        return m_actionStyle;
+    }
+
+    void setActionStyle(ActionStyle style) {
+        m_actionStyle = style;
+    }
+
 protected:
     std::string m_title;
     std::string m_info;
     bool m_enabled = true;
+    ActionStyle m_actionStyle = ActionStyle::Default;
 };
 
 class SidebarEntryCallback final : public SidebarEntryBase {
 public:
     using Callback = std::function<void()>;
 
-    SidebarEntryCallback(const std::string& title, Callback callback, bool popOnClick = false, const std::string& info = "");
+    SidebarEntryCallback(const std::string& title, Callback callback, bool popOnClick = false, const std::string& info = "", ActionStyle style = ActionStyle::Default);
 
     void activate();
 

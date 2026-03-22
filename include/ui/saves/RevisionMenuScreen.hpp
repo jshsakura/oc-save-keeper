@@ -95,6 +95,13 @@ private:
     std::mutex m_deleteMutex;
     std::shared_ptr<DeleteTaskData> m_deleteData;
     
+    // Restore async state
+    std::thread m_restoreThread;
+    std::atomic<bool> m_restoreInProgress{false};
+    std::atomic<bool> m_restoreSuccess{false};
+    std::atomic<bool> m_cancelRestore{false};
+    std::string m_restoreMessage;
+    std::mutex m_restoreMutex;
     std::shared_ptr<RestoreTaskData> m_restoreData;
     
     // Favorite toggle async state
