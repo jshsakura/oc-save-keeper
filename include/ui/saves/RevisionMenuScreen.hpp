@@ -29,6 +29,15 @@ struct RestoreTaskData {
     SaveSource source = SaveSource::Local;
 };
 
+struct FavoriteTaskData {
+    uint64_t titleId = 0;
+    std::string entryId;
+    std::string entryPath;
+    SaveSource source = SaveSource::Local;
+    bool newFavoriteState = false;
+    int entryIndex = 0;
+};
+
 class RevisionMenuScreen final : public GridMenuBase {
 public:
     RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uint64_t titleId, SaveSource source, std::string titleLabel, bool isSystem = false);
@@ -62,8 +71,10 @@ public:
 
 private:
     void reload();
+    void openActions();
     void restoreSelected();
     void deleteSelected();
+    void toggleFavoriteSelected();
 
     std::shared_ptr<SaveBackend> m_backend;
     std::unique_ptr<List> m_list;
@@ -85,6 +96,15 @@ private:
     std::shared_ptr<DeleteTaskData> m_deleteData;
     
     std::shared_ptr<RestoreTaskData> m_restoreData;
+    
+    // Favorite toggle async state
+    std::thread m_favoriteThread;
+    std::atomic<bool> m_favoriteInProgress{false};
+    std::atomic<bool> m_favoriteSuccess{false};
+    std::atomic<bool> m_cancelFavorite{false};
+    std::string m_favoriteMessage;
+    std::mutex m_favoriteMutex;
+    std::shared_ptr<FavoriteTaskData> m_favoriteData;
 };
 
 } // namespace ui::saves

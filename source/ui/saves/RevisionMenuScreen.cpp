@@ -17,17 +17,14 @@ RevisionMenuScreen::RevisionMenuScreen(std::shared_ptr<SaveBackend> backend, uin
     onLayoutChange(m_list, m_layout);
     reload();
 
-    setAction(Button::A, Action{source == SaveSource::Cloud ? lang.get("detail.download") : lang.get("history.restore"), [this]() {
-        restoreSelected();
+    setAction(Button::A, Action{lang.get("footer.controls.open"), [this]() {
+        openActions();
     }});
     setAction(Button::B, Action{lang.get("detail.back"), [this]() {
         setPop();
     }});
     setAction(Button::X, Action{lang.get("ui.refresh"), [this]() {
         reload();
-    }});
-    setAction(Button::Minus, Action{lang.get("history.restore_delete_hint"), [this]() {
-        deleteSelected();
     }});
 }
 
@@ -68,6 +65,22 @@ void RevisionMenuScreen::update(const Controller& controller, const TouchInfo& t
         }
     }
 
+    // Check for async favorite completion
+    if (m_favoriteThread.joinable() && !m_favoriteInProgress) {
+        m_favoriteThread.join();
+        Runtime::instance().setLoading(false);
+        
+        std::lock_guard<std::mutex> lock(m_favoriteMutex);
+        if (m_favoriteSuccess) {
+            Runtime::instance().notify(utils::Language::instance().get("sync.favorite_success"));
+        } else {
+            Runtime::instance().pushError(m_favoriteMessage.empty() 
+                ? utils::Language::instance().get("sync.favorite_failed") 
+                : m_favoriteMessage);
+        }
+        m_favoriteData.reset();
+    }
+
     auto sidebar = m_sidebar;
     if (sidebar) {
         sidebar->update(controller, touch);
@@ -86,7 +99,7 @@ void RevisionMenuScreen::update(const Controller& controller, const TouchInfo& t
     m_list->onUpdate(controller, touch, m_index, static_cast<int>(m_entries.size()), [this](bool tapped, int index) {
         m_index = index;
         if (tapped) {
-            restoreSelected();
+            openActions();
         }
     });
 }
@@ -133,6 +146,51 @@ void RevisionMenuScreen::reload() {
     }
 
     Runtime::instance().notify(lang.get("ui.refresh_completed"));
+}
+
+void RevisionMenuScreen::openActions() {
+    if (m_sidebar) {
+        return;
+    }
+
+    if (m_entries.empty()) {
+        Runtime::instance().notify(utils::Language::instance().get("ui.no_revision_entries"));
+        return;
+    }
+
+    if (m_index < 0 || m_index >= static_cast<int>(m_entries.size())) {
+        return;
+    }
+
+    const auto& entry = m_entries[m_index];
+    const bool isKorean = utils::Language::instance().currentLang() == "ko";
+    
+    m_sidebar = std::make_shared<Sidebar>(
+        isKorean ? "동작 선택" : "Select Action", 
+        Sidebar::Side::Right
+    );
+    
+    m_sidebar->add<SidebarEntryCallback>(
+        isKorean ? "복원" : utils::Language::instance().get("history.restore"),
+        [this]() { restoreSelected(); },
+        false
+    );
+    
+    m_sidebar->add<SidebarEntryCallback>(
+        isKorean ? "삭제" : "Delete",
+        [this]() { deleteSelected(); },
+        false
+    );
+    
+    const std::string favoriteLabel = entry.isFavorite
+        ? (isKorean ? "즐겨찾기 해제" : "Remove from Favorites")
+        : (isKorean ? "즐겨찾기 등록" : "Add to Favorites");
+    
+    m_sidebar->add<SidebarEntryCallback>(
+        favoriteLabel,
+        [this]() { toggleFavoriteSelected(); },
+        false
+    );
 }
 
 void RevisionMenuScreen::restoreSelected() {
@@ -302,10 +360,127 @@ void RevisionMenuScreen::deleteSelected() {
     }, true);
 }
 
+void RevisionMenuScreen::toggleFavoriteSelected() {
+    LOG_INFO("toggleFavoriteSelected() called");
+
+    if (m_sidebar) {
+        LOG_WARNING("toggleFavoriteSelected: sidebar already open");
+        return;
+    }
+
+    const auto& lang = utils::Language::instance();
+    
+    if (m_entries.empty()) {
+        LOG_WARNING("toggleFavoriteSelected: no entries");
+        return;
+    }
+
+    if (m_favoriteInProgress) {
+        LOG_WARNING("toggleFavoriteSelected: already in progress");
+        return;
+    }
+
+    if (m_index < 0 || m_index >= static_cast<int>(m_entries.size())) {
+        LOG_ERROR("toggleFavoriteSelected: invalid index %d (size=%zu)", m_index, m_entries.size());
+        return;
+    }
+
+    const auto& entry = m_entries[m_index];
+    const bool newFavoriteState = !entry.isFavorite;
+    const std::string confirmMsg = newFavoriteState 
+        ? lang.get("ui.confirm_favorite_add") 
+        : lang.get("ui.confirm_favorite_remove");
+    
+    LOG_INFO("toggleFavoriteSelected: creating sidebar for entry %s (current=%d, new=%d)", 
+             entry.id.c_str(), entry.isFavorite, newFavoriteState);
+
+    m_favoriteData = std::make_shared<FavoriteTaskData>();
+    m_favoriteData->titleId = m_titleId;
+    m_favoriteData->entryId = entry.id;
+    m_favoriteData->entryPath = entry.path;
+    m_favoriteData->source = m_source;
+    m_favoriteData->newFavoriteState = newFavoriteState;
+    m_favoriteData->entryIndex = m_index;
+
+    m_sidebar = std::make_shared<Sidebar>(confirmMsg, Sidebar::Side::Right);
+    m_sidebar->setInitialIndex(1);
+    const std::string yesHint = newFavoriteState 
+        ? lang.get("ui.confirm_favorite_add_hint") 
+        : lang.get("ui.confirm_favorite_remove_hint");
+    
+    m_sidebar->add<SidebarEntryCallback>(lang.get("ui.yes"), [this]() {
+        LOG_INFO("toggleFavoriteSelected: YES clicked");
+        const auto& lang = utils::Language::instance();
+        
+        if (!m_favoriteData) {
+            LOG_ERROR("toggleFavoriteSelected: m_favoriteData is null");
+            Runtime::instance().pushError(lang.get("sync.favorite_failed"));
+            return;
+        }
+        
+        const int idx = m_favoriteData->entryIndex;
+        if (idx < 0 || idx >= static_cast<int>(m_entries.size())) {
+            LOG_ERROR("toggleFavoriteSelected: invalid stored index");
+            Runtime::instance().pushError(lang.get("sync.favorite_failed"));
+            m_favoriteData.reset();
+            return;
+        }
+        
+        const bool previousState = m_entries[idx].isFavorite;
+        m_entries[idx].isFavorite = m_favoriteData->newFavoriteState;
+        
+        LOG_INFO("toggleFavoriteSelected: entryId=%s, toggling to %d", 
+                 m_favoriteData->entryId.c_str(), m_favoriteData->newFavoriteState);
+        
+        {
+            std::lock_guard<std::mutex> lock(m_favoriteMutex);
+            m_favoriteInProgress = true;
+            m_favoriteSuccess = false;
+            m_cancelFavorite = false;
+            m_favoriteMessage.clear();
+        }
+        
+        Runtime::instance().setLoading(true, lang.get("sync.favorite_updating"));
+        
+        auto dataPtr = m_favoriteData;
+        auto backendPtr = m_backend;
+        
+        m_favoriteThread = std::thread([this, dataPtr, backendPtr, previousState, idx]() {
+            LOG_INFO("toggleFavoriteSelected: worker started");
+            
+            auto result = backendPtr->toggleFavorite(dataPtr->titleId, dataPtr->entryPath, dataPtr->source);
+            LOG_INFO("toggleFavoriteSelected: result ok=%d msg=%s", result.ok, result.message.c_str());
+            
+            if (m_cancelFavorite) {
+                LOG_INFO("toggleFavoriteSelected: cancelled, skipping result handling");
+                return;
+            }
+            
+            std::lock_guard<std::mutex> lock(m_favoriteMutex);
+            m_favoriteSuccess = result.ok;
+            m_favoriteMessage = result.message;
+            m_favoriteInProgress = false;
+            
+            if (!result.ok && idx >= 0 && idx < static_cast<int>(m_entries.size())) {
+                m_entries[idx].isFavorite = previousState;
+            }
+        });
+    }, true, yesHint);
+
+    m_sidebar->add<SidebarEntryCallback>(lang.get("ui.no"), [this]() {
+        LOG_INFO("toggleFavoriteSelected: NO clicked");
+        m_favoriteData.reset();
+    }, true);
+}
+
 RevisionMenuScreen::~RevisionMenuScreen() {
     m_cancelDelete = true;
     if (m_deleteThread.joinable()) {
         m_deleteThread.join();
+    }
+    m_cancelFavorite = true;
+    if (m_favoriteThread.joinable()) {
+        m_favoriteThread.join();
     }
 }
 

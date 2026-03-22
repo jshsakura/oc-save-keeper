@@ -669,7 +669,12 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
         char sizeBuf[32];
         std::snprintf(sizeBuf, sizeof(sizeBuf), "%.1f MB", entry.size / (1024.0 * 1024.0));
 
-        renderText(fitText(m_fontMedium, entry.label, 340), row.x + 16, row.y + 12, m_fontMedium, color(241, 245, 249));
+        int labelOffset = row.x + 16;
+        if (entry.isFavorite) {
+            renderText("\xe2\x98\x85", labelOffset, row.y + 10, m_fontMedium, CAT_YELLOW);
+            labelOffset += 28;
+        }
+        renderText(fitText(m_fontMedium, entry.label, 340 - (entry.isFavorite ? 28 : 0)), labelOffset, row.y + 12, m_fontMedium, color(241, 245, 249));
         renderText(fitText(m_fontSmall, entry.userLabel.empty() ? tr("history.unknown_user", "Unknown user") : entry.userLabel, 200), row.x + 360, row.y + 16, m_fontSmall, color(148, 163, 184));
         renderText(fitText(m_fontSmall, entry.deviceLabel.empty() ? tr("history.unknown_device", "Unknown device") : entry.deviceLabel, 240), row.x + 600, row.y + 16, m_fontSmall, color(148, 163, 184));
 
@@ -691,7 +696,7 @@ void SaveShell::renderRevisionMenu(const RevisionMenuScreen& screen) {
     }
 
     const std::string rightHint = m_statusMessage;
-    renderFooter(tr("footer.hint.revision", "A: Restore/Download  B: Back  X: Refresh  Y: Language  L: Users  -: Delete"),
+    renderFooter(tr("footer.hint.revision", "A: Actions  B: Back  X: Refresh  L: Users"),
                  rightHint);
 }
 
