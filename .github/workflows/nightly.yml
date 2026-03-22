@@ -26,13 +26,15 @@ jobs:
 
       - name: Get date
         id: date
-        run: echo "date=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_OUTPUT
+        run: |
+          echo "tag=$(date -u +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
+          echo "name=$(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
 
       - name: Upload nightly release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly-${{ steps.date.outputs.date }}
-          name: Nightly ${{ steps.date.outputs.date }}
+          tag_name: nightly-${{ steps.date.outputs.tag }}
+          name: Nightly ${{ steps.date.outputs.name }}
           body: Automated nightly build for testing. May contain unstable changes.
           prerelease: true
           make_latest: false
