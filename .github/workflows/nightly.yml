@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,18 +28,13 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_OUTPUT
 
-      - name: Delete old nightly
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release delete "Nightly ${{ steps.date.outputs.date }}" --yes || true
-
-      - name: Create nightly release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "Nightly ${{ steps.date.outputs.date }}" \
-            --title "Nightly ${{ steps.date.outputs.date }}" \
-            --prerelease \
-            --notes "Automated nightly build for testing. May contain unstable changes." \
-            oc-save-keeper.nro
+      - name: Upload nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ steps.date.outputs.date }}
+          name: Nightly ${{ steps.date.outputs.date }}
+          body: Automated nightly build for testing. May contain unstable changes.
+          prerelease: true
+          make_latest: false
+          generate_release_notes: false
+          files: oc-save-keeper.nro
