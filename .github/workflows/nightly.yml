@@ -1,0 +1,39 @@
+name: Nightly Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          make clean
+          make
+
+      - name: Get date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d %H:%M')" >> $GITHUB_OUTPUT
+
+      - name: Delete old nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "Nightly ${{ steps.date.outputs.date }}" --yes || true
+
+      - name: Create nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "Nightly ${{ steps.date.outputs.date }}" \
+            --title "Nightly ${{ steps.date.outputs.date }}" \
+            --prerelease \
+            --notes "Automated nightly build for testing. May contain unstable changes." \
+            oc-save-keeper.nro
