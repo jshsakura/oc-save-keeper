@@ -27,8 +27,8 @@ jobs:
       - name: Get date
         id: date
         run: |
-          echo "tag=$(date -u +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
-          echo "name=$(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
+          echo "tag=$(TZ=Asia/Seoul date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
+          echo "name=$(TZ=Asia/Seoul date +'%Y-%m-%d %H:%M KST')" >> $GITHUB_OUTPUT
 
       - name: Upload nightly release
         uses: softprops/action-gh-release@v2
