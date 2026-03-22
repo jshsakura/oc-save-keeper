@@ -12,16 +12,18 @@ HOST_JSON_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
 -include $(TOPDIR)/.env
 export DROPBOX_APP_KEY
 export DROPBOX_BRIDGE_BASE
-DROPBOX_APP_KEY ?=
-DROPBOX_APP_KEY_DEFINE :=
-ifneq ($(strip $(DROPBOX_APP_KEY)),)
+
+# Mandatory variables check - fail early if missing
+ifeq ($(strip $(DROPBOX_APP_KEY)),)
+$(error DROPBOX_APP_KEY is not defined! Please provide it via environment variable or .env file)
+endif
+
+ifeq ($(strip $(DROPBOX_BRIDGE_BASE)),)
+$(error DROPBOX_BRIDGE_BASE is not defined! Please provide it via environment variable or .env file)
+endif
+
 DROPBOX_APP_KEY_DEFINE := -DDROPBOX_APP_KEY=\"$(DROPBOX_APP_KEY)\"
-endif
-DROPBOX_BRIDGE_BASE ?=
-DROPBOX_BRIDGE_BASE_DEFINE :=
-ifneq ($(strip $(DROPBOX_BRIDGE_BASE)),)
 DROPBOX_BRIDGE_BASE_DEFINE := -DDROPBOX_BRIDGE_BASE=\"$(DROPBOX_BRIDGE_BASE)\"
-endif
 $(info DEBUG: DROPBOX_BRIDGE_BASE=[${DROPBOX_BRIDGE_BASE}])
 $(info DEBUG: DROPBOX_BRIDGE_BASE_DEFINE=[${DROPBOX_BRIDGE_BASE_DEFINE}])
 HOST_CXXFLAGS := -std=c++20 -Wall -Wextra -O0 -g -I$(CURDIR)/include -I$(CURDIR) $(HOST_JSON_CFLAGS) $(DROPBOX_APP_KEY_DEFINE) $(DROPBOX_BRIDGE_BASE_DEFINE)

@@ -127,3 +127,72 @@ TEST_CASE("Metadata logic parses is_auto_backup from both formats") {
         REQUIRE_EQ(parsed.isAutoBackup, false);
     }
 }
+
+TEST_CASE("Metadata logic defaults is_favorite to false when absent") {
+    const std::string text =
+        "title_id=42\n"
+        "backup_name=manual-backup\n";
+
+    core::BackupMetadata parsed;
+    REQUIRE(core::parseBackupMetadata(text, parsed));
+    REQUIRE_EQ(parsed.isFavorite, false);
+}
+
+TEST_CASE("Metadata logic parses is_favorite=1 as true") {
+    const std::string text = "backup_name=test\nis_favorite=1\n";
+    core::BackupMetadata parsed;
+    REQUIRE(core::parseBackupMetadata(text, parsed));
+    REQUIRE_EQ(parsed.isFavorite, true);
+}
+
+TEST_CASE("Metadata logic parses is_favorite=0 as false") {
+    const std::string text = "backup_name=test\nis_favorite=0\n";
+    core::BackupMetadata parsed;
+    REQUIRE(core::parseBackupMetadata(text, parsed));
+    REQUIRE_EQ(parsed.isFavorite, false);
+}
+
+TEST_CASE("Metadata logic parses isFavorite from both formats") {
+    {
+        const std::string text = "backup_name=test\nis_favorite=1\n";
+        core::BackupMetadata parsed;
+        REQUIRE(core::parseBackupMetadata(text, parsed));
+        REQUIRE_EQ(parsed.isFavorite, true);
+    }
+
+    {
+        const std::string text = "backup_name=test\nisFavorite=true\n";
+        core::BackupMetadata parsed;
+        REQUIRE(core::parseBackupMetadata(text, parsed));
+        REQUIRE_EQ(parsed.isFavorite, true);
+    }
+
+    {
+        const std::string text = "backup_name=test\nis_favorite=0\n";
+        core::BackupMetadata parsed;
+        REQUIRE(core::parseBackupMetadata(text, parsed));
+        REQUIRE_EQ(parsed.isFavorite, false);
+    }
+}
+
+TEST_CASE("Metadata logic round-trips is_favorite flag") {
+    core::BackupMetadata input;
+    input.titleId = 0x01006A800016E000ULL;
+    input.backupName = "favorite-backup";
+    input.isFavorite = true;
+
+    const std::string text = core::serializeBackupMetadata(input);
+
+    core::BackupMetadata parsed;
+    REQUIRE(core::parseBackupMetadata(text, parsed));
+    REQUIRE_EQ(parsed.isFavorite, true);
+}
+
+TEST_CASE("Metadata logic serialization includes is_favorite key") {
+    core::BackupMetadata meta;
+    meta.backupName = "test-backup";
+    meta.isFavorite = true;
+
+    const std::string text = core::serializeBackupMetadata(meta);
+    REQUIRE(text.find("is_favorite=1") != std::string::npos);
+}

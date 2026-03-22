@@ -46,6 +46,7 @@ struct SaveRevisionEntry {
     int64_t size = 0;
     SaveSource source = SaveSource::Local;
     bool isAutoBackup = false;
+    bool isFavorite = false;
 };
 
 struct SaveActionResult {

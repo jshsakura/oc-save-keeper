@@ -95,6 +95,7 @@ struct BackupMetadata {
     int devicePriority = 100;
     int64_t size = 0;
     bool isAutoBackup = false;
+    bool isFavorite = false;
 };
 
 struct SyncDecision {

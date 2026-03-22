@@ -26,6 +26,7 @@ inline std::string serializeBackupMetadata(const BackupMetadata& meta) {
     text += "device_priority=" + std::to_string(meta.devicePriority) + "\n";
     text += "size=" + std::to_string(static_cast<long long>(meta.size)) + "\n";
     text += "is_auto_backup=" + std::string(meta.isAutoBackup ? "1" : "0") + "\n";
+    text += "is_favorite=" + std::string(meta.isFavorite ? "1" : "0") + "\n";
     return text;
 }
 
@@ -76,6 +77,10 @@ inline bool parseBackupMetadata(const std::string& text, BackupMetadata& outMeta
                 outMeta.isAutoBackup = (value == "1" || value == "true");
             } else if (key == "isAutoBackup") {
                 outMeta.isAutoBackup = (value == "1" || value == "true");
+            } else if (key == "is_favorite") {
+                outMeta.isFavorite = (value == "1" || value == "true");
+            } else if (key == "isFavorite") {
+                outMeta.isFavorite = (value == "1" || value == "true");
             }
         }
 
