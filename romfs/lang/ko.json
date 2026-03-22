@@ -120,6 +120,7 @@
     "history.source_dropbox": "클라우드",
     "history.restore_delete_hint": "삭제",
     "error.not_authenticated": "클라우드: 연결되지 않음",
+    "error.reauth_required": "Dropbox 인증이 만료되었거나 해제되었습니다. R 버튼의 연동 설정에서 다시 연결하세요.",
     "error.no_selection": "선택된 게임 없음",
     "error.unknown_title": "알 수 없는 타이틀",
     "error.no_title_selected": "선택된 타이틀이 없습니다",

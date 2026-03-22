@@ -151,7 +151,12 @@ static constexpr const char* DROPBOX_OLD_AUTH_FILE = "/oc-save-keeper/dropbox_au
 static constexpr const char* DROPBOX_OLD_LEGACY_TOKEN_FILE = "/oc-save-keeper/dropbox_token.txt";
 
 Dropbox::Dropbox() 
-    : m_clientId(loadClientId()), m_tokenExpiresAt(0), m_authenticated(false), m_curl(nullptr) {
+    : m_clientId(loadClientId())
+    , m_tokenExpiresAt(0)
+    , m_authenticated(false)
+    , m_reconnectRequired(false)
+    , m_lastRequestHttpCode(0)
+    , m_curl(nullptr) {
     
     m_curl = curl_easy_init();
     
@@ -194,6 +199,12 @@ bool Dropbox::isOAuthConfigured() const {
 
 bool Dropbox::isAuthenticated() const {
     return m_authenticated;
+}
+
+bool Dropbox::consumeReconnectRequired() {
+    const bool required = m_reconnectRequired;
+    m_reconnectRequired = false;
+    return required;
 }
 
 // Get the authorization URL - user just clicks this on their phone!
@@ -491,6 +502,14 @@ bool Dropbox::loadToken() {
                 if (json_object_object_get_ex(root.get(), "refresh_token", &refreshObj)) {
                     std::string encryptedRefresh = json_object_get_string(refreshObj);
                     m_refreshToken = utils::TokenCrypto::decrypt(encryptedRefresh);
+                    if (!encryptedRefresh.empty() && m_refreshToken.empty()) {
+                        LOG_WARNING("Dropbox: Stored refresh token uses unsupported legacy/corrupt format. Re-auth required.");
+                        m_accessToken.clear();
+                        m_tokenExpiresAt = 0;
+                        remove(DROPBOX_AUTH_FILE);
+                        remove(DROPBOX_OLD_AUTH_FILE);
+                        return false;
+                    }
                 }
                 if (json_object_object_get_ex(root.get(), "expires_at", &expiresObj)) {
                     m_tokenExpiresAt = static_cast<std::time_t>(json_object_get_int64(expiresObj));
@@ -560,6 +579,7 @@ void Dropbox::logout() {
     m_tokenExpiresAt = 0;
     cancelPendingAuthorization();
     m_authenticated = false;
+    m_reconnectRequired = false;
     remove(DROPBOX_AUTH_FILE);
     remove(DROPBOX_LEGACY_TOKEN_FILE);
     remove(DROPBOX_OLD_AUTH_FILE);
@@ -833,6 +853,16 @@ bool Dropbox::refreshToken() {
     );
 
     if (response.empty()) {
+        const bool invalidGrant =
+            m_lastRequestHttpCode == 400 &&
+            m_lastRequestUrl == DROPBOX_TOKEN_URL &&
+            (m_lastRequestErrorResponse.find("invalid_grant") != std::string::npos ||
+             m_lastRequestErrorResponse.find("invalid or revoked") != std::string::npos ||
+             m_lastRequestErrorResponse.find("expired") != std::string::npos);
+        if (invalidGrant) {
+            LOG_ERROR("Dropbox: Refresh token is invalid/revoked. Forcing reconnect.");
+            invalidateAuthAndRequireReconnect();
+        }
         return false;
     }
 
@@ -848,6 +878,8 @@ bool Dropbox::refreshToken() {
     json_object* refreshTokenObj = nullptr;
     const bool hasAccess = json_object_object_get_ex(root, "access_token", &accessTokenObj);
     if (!hasAccess) {
+        LOG_ERROR("Dropbox: Refresh response missing access token. Forcing reconnect.");
+        invalidateAuthAndRequireReconnect();
         return false;
     }
 
@@ -865,9 +897,19 @@ bool Dropbox::refreshToken() {
 
     m_authenticated = !m_accessToken.empty();
     if (!m_authenticated) {
+        invalidateAuthAndRequireReconnect();
         return false;
     }
     return saveToken();
+}
+
+void Dropbox::invalidateAuthAndRequireReconnect() {
+    m_accessToken.clear();
+    m_refreshToken.clear();
+    m_tokenExpiresAt = 0;
+    m_authenticated = false;
+    m_reconnectRequired = true;
+    saveToken();
 }
 
 bool Dropbox::appendListFolderPage(const std::string& response,
@@ -954,6 +996,9 @@ std::string Dropbox::performRequest(const std::string& url,
                                     bool isApiV2) {
     std::lock_guard<std::mutex> lock(m_curlMutex);
     std::string response;
+    m_lastRequestHttpCode = 0;
+    m_lastRequestUrl = url;
+    m_lastRequestErrorResponse.clear();
     
     curl_easy_reset(m_curl);
     curl_easy_setopt(m_curl, CURLOPT_URL, url.c_str());
@@ -999,6 +1044,8 @@ std::string Dropbox::performRequest(const std::string& url,
     }
 
     if (!dropbox::isSuccessfulHttpStatus(httpCode)) {
+        m_lastRequestHttpCode = httpCode;
+        m_lastRequestErrorResponse = response;
         if (response.find("insufficient_scope") != std::string::npos || response.find("not_permitted") != std::string::npos) {
             LOG_ERROR("Dropbox: PERMISSION ERROR. Please enable 'files.metadata.read' scope in Dropbox App Console.");
         }

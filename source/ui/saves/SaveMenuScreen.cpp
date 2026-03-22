@@ -238,7 +238,10 @@ void SaveMenuScreen::openActions() {
                 Runtime::instance().notify(lang.get("sync.success"));
                 reload();
             } else {
-                Runtime::instance().pushError(lang.get("sync.upload_failed"));
+                Runtime::instance().pushError(result.message.empty() ? lang.get("sync.upload_failed") : result.message);
+                if (!m_backend->isCloudAuthenticated()) {
+                    reload();
+                }
             }
         }, false, lang.get("ui.action_upload_hint"));
 

@@ -29,6 +29,7 @@ HOST_LDFLAGS := $(HOST_JSON_LIBS)
 TEST_BUILD := build-host
 TEST_BIN := $(TEST_BUILD)/unit-tests
 TEST_SOURCES := $(wildcard $(CURDIR)/tests/*.cpp)
+TEST_SUPPORT_SOURCES := $(CURDIR)/source/utils/TokenCrypto.cpp
 TEST_HEADERS := $(shell if [ -d "$(TOPDIR)/include" ] && [ -d "$(TOPDIR)/tests" ]; then find $(TOPDIR)/include $(TOPDIR)/tests \( -name '*.hpp' -o -name '*.h' \); fi)
 ifneq ($(strip $(DEVKITPRO)),)
 include $(DEVKITPRO)/libnx/switch_rules
@@ -92,9 +93,9 @@ endif
 test: $(TEST_BIN)
 	@$(TEST_BIN)
 
-$(TEST_BIN): $(TEST_SOURCES) $(TEST_HEADERS)
+$(TEST_BIN): $(TEST_SOURCES) $(TEST_SUPPORT_SOURCES) $(TEST_HEADERS)
 	@[ -d $(TEST_BUILD) ] || mkdir -p $(TEST_BUILD)
-	@$(HOST_CXX) $(HOST_CXXFLAGS) $(TEST_SOURCES) -o $(TEST_BIN) $(HOST_LDFLAGS)
+	@$(HOST_CXX) $(HOST_CXXFLAGS) $(TEST_SOURCES) $(TEST_SUPPORT_SOURCES) -o $(TEST_BIN) $(HOST_LDFLAGS)
 
 clean:
 	@rm -fr $(BUILD) $(TEST_BUILD) $(TARGET).nro $(TARGET).nacp $(TARGET).elf

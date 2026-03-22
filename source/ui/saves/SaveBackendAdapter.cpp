@@ -317,6 +317,9 @@ SaveActionResult SaveBackendAdapter::upload(uint64_t titleId) {
         return {false, lang.get("error.unknown_title")};
     }
     if (!m_dropbox.isAuthenticated()) {
+        if (m_dropbox.consumeReconnectRequired()) {
+            return {false, lang.get("error.reauth_required")};
+        }
         return {false, lang.get("error.not_authenticated")};
     }
 
@@ -353,6 +356,9 @@ SaveActionResult SaveBackendAdapter::upload(uint64_t titleId) {
                     m_dropbox.uploadFile(archivePath, latestArchivePath);
 
     if (ok) g_remoteCacheValid = false;
+    if (!ok && m_dropbox.consumeReconnectRequired()) {
+        return {false, lang.get("error.reauth_required")};
+    }
     return {
         ok,
         ok ? lang.get("sync.upload_completed") : lang.get("sync.upload_failed")
@@ -366,6 +372,9 @@ SaveActionResult SaveBackendAdapter::download(uint64_t titleId, const std::strin
         return {false, lang.get("error.unknown_title")};
     }
     if (!m_dropbox.isAuthenticated()) {
+        if (m_dropbox.consumeReconnectRequired()) {
+            return {false, lang.get("error.reauth_required")};
+        }
         return {false, lang.get("error.not_authenticated")};
     }
 
@@ -379,6 +388,9 @@ SaveActionResult SaveBackendAdapter::download(uint64_t titleId, const std::strin
     utils::paths::ensureBaseDirectories();
     const std::string tempArchive = makeTempArchivePath(titleId);
     if (!m_dropbox.downloadFile(zipPath, tempArchive)) {
+        if (m_dropbox.consumeReconnectRequired()) {
+            return {false, lang.get("error.reauth_required")};
+        }
         return {false, lang.get("error.download_failed")};
     }
 
@@ -453,6 +465,9 @@ SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std:
         LOG_INFO("deleteRevision: deleting cloud backup");
         if (!m_dropbox.isAuthenticated()) {
             LOG_ERROR("deleteRevision: Dropbox not authenticated");
+            if (m_dropbox.consumeReconnectRequired()) {
+                return {false, lang.get("error.reauth_required")};
+            }
             return {false, lang.get("error.not_authenticated")};
         }
 
@@ -490,6 +505,10 @@ SaveActionResult SaveBackendAdapter::deleteRevision(uint64_t titleId, const std:
         }
         
         const bool ok = zipOk || metaOk;
+
+        if (!ok && m_dropbox.consumeReconnectRequired()) {
+            return {false, lang.get("error.reauth_required")};
+        }
         
         if (ok) g_remoteCacheValid = false;
         LOG_INFO("deleteRevision: cloud delete result=%d", ok);

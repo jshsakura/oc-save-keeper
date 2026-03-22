@@ -120,6 +120,7 @@
     "history.source_dropbox": "Cloud",
     "history.restore_delete_hint": "Delete",
     "error.not_authenticated": "Cloud: Not connected",
+    "error.reauth_required": "Dropbox auth expired or was revoked. Reconnect from Cloud Setup with the R button.",
     "error.no_selection": "No game selected",
     "error.unknown_title": "Unknown title",
     "error.no_title_selected": "No title selected",

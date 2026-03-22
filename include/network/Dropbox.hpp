@@ -60,6 +60,7 @@ public:
     std::string getAuthorizeUrl();                    // Get URL to show user
     bool checkAuthentication();                       // Check if user authorized (polling)
     bool isAuthenticated() const;
+    bool consumeReconnectRequired();
     bool exchangeAuthorizationCode(const std::string& input);
     
     // Bridge-based authentication (QR code flow)
@@ -107,6 +108,11 @@ private:
     std::string m_csrfToken;
     std::string m_codeVerifier;
     bool m_authenticated;
+    bool m_reconnectRequired;
+
+    long m_lastRequestHttpCode;
+    std::string m_lastRequestUrl;
+    std::string m_lastRequestErrorResponse;
     
     // Curl
     CURL* m_curl;
@@ -126,6 +132,7 @@ private:
     bool saveToken();
     bool refreshToken();
     bool ensureAccessToken();
+    void invalidateAuthAndRequireReconnect();
     
     static size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userp);
     static size_t readCallback(void* ptr, size_t size, size_t nmemb, void* userp);
