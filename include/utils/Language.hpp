@@ -1,6 +1,6 @@
 /**
  * oc-save-keeper - Multi-language support
- * Auto-detects system language on Nintendo Switch
+ * Auto-detects system language
  */
 
 #pragma once

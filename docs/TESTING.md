@@ -3,7 +3,7 @@
 ## Build & Test
 
 ```bash
-# Switch build (produces .nro)
+# Device build (produces .nro)
 make
 
 # Host build for unit tests
@@ -20,7 +20,7 @@ make test
 | Sync logic | 3 | ✅ |
 | **Total** | **30** | ✅ |
 
-## Install (Switch)
+## Install (Device)
 
 1. Extract release zip to SD card root
 2. Verify: `/switch/oc-save-keeper/oc-save-keeper.nro`

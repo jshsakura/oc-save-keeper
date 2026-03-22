@@ -2,7 +2,7 @@
 
 This service provides a callback-and-poll bridge for `oc-save-keeper`.
 
-It exists because Dropbox does not support OAuth Device Code Grant, so the Switch app cannot finish pure polling-only auth without an external callback receiver.
+It exists because Dropbox does not support OAuth Device Code Grant, so the device app cannot finish pure polling-only auth without an external callback receiver.
 
 ## Domain and Redirect URI
 
@@ -16,19 +16,19 @@ https://example.yourdomain.com/oauth/dropbox/callback
 
 ## Flow (Fully Automatic - No Manual Code Entry)
 
-1. Switch calls `POST /v1/sessions/start`.
+1. Device calls `POST /v1/sessions/start`.
 2. Bridge generates PKCE `code_verifier` + `code_challenge`, returns `authorize_url`, `session_id`, and `poll_token`.
 3. User opens `authorize_url` on phone/PC and approves Dropbox.
 4. Dropbox redirects to bridge callback `/oauth/dropbox/callback` with authorization code.
-5. Switch polls `POST /v1/sessions/{session_id}/status` automatically.
-6. On `approved`, Switch calls `POST /v1/sessions/{session_id}/consume`.
+5. Device polls `POST /v1/sessions/{session_id}/status` automatically.
+6. On `approved`, device calls `POST /v1/sessions/{session_id}/consume`.
 7. Bridge returns `authorization_code` + `code_verifier` (one-time).
-8. **Switch exchanges code directly with Dropbox token endpoint** → refresh token is created and stored on Switch.
+8. **Device exchanges code directly with Dropbox token endpoint** → refresh token is created and stored on device.
 
 **Key Points:**
 - No manual code copy/paste required - automatic polling completes the flow
 - PKCE key exchange is handled automatically by the bridge
-- **Refresh token is generated on and stored only on Switch**
+- **Refresh token is generated on and stored only on device**
 - **Bridge never stores access/refresh tokens** - only transient session data
 
 ## Privacy and Trust Boundary
@@ -38,8 +38,8 @@ This bridge applies minimum protections such as OAuth `state` validation, HMAC-p
 That still does **not** make a public/shared bridge fully trustworthy.
 
 - A third-party operator can still observe connection metadata, timing, and transient OAuth session activity.
-- The authorization code passes through the bridge callback before the Switch exchanges it directly with Dropbox.
-- Refresh tokens stay on the Switch, but trusting a public/shared bridge is still the user's responsibility.
+- The authorization code passes through the bridge callback before the device exchanges it directly with Dropbox.
+- Refresh tokens stay on the device, but trusting a public/shared bridge is still the user's responsibility.
 
 If privacy matters, self-host the bridge on your own domain and keep request/security-event logging disabled unless you explicitly need it for incident response.
 

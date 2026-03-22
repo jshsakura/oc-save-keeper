@@ -18,7 +18,7 @@
 namespace network::dropbox {
 
 // Cryptographically secure random byte generator
-// Uses Switch CSRNG on device, falls back to std::random_device on host
+// Uses platform CSRNG on device, falls back to std::random_device on host
 inline bool getCryptographicBytes(unsigned char* buffer, std::size_t size) {
 #ifdef __SWITCH__
     Result rc = csrngGetRandomBytes(buffer, size);

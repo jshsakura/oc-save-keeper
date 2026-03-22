@@ -1,5 +1,5 @@
 /**
- * oc-save-keeper - Safe save backup and sync for Nintendo Switch
+ * oc-save-keeper - Safe save backup and sync for homebrew
  * Main entry point
  */
 

@@ -1,5 +1,5 @@
 #---------------------------------------------------------------------------------
-# oc-save-keeper - Safe save backup and sync for Nintendo Switch
+# oc-save-keeper - Safe save backup and sync for homebrew
 #---------------------------------------------------------------------------------
 .SUFFIXES:
 .NOTPARALLEL: test switch-build all
@@ -44,7 +44,7 @@ DATA		:=	data
 INCLUDES	:=	include
 APP_TITLE   :=  OC Save Keeper
 APP_AUTHOR  :=  OpenCourse
-APP_VERSION :=  1.0.0
+APP_VERSION :=  1.0.2
 ROMFS	    :=	romfs
 APP_ICON	:=	icon.png
 NROFLAGS    :=  --icon=$(TOPDIR)/$(APP_ICON) --nacp=$(TOPDIR)/$(TARGET).nacp --romfsdir=$(TOPDIR)/$(ROMFS)

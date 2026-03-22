@@ -73,7 +73,7 @@
     "card.state.cloud_newer": "클라우드 최신",
 
     "auth.title": "클라우드 연동설정",
-    "auth.setup_time": "Switch에서 로그인 링크를 만든 뒤 스마트폰이나 PC에서 승인하고 여기서 연결을 마무리합니다.",
+    "auth.setup_time": "이 기기에서 로그인 링크를 만든 뒤 스마트폰이나 PC에서 승인하고 여기서 연결을 마무리합니다.",
     "auth.next": "다음 단계",
     "auth.steps_title": "진행 순서",
     "auth.step1": "1. [로그인 열기]를 눌러 인증 링크를 생성합니다.",
@@ -82,7 +82,7 @@
     "auth.step2_access": "- 방식: PKCE + callback",
     "auth.step2_name": "- fallback: 짧은 인증 코드",
     "auth.step3": "3. 자동 복귀에 실패하면 클라우드 로그인 화면의 짧은 코드만 입력하세요.",
-    "auth.step4": "4. 돌아온 전체 URL 또는 인증 코드를 Switch에 붙여넣고 [클라우드 연결]을 누릅니다.",
+    "auth.step4": "4. 돌아온 전체 URL 또는 인증 코드를 기기에 붙여넣고 [클라우드 연결]을 누릅니다.",
     "auth.get_link": "로그인 열기",
     "auth.connect_code": "인증 코드 입력",
     "auth.status": "상태",
@@ -106,7 +106,7 @@
     "auth.cancel": "취소",
     "auth.tip": "PKCE 1회 설정 후에는 저장된 refresh token을 재사용합니다.",
     "auth.browser_opened": "로그인 링크를 만들었습니다. 스마트폰이나 PC에서 연 뒤 돌아온 URL 또는 인증 코드를 입력하세요.",
-    "auth.browser_failed": "Switch에서는 브라우저를 열지 않습니다. 표시된 링크를 다른 기기에서 연 뒤 URL 또는 인증 코드를 입력하세요.",
+    "auth.browser_failed": "이 기기에서는 브라우저를 열지 않습니다. 표시된 링크를 다른 기기에서 연 뒤 URL 또는 인증 코드를 입력하세요.",
     "auth.link_ready": "로그인 링크가 준비되었습니다. 표시된 링크를 다른 기기에서 연 뒤 돌아온 URL 또는 인증 코드를 입력하세요.",
     "auth.qr_label": "QR 스캔",
 

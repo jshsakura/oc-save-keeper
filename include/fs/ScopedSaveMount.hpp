@@ -1,5 +1,5 @@
 /**
- * oc-save-keeper - Dropbox Save Sync for Nintendo Switch
+ * oc-save-keeper - Safe save backup and sync for homebrew
  * Scoped Save Mount - RAII wrapper for save data mounting
  * 100% Aligned with JKSV's mounting and commitment logic
  */
@@ -43,7 +43,7 @@ public:
         std::memset(&attr, 0, sizeof(attr));
         attr.application_id = titleId;
         
-        // Device and System saves must have UID zeroed out (standard Switch behavior)
+        // Device and System saves must have UID zeroed out (standard homebrew behavior)
         if (saveType == core::SaveType::Device || saveType == core::SaveType::System) {
             std::memset(&attr.uid, 0, sizeof(attr.uid));
         } else {

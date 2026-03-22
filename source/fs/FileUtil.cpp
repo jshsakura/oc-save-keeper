@@ -1,5 +1,5 @@
 /**
- * oc-save-keeper - Dropbox Save Sync for Nintendo Switch
+ * oc-save-keeper - Safe save backup and sync for homebrew
  * File utilities implementation
  * 100% Aligned with JKSV's physical commitment strategy
  * Ultimate safety edition: Iteration-safe deletion and eager commits

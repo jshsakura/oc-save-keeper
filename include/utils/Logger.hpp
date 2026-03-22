@@ -1,5 +1,5 @@
 /**
- * oc-save-keeper - Safe save backup and sync for Nintendo Switch
+ * oc-save-keeper - Safe save backup and sync for homebrew
  * Logging utility with file:line info and toggle support
  */
 #pragma once

@@ -14,7 +14,7 @@ Run tests and fixes in a single serial flow. Do not work on multiple failing tes
 5. Run `make test` again until it passes.
 6. Refactor with tests still green.
 7. Move to the next failing case.
-8. Run the Switch build only after tests are green.
+8. Run the homebrew build only after tests are green.
 
 ## Commands
 

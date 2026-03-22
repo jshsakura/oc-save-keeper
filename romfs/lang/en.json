@@ -73,7 +73,7 @@
     "card.state.cloud_newer": "Cloud newer",
 
     "auth.title": "Cloud Setup",
-    "auth.setup_time": "Create a sign-in link on the Switch, approve it on your phone or PC, then finish connecting here.",
+    "auth.setup_time": "Create a sign-in link on this device, approve it on your phone or PC, then finish connecting here.",
     "auth.next": "Next Step",
     "auth.steps_title": "How It Works",
     "auth.step1": "1. Press [Open Login] to generate an auth link.",
@@ -106,7 +106,7 @@
     "auth.cancel": "Cancel",
     "auth.tip": "One-time PKCE setup, then the saved refresh token is reused.",
     "auth.browser_opened": "Auth link created. Open on phone/PC, then enter the URL or code.",
-    "auth.browser_failed": "No browser on Switch. Open the link on another device, then enter the URL or code.",
+    "auth.browser_failed": "No browser on this device. Open the link on another device, then enter the URL or code.",
     "auth.link_ready": "Auth link ready. Open on another device, then enter the URL or code.",
     "auth.qr_label": "QR Scan",
 

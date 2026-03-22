@@ -1,5 +1,5 @@
 /**
- * oc-save-keeper - Safe save backup and sync for Nintendo Switch
+ * oc-save-keeper - Safe save backup and sync for homebrew
  * Save Manager implementation
  */
 
@@ -431,7 +431,7 @@ void SaveManager::scanTitles() {
     TitleInfo mockTitle;
     mockTitle.titleId = 0x01006A800016E000;
     mockTitle.name = "The Legend of Zelda: BOTW";
-    mockTitle.publisher = "Nintendo";
+    mockTitle.publisher = "Example";
     mockTitle.hasSave = true;
     mockTitle.saveType = SaveType::Account;
     mockTitle.saveSize = 0;
@@ -1395,7 +1395,7 @@ bool SaveManager::importBackupArchive(TitleInfo* title, const std::string& archi
     }
     LOG_DEBUG("ZIP file validated: %s (%ld bytes)", archivePath.c_str(), st.st_size);
 
-    // Extraction stays on disk so Switch RAM usage is bounded by our fixed IO buffers.
+    // Extraction stays on disk so device RAM usage is bounded by our fixed IO buffers.
     std::string tempDir = makeUniqueTempPath(title, "import");
     if (!zip::unzipToDirectory(archivePath, tempDir)) {
         if (outReason) *outReason = "Failed to extract downloaded archive";

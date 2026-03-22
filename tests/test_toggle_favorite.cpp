@@ -667,7 +667,7 @@ TEST_CASE("Toggle favorite - success preserves other metadata fields") {
         "title_name=Test Game\n"
         "backup_name=20260316_232624\n"
         "device_id=device123\n"
-        "device_label=My Switch\n"
+        "device_label=My Device\n"
         "user_id=user456\n"
         "user_name=TestUser\n"
         "source=cloud\n"

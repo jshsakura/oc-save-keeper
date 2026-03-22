@@ -1,5 +1,5 @@
 /**
- * Drop-Keep - Dropbox Save Sync for Nintendo Switch
+ * oc-save-keeper - Safe save backup and sync for homebrew
  * Dropbox client - Simple OAuth, phone-friendly
  */
 #pragma once
