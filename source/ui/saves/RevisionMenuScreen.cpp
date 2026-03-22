@@ -362,12 +362,10 @@ void RevisionMenuScreen::deleteSelected() {
 
 void RevisionMenuScreen::toggleFavoriteSelected() {
     LOG_INFO("toggleFavoriteSelected() called");
-
-    if (m_sidebar) {
-        LOG_WARNING("toggleFavoriteSelected: sidebar already open");
-        return;
-    }
-
+    
+    // FIX: Close action sidebar BEFORE any other logic so confirmation callback can proceed
+    m_sidebar.reset();
+    
     const auto& lang = utils::Language::instance();
     
     if (m_entries.empty()) {
@@ -440,7 +438,10 @@ void RevisionMenuScreen::toggleFavoriteSelected() {
             m_favoriteMessage.clear();
         }
         
-        Runtime::instance().setLoading(true, lang.get("sync.favorite_updating"));
+        const std::string loadingMsg = m_favoriteData->newFavoriteState
+            ? lang.get("sync.favorite_adding")
+            : lang.get("sync.favorite_removing");
+        Runtime::instance().setLoading(true, loadingMsg);
         
         auto dataPtr = m_favoriteData;
         auto backendPtr = m_backend;
