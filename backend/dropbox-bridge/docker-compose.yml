@@ -15,6 +15,13 @@ services:
       - ENABLE_ACCESS_LOGS=${ENABLE_ACCESS_LOGS:-0}
       - ENABLE_SECURITY_EVENT_LOGS=${ENABLE_SECURITY_EVENT_LOGS:-0}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - VIOLATION_THRESHOLD=${VIOLATION_THRESHOLD:-5}
+      - ALERT_COOLDOWN_SECONDS=${ALERT_COOLDOWN_SECONDS:-300}
+      - BLACKLIST_FILE=${BLACKLIST_FILE:-/app/data/blacklist.txt}
+    volumes:
+      - ./data/blacklist.txt:/app/data/blacklist.txt
     depends_on:
       - redis
     networks:

@@ -85,3 +85,63 @@ Only enable these flags when you explicitly need operational visibility and unde
 - `POST /v1/sessions/{session_id}/status`
 - `POST /v1/sessions/{session_id}/consume`
 - `GET /oauth/dropbox/callback`
+
+## Security Monitoring Setup
+
+The bridge includes optional Telegram alerts for real-time security notifications.
+
+### Create Telegram Bot
+
+1. Open Telegram and search for **@BotFather**
+2. Send `/newbot` and follow the prompts
+3. BotFather will give you a **bot token** (e.g., `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+
+### Get Chat ID
+
+1. Start a conversation with your bot
+2. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+3. Send any message to your bot
+4. Refresh the URL - you'll see your **chat ID** in the response
+
+For groups/channels, add the bot and use `@getidsbot` to find the chat ID.
+
+### Configuration
+
+Add to your `.env` file:
+
+```bash
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+TELEGRAM_CHAT_ID=123456789
+```
+
+Or use Docker secrets:
+- `/run/secrets/telegram_bot_token`
+- `/run/secrets/telegram_chat_id`
+
+### Alert Types
+
+| Event | Description |
+|-------|-------------|
+| `attack_detected` | DDoS/rate limit exceeded (100+ req/min) |
+| `auth_failure` | Invalid poll token, session expired |
+| `blocked_ip` | IP auto-blacklisted (5+ violations) |
+| `suspicious_pattern` | Unusual request patterns |
+
+### Security Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VIOLATION_THRESHOLD` | 5 | Violations before auto-blacklist |
+| `ALERT_COOLDOWN_SECONDS` | 300 | Min seconds between alerts per IP |
+| `BLACKLIST_FILE` | `/app/data/blacklist.txt` | Persistent blacklist location |
+
+### Blacklist File
+
+The blacklist persists in `./data/blacklist.txt` (mounted from host). Format:
+
+```text
+192.168.1.100  # Auto-blocked: 5 violations
+10.0.0.50      # Manual block
+```
+
+To manually block/unblock an IP, edit the file and restart the container.
