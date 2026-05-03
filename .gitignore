@@ -13,7 +13,13 @@ dist/
 build-host/
 build/
 dist/
-backend/dropbox-bridge/app/__pycache__/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.venv/
+venv/
 
 # External references
 JKSV/
