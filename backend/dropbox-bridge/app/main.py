@@ -18,6 +18,8 @@ from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from services import send_security_alert, is_blacklisted, add_to_blacklist
+
 
 DROPBOX_AUTHORIZE_URL = "https://www.dropbox.com/oauth2/authorize"
 DROPBOX_TOKEN_URL = "https://api.dropboxapi.com/oauth2/token"
@@ -39,6 +41,9 @@ GITHUB_URL = get_env("GITHUB_URL", "https://github.com/jshsakura/oc-save-keeper"
 BRIDGE_LOG_LEVEL = get_env("BRIDGE_LOG_LEVEL", "WARNING").upper()
 ENABLE_ACCESS_LOGS = get_env("ENABLE_ACCESS_LOGS", "0") == "1"
 ENABLE_SECURITY_EVENT_LOGS = get_env("ENABLE_SECURITY_EVENT_LOGS", "0") == "1"
+
+VIOLATION_THRESHOLD = int(get_env("VIOLATION_THRESHOLD", "5"))
+ALERT_COOLDOWN_SECONDS = int(get_env("ALERT_COOLDOWN_SECONDS", "300"))
 
 # 보안 강화: 파일에서 시크릿 읽기 지원 (Docker Secrets 스타일)
 SECRET_FILE_PATH = "/run/secrets/poll_token_secret"
@@ -92,26 +97,27 @@ async def check_rate_limit(redis: Redis, client_ip: str, action: str, limit: int
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
 
-async def detect_attack(redis: Redis, client_ip: str) -> bool:
+async def detect_attack(redis: Redis, client_ip: str, request: Request | None = None) -> bool:
     """
     공격 탐지: 의심스러운 패턴 감지
     - 1분 내 100회 이상 요청 = DDoS 의심
     - 1시간 내 차단 횟수 누적
     """
     try:
-        # 분당 요청 수 체크
         minute_key = f"attack:minute:{client_ip}"
         minute_count = await redis.incr(minute_key)
         if minute_count == 1:
             await redis.expire(minute_key, 60)
         
-        # 1분에 100회 이상 = 공격 의심
         if minute_count > 100:
             block_key = f"attack:blocked:{client_ip}"
-            await redis.setex(block_key, 3600, "1")  # 1시간 차단
+            await redis.setex(block_key, 3600, "1")
+            await record_security_event(
+                redis, client_ip, "attack_detected",
+                f"DDoS: {minute_count} req/min", request
+            )
             return True
         
-        # 이미 차단된 IP인지 확인
         block_key = f"attack:blocked:{client_ip}"
         if await redis.exists(block_key):
             return True
@@ -119,7 +125,7 @@ async def detect_attack(redis: Redis, client_ip: str) -> bool:
         return False
     except RedisError as e:
         logger.error(f"Attack detection Redis error: {e}")
-        return False  # Fail-open for availability
+        return False
 
 
 async def log_suspicious(redis: Redis, client_ip: str, action: str, reason: str):
@@ -138,7 +144,58 @@ async def log_suspicious(redis: Redis, client_ip: str, action: str, reason: str)
         await redis.ltrim("security:logs", 0, 999)  # 최근 1000개만 유지
     except RedisError as e:
         logger.error(f"Failed to log suspicious activity: {e}")
-        # Do not crash, just log
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP, supporting Cloudflare/reverse proxy (X-Forwarded-For)."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def increment_violations(redis: Redis, ip: str) -> int:
+    """Increment violation counter for IP. Returns new count."""
+    try:
+        key = f"violations:{ip}"
+        count = await redis.incr(key)
+        if count == 1:
+            await redis.expire(key, 86400)  # 24 hour TTL
+        return count
+    except RedisError as e:
+        logger.error(f"Failed to increment violations: {e}")
+        return 0
+
+
+async def record_security_event(
+    redis: Redis,
+    ip: str,
+    event_type: str,
+    reason: str,
+    request: Request | None = None,
+) -> bool:
+    """
+    Record a security event: increment violations, send Telegram alert.
+    Returns True if IP was auto-blacklisted (5+ violations).
+    """
+    violation_count = await increment_violations(redis, ip)
+    
+    details = {"reason": reason, "violations": violation_count}
+    await send_security_alert(
+        redis, event_type, ip, details, request,
+        cooldown_seconds=ALERT_COOLDOWN_SECONDS
+    )
+    
+    if violation_count >= VIOLATION_THRESHOLD:
+        await add_to_blacklist(ip, f"Auto-blocked: {violation_count} violations")
+        await send_security_alert(
+            redis, "blocked_ip", ip,
+            {"reason": f"Exceeded {VIOLATION_THRESHOLD} violations"},
+            request, cooldown_seconds=ALERT_COOLDOWN_SECONDS
+        )
+        return True
+    
+    return False
 
 
 def session_key(session_id: str) -> str:
@@ -221,6 +278,18 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 
 
 @app.middleware("http")
+async def security_monitor_middleware(request: Request, call_next):
+    """Security monitoring: blacklist check, violation tracking, auto-ban."""
+    client_ip = get_client_ip(request)
+    
+    if await is_blacklisted(client_ip):
+        logger.warning(f"Blocked request from blacklisted IP: {client_ip}")
+        return JSONResponse(status_code=403, content={"detail": "Access denied"})
+    
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     """보안 헤더 추가"""
     response = await call_next(request)
@@ -228,7 +297,6 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # Content-Security-Policy: 실서비스 환경에 맞게 완화
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' unpkg.com 'unsafe-inline'; "
@@ -768,14 +836,12 @@ async def favicon():
 
 @app.post("/v1/sessions/start", response_model=StartSessionResponse)
 async def start_session(payload: StartSessionRequest, request: Request) -> StartSessionResponse:
-    client_ip = request.client.host
+    client_ip = get_client_ip(request)
     
-    # 공격 탐지
-    if await detect_attack(redis_client, client_ip):
+    if await detect_attack(redis_client, client_ip, request):
         await log_suspicious(redis_client, client_ip, "start_session", "blocked_by_attack_detection")
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # 세션 시작 시에도 너무 잦은 요청은 차단
     await check_rate_limit(redis_client, client_ip, "start_session", limit=5, window=60)
     
     session_id = secrets.token_urlsafe(18)
@@ -851,14 +917,12 @@ async def get_status(
     payload: SessionStatusRequest,
     request: Request,
 ) -> SessionStatusResponse:
-    client_ip = request.client.host
+    client_ip = get_client_ip(request)
     
-    # 공격 탐지
-    if await detect_attack(redis_client, client_ip):
+    if await detect_attack(redis_client, client_ip, request):
         await log_suspicious(redis_client, client_ip, "status", "blocked_by_attack_detection")
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # 무차별 대입 공격 방지
     await check_rate_limit(redis_client, client_ip, "status")
     
     key = session_key(session_id)
@@ -869,6 +933,9 @@ async def get_status(
     if not data:
         return SessionStatusResponse(status="expired")
     if not verify_poll_token(data.get("poll_token_hash", ""), payload.poll_token):
+        await record_security_event(
+            redis_client, client_ip, "auth_failure", "Invalid poll token", request
+        )
         raise HTTPException(status_code=401, detail="invalid poll token")
 
     status = data.get("status", "expired")
@@ -883,14 +950,12 @@ async def consume_session(
     payload: ConsumeSessionRequest,
     request: Request,
 ) -> ConsumeSessionResponse:
-    client_ip = request.client.host
+    client_ip = get_client_ip(request)
     
-    # 공격 탐지
-    if await detect_attack(redis_client, client_ip):
+    if await detect_attack(redis_client, client_ip, request):
         await log_suspicious(redis_client, client_ip, "consume", "blocked_by_attack_detection")
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # 가장 중요한 지점: 엄격한 Rate Limit (5분 내 5회 실패 시 차단)
     await check_rate_limit(redis_client, client_ip, "consume", limit=5, window=300)
     
     key = session_key(session_id)
@@ -901,6 +966,9 @@ async def consume_session(
     if not data:
         raise HTTPException(status_code=404, detail="session expired")
     if not verify_poll_token(data.get("poll_token_hash", ""), payload.poll_token):
+        await record_security_event(
+            redis_client, client_ip, "auth_failure", "Invalid poll token", request
+        )
         raise HTTPException(status_code=401, detail="invalid poll token")
 
     status = data.get("status", "expired")
