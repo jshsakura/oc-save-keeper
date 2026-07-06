@@ -5,6 +5,12 @@
     "app.applet_warning_message": "You are running in Album mode. Memory and Save access are strictly restricted.",
     "app.applet_warning_instruction": "Please use 'Title Takeover' (Hold R while launching a game) to use the full memory mode.",
 
+    "restricted.title": "Cannot Access Save Data",
+    "restricted.line1": "This app needs permission to read your game saves.",
+    "restricted.line2": "It cannot run when installed as a shortcut/forwarder.",
+    "restricted.line3": "Please launch it from the homebrew (Album) menu.",
+    "restricted.exit_hint": "Press any button to exit.",
+
     "status.connected": "Connected",
     "status.disconnected": "Disconnected",
 

@@ -235,6 +235,16 @@ bool SaveShell::initialize() {
     // Perform the heavy lifting first (Scanning titles)
     m_saveManager.scanTitles();
 
+    // If the launch context cannot access save data (e.g. installed as a
+    // forwarder / "바로가기" running as a restricted application title), do not
+    // proceed into the normal UI where the missing permissions would cause
+    // crashes. Show a dedicated guidance screen instead.
+    m_restrictedMode = !m_saveManager.hasSaveAccess();
+    if (m_restrictedMode) {
+        LOG_WARNING("Restricted launch context detected: showing guidance screen");
+        return true;
+    }
+
     // Check for expired trash only after initial scan is done or ongoing
     if (m_saveManager.hasExpiredTrashEntries(30)) {
         showProcessingOverlay(tr("sync.trash_cleanup", "Cleaning up trash..."));
@@ -342,6 +352,15 @@ void SaveShell::setStatus(const std::string& message) {
 }
 
 void SaveShell::update() {
+    // In restricted mode the only interaction is "press any button to exit".
+    if (m_restrictedMode) {
+        if (m_controller.down != 0) {
+            m_shouldExit = true;
+        }
+        resetInput();
+        return;
+    }
+
     u64 now = static_cast<u64>(std::time(nullptr));
     // Pull notifications from runtime
     if (Runtime::instance().hasNotification()) {
@@ -436,6 +455,11 @@ void SaveShell::showProcessingOverlay(const std::string& message) {
 }
 
 void SaveShell::render() {
+    if (m_restrictedMode) {
+        renderRestrictedScreen();
+        return;
+    }
+
     auto current = Runtime::instance().current();
     if (!current) {
         return;
@@ -477,6 +501,36 @@ void SaveShell::render() {
     }
 }
 
+void SaveShell::renderRestrictedScreen() {
+    SDL_SetRenderDrawColor(m_renderer, 10, 16, 28, 255);
+    SDL_RenderClear(m_renderer);
+
+    SDL_Rect panel{140, 150, 1000, 420};
+    drawPanel(m_renderer, panel, color(15, 23, 42, 255), color(248, 113, 113, 255));
+
+    const int centerX = panel.x;
+    const int width = panel.w;
+    const int lineHeight = 44;
+    int y = panel.y + 40;
+
+    auto drawLine = [&](const std::string& text, TTF_Font* font, SDL_Color textColor, int gap) {
+        SDL_Rect lineRect{centerX, y, width, lineHeight};
+        renderTextCentered(text, lineRect, font, textColor);
+        y += gap;
+    };
+
+    drawLine(tr("restricted.title", "Cannot Access Save Data"),
+             m_fontLarge, color(248, 113, 113, 255), lineHeight + 24);
+    drawLine(tr("restricted.line1", "This app needs permission to read game save data."),
+             m_fontMedium, color(226, 232, 240, 255), lineHeight);
+    drawLine(tr("restricted.line2", "It cannot run when installed as a shortcut/forwarder."),
+             m_fontMedium, color(226, 232, 240, 255), lineHeight + 24);
+    drawLine(tr("restricted.line3", "Please launch it from the homebrew (Album) menu."),
+             m_fontMedium, color(125, 211, 252, 255), lineHeight + 40);
+    drawLine(tr("restricted.exit_hint", "Press any button to exit."),
+             m_fontSmall, color(148, 163, 184, 255), lineHeight);
+}
+
 void SaveShell::renderHeader(const std::string& title, const std::string& subtitle) {
     SDL_Rect header{0, 0, 1280, 96};
     fillRect(m_renderer, header, color(15, 23, 42));
@@ -498,15 +552,9 @@ void SaveShell::renderHeader(const std::string& title, const std::string& subtit
     const int chipX = 1280 - 24 - chipW; // 1076
     const int chipY = 33; // Centered vertically (96/2 - 30/2 = 33)
 
-    if (m_isAppletMode) {
-        renderStatusChip(tr("app.applet_warning_title", "Applet Mode"),
-                         chipX - (chipW + 12), // 884
-                         chipY,
-                         chipW,
-                         color(185, 28, 28), // Brighter red background (Red-700)
-                         color(248, 113, 113));
-    }
-
+    // Note: launching from the homebrew/Album menu ("applet mode") is the
+    // REQUIRED mode for this save manager — it is where the broad save-data
+    // permissions are granted — so it is intentionally not flagged as a warning.
     renderStatusChip(tr(m_dropbox.isAuthenticated() ? "status.connected" : "status.disconnected",
                         m_dropbox.isAuthenticated() ? "Connected" : "Not connected"),
                      chipX,

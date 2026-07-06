@@ -157,10 +157,12 @@ bool SaveManager::initialize() {
         return false;
     }
     
-    // Load users
+    // Load users. An empty list is NOT fatal here: a restricted forwarder/
+    // application title cannot list users, and we still want to boot far enough
+    // to show the user a clear "run from the homebrew menu" screen instead of
+    // silently closing. scanTitles() detects the real permission state.
     if (!loadUsers()) {
-        LOG_ERROR("Failed to load users");
-        return false;
+        LOG_WARNING("No users loaded (likely restricted launch context)");
     }
     
     // Select first user by default
@@ -308,6 +310,13 @@ void SaveManager::scanTitles() {
     FsSaveDataFilter filter{};
     FsSaveDataInfoReader reader;
     Result rc = fsOpenSaveDataInfoReaderWithFilter(&reader, FsSaveDataSpaceId_User, &filter);
+    // This reader is the authoritative capability gate: it only succeeds when the
+    // process was granted broad save-data permissions (homebrew/Album launch).
+    // A restricted forwarder title fails here, which drives the guidance screen.
+    m_saveAccessOk = R_SUCCEEDED(rc);
+    if (R_FAILED(rc)) {
+        LOG_WARNING("fsOpenSaveDataInfoReaderWithFilter failed: 0x%x (restricted launch context)", rc);
+    }
     if (R_SUCCEEDED(rc)) {
         FsSaveDataInfo entries[256]{};
         while (true) {

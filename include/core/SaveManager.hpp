@@ -116,6 +116,11 @@ public:
     // Initialization
     bool initialize();
     void scanTitles();
+
+    // True when the process holds the broad save-data permissions this app needs
+    // (i.e. launched from the homebrew/Album menu). False when running as a
+    // restricted forwarder/application title that cannot enumerate saves.
+    bool hasSaveAccess() const { return m_saveAccessOk; }
     
     // User selection
     const std::vector<UserInfo>& getUsers() const { return m_users; }
@@ -174,6 +179,8 @@ public:
     
 private:
     bool m_initialized;
+    // Assume access until a save-data scan proves otherwise (host build stays true).
+    bool m_saveAccessOk = true;
     std::string m_deviceId;
     std::string m_deviceLabel;
     int m_devicePriority;

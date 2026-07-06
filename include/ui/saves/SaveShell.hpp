@@ -83,6 +83,7 @@ private:
     void renderDropboxOverlay();
     void renderUserPickerOverlay();
     void renderHeader(const std::string& title, const std::string& subtitle = "");
+    void renderRestrictedScreen();
     void renderStatusChip(const std::string& text, int x, int y, int w, SDL_Color fill, SDL_Color border);
     void renderText(const std::string& text, int x, int y, TTF_Font* font, SDL_Color color);
     void renderTextCentered(const std::string& text, const SDL_Rect& rect, TTF_Font* font, SDL_Color color);
@@ -133,6 +134,9 @@ private:
     u64 m_lastPollTime = 0;
     bool m_hostTextInput = false;
     bool m_isAppletMode = false;
+    // True when the app lacks the save-data permissions it needs (restricted
+    // forwarder/application launch). Replaces the normal UI with a guidance screen.
+    bool m_restrictedMode = false;
     static constexpr std::size_t MAX_ICON_CACHE_ITEMS = 24;
     static constexpr int ICON_TEXTURE_SIZE = 160;
     std::map<std::string, SDL_Texture*> m_iconCache;
