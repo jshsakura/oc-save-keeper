@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from services import send_security_alert, is_blacklisted, add_to_blacklist
+from app.services import send_security_alert, is_blacklisted, add_to_blacklist
 
 
 DROPBOX_AUTHORIZE_URL = "https://www.dropbox.com/oauth2/authorize"
